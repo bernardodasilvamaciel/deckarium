@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-labelledby="title">
+  <title id="title">Símbolo do Deckarium</title>
+  <path d="M16 2 29 9.5v13L16 30 3 22.5v-13L16 2Z" fill="none" stroke="#f8faf4" stroke-width="2"/>
+  <path d="m16 6 2.6 7.1H26l-5.9 4.2 2.3 7.1-6.4-4.3-6.4 4.3 2.3-7.1L6 13.1h7.4L16 6Z" fill="#f8faf4"/>
+</svg>

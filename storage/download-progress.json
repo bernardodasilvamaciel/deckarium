@@ -1,0 +1,15 @@
+{
+    "state": "stopped_by_user",
+    "mode": "all",
+    "size": "normal",
+    "downloaded": 0,
+    "failed": 0,
+    "existing": 0,
+    "selected": 0,
+    "processed": 0,
+    "total": 0,
+    "bytes": 0,
+    "resumed": true,
+    "started_at": 1789402145,
+    "updated_at": 1789402150
+}

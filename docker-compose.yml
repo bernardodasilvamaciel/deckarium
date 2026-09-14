@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: mtg-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mtg}
+      POSTGRES_USER: ${POSTGRES_USER:-mtg}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mtg_local_change_me}
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mtg} -d ${POSTGRES_DB:-mtg}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: ./docker/php
+    container_name: mtg-php
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-mtg}
+      DB_USER: ${POSTGRES_USER:-mtg}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-mtg_local_change_me}
+      SCRYFALL_BULK_TYPE: ${SCRYFALL_BULK_TYPE:-default_cards}
+      SCRYFALL_USER_AGENT: ${SCRYFALL_USER_AGENT:-BernardoMTGLocal/1.0}
+      SCRYFALL_ACCEPT: application/json;q=0.9,*/*;q=0.8
+      STORAGE_DIR: /var/www/storage
+    ports:
+      - "8080:80"
+    volumes:
+      - ./app:/var/www/html
+      - ./storage:/var/www/storage
+
+volumes:
+  postgres_data:

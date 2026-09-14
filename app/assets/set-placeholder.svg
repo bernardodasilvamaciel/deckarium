@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title desc">
+  <title id="title">Ícone genérico de coleção</title>
+  <desc id="desc">Símbolo abstrato de uma coleção de cartas</desc>
+  <rect width="96" height="96" rx="14" fill="#edf0e8"/>
+  <path d="M28 24h32a6 6 0 0 1 6 6v38a6 6 0 0 1-6 6H28a6 6 0 0 1-6-6V30a6 6 0 0 1 6-6Z" fill="#fffefa" stroke="#345d4a" stroke-width="3"/>
+  <path d="M34 18h32a6 6 0 0 1 6 6v38a6 6 0 0 1-6 6" fill="none" stroke="#8da596" stroke-width="3" stroke-linecap="round"/>
+  <path d="m44 35 3.7 7.5 8.3 1.2-6 5.9 1.4 8.3-7.4-3.9-7.4 3.9 1.4-8.3-6-5.9 8.3-1.2L44 35Z" fill="#345d4a"/>
+  <path d="M33 65h22M33 70h14" stroke="#8da596" stroke-width="3" stroke-linecap="round"/>
+</svg>

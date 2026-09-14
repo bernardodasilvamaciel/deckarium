@@ -1,0 +1,335 @@
+{
+  "tool": "comp-spec",
+  "version": 1,
+  "createdAt": "2026-09-14T01:41:58.702Z",
+  "comp": ".impeccable/mocks/decision/assigned.webp",
+  "warnings": [
+    "region catalog: the artwork runs off the box on the left (its ink reaches the edge over 35% of that side). Widen the region so the box holds the whole shape with a margin; a plate placed with object-fit: cover on this box would be cut there."
+  ],
+  "uncoveredInkCells": [],
+  "compSize": {
+    "width": 1536,
+    "height": 1024
+  },
+  "aspect": 1.5,
+  "orientation": "landscape",
+  "palette": [
+    {
+      "hex": "#f5f5e9",
+      "coverage": 0.5667
+    },
+    {
+      "hex": "#141621",
+      "coverage": 0.2624
+    },
+    {
+      "hex": "#cfd7dd",
+      "coverage": 0.0931
+    },
+    {
+      "hex": "#364943",
+      "coverage": 0.0406
+    },
+    {
+      "hex": "#999ea3",
+      "coverage": 0.0372
+    }
+  ],
+  "bands": [
+    {
+      "y": 0.0588,
+      "strength": 0.6294
+    },
+    {
+      "y": 0.0941,
+      "strength": 0.6234
+    },
+    {
+      "y": 0.1294,
+      "strength": 0.3565
+    },
+    {
+      "y": 0.2353,
+      "strength": 0.2437
+    },
+    {
+      "y": 0.3176,
+      "strength": 1
+    },
+    {
+      "y": 0.3412,
+      "strength": 0.5167
+    },
+    {
+      "y": 0.4706,
+      "strength": 0.849
+    },
+    {
+      "y": 0.5647,
+      "strength": 1
+    },
+    {
+      "y": 0.5882,
+      "strength": 1
+    },
+    {
+      "y": 0.6471,
+      "strength": 0.7768
+    },
+    {
+      "y": 0.6706,
+      "strength": 0.7763
+    },
+    {
+      "y": 0.7882,
+      "strength": 0.6389
+    },
+    {
+      "y": 0.8118,
+      "strength": 0.4314
+    },
+    {
+      "y": 0.8824,
+      "strength": 0.8743
+    },
+    {
+      "y": 0.9176,
+      "strength": 1
+    }
+  ],
+  "regions": [
+    {
+      "id": "rail",
+      "kind": "chrome",
+      "note": "224px graphite sidebar",
+      "grid": "A0:B9",
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 0.2,
+        "h": 1
+      },
+      "px": {
+        "x": 0,
+        "y": 0,
+        "w": 307,
+        "h": 1024
+      },
+      "aspect": 0.2998,
+      "palette": [
+        {
+          "hex": "#181827",
+          "coverage": 0.7266
+        },
+        {
+          "hex": "#f7f6e9",
+          "coverage": 0.1919
+        },
+        {
+          "hex": "#395049",
+          "coverage": 0.0341
+        },
+        {
+          "hex": "#162423",
+          "coverage": 0.0286
+        },
+        {
+          "hex": "#a3a7aa",
+          "coverage": 0.0188
+        }
+      ],
+      "detail": {
+        "energy": 14.3112
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "heading",
+      "kind": "text",
+      "note": "Encontre sua próxima carta.",
+      "grid": "B0:G0",
+      "coverBox": {
+        "x": 0.1,
+        "y": 0,
+        "w": 0.6,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.1667,
+        "y": 0.041,
+        "w": 0.4844,
+        "h": 0.0586
+      },
+      "px": {
+        "x": 256,
+        "y": 42,
+        "w": 744,
+        "h": 60
+      },
+      "aspect": 12.4,
+      "palette": [
+        {
+          "hex": "#f7f6eb",
+          "coverage": 0.7175
+        },
+        {
+          "hex": "#0a131c",
+          "coverage": 0.2041
+        },
+        {
+          "hex": "#c5c7c7",
+          "coverage": 0.038
+        },
+        {
+          "hex": "#949798",
+          "coverage": 0.0236
+        },
+        {
+          "hex": "#283636",
+          "coverage": 0.0168
+        }
+      ],
+      "detail": {
+        "energy": 120.3684
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null,
+      "type": {
+        "comp": {
+          "lines": 1,
+          "glyphs": 21,
+          "capHeightPx": 44,
+          "inkIsDark": true,
+          "allCaps": false,
+          "advance": 0.6359,
+          "advTall": 0.704,
+          "advX": 0.6359,
+          "gap": 0.0454,
+          "xRatio": 0.6813,
+          "stemW": 0.1893,
+          "contrast": 1.9205,
+          "serif": 1.766,
+          "densTall": 0.5103,
+          "densX": 0.5562,
+          "weight": 0.5103
+        },
+        "widthClass": "normal",
+        "weightClass": "medium",
+        "chosen": {
+          "family": "Chiron Sung HK",
+          "weight": 700,
+          "fontSizePx": 63,
+          "source": "catalog",
+          "estimatedSize": true,
+          "stamp": "c7cc93323a85"
+        }
+      }
+    },
+    {
+      "id": "search",
+      "kind": "control",
+      "note": "Labeled search and edition inputs",
+      "grid": "B1:J2",
+      "coverBox": {
+        "x": 0.1,
+        "y": 0.1,
+        "w": 0.9,
+        "h": 0.2
+      },
+      "box": {
+        "x": 0.8581,
+        "y": 0.1758,
+        "w": 0.1289,
+        "h": 0.0645
+      },
+      "px": {
+        "x": 1318,
+        "y": 180,
+        "w": 198,
+        "h": 66
+      },
+      "aspect": 3,
+      "palette": [
+        {
+          "hex": "#385647",
+          "coverage": 0.6262
+        },
+        {
+          "hex": "#f8f5e8",
+          "coverage": 0.2959
+        },
+        {
+          "hex": "#6a7a77",
+          "coverage": 0.0648
+        },
+        {
+          "hex": "#c5c8c8",
+          "coverage": 0.0069
+        },
+        {
+          "hex": "#9daca8",
+          "coverage": 0.0062
+        }
+      ],
+      "detail": {
+        "energy": 18.1167
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "catalog",
+      "kind": "image",
+      "note": "Dynamic collection of real Scryfall trading card images, never generated replacements",
+      "grid": "B3:J9",
+      "box": {
+        "x": 0.1,
+        "y": 0.3,
+        "w": 0.9,
+        "h": 0.7
+      },
+      "px": {
+        "x": 154,
+        "y": 307,
+        "w": 1382,
+        "h": 717
+      },
+      "aspect": 1.9275,
+      "palette": [
+        {
+          "hex": "#f2f2e7",
+          "coverage": 0.4727
+        },
+        {
+          "hex": "#111519",
+          "coverage": 0.2725
+        },
+        {
+          "hex": "#d0d8e0",
+          "coverage": 0.1473
+        },
+        {
+          "hex": "#3a4449",
+          "coverage": 0.0606
+        },
+        {
+          "hex": "#7a7d7f",
+          "coverage": 0.0469
+        }
+      ],
+      "detail": {
+        "energy": 68.6501
+      },
+      "medium": "raster",
+      "clipped": [
+        "left"
+      ],
+      "plate": "assets/plates/catalog.png",
+      "text": null
+    }
+  ]
+}

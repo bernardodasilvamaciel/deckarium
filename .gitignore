@@ -1,0 +1,5 @@
+.env
+storage/bulk/*
+storage/images/*
+!storage/bulk/.gitkeep
+!storage/images/.gitkeep
