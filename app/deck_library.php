@@ -23,6 +23,10 @@ function deckSchema(): void {
             commander_id uuid NOT NULL REFERENCES cards(id) ON DELETE CASCADE, card_id uuid NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
             metric text NOT NULL DEFAULT 'synergy', score numeric NOT NULL, inclusion numeric NULL, deck_count int NULL,
             source_url text NOT NULL, synced_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(commander_id,card_id));");
+    db()->exec("CREATE INDEX IF NOT EXISTS builder_items_deck_stage_idx ON builder_items(deck_id,stage);
+        CREATE INDEX IF NOT EXISTS builder_items_card_idx ON builder_items(card_id);
+        CREATE INDEX IF NOT EXISTS deck_synergy_commander_score_idx ON deck_synergy(commander_id,score DESC);
+        CREATE INDEX IF NOT EXISTS cards_color_identity_gin_idx ON cards USING gin(color_identity);");
 }
 
 function deckFindPrinting(string $name): ?array {
@@ -156,7 +160,8 @@ function deckText(array $card): string {
 function deckTerms(string $value): array {
     return array_values(array_unique(array_filter(array_map('trim', explode(';', $value)), fn($s)=>$s!=='')));
 }
-function deckHighlight(string $text, array $terms): string {
+function deckHighlight(?string $text, array $terms): string {
+    $text = $text ?? '';
     $terms=array_values(array_unique(array_filter($terms,fn($term)=>$term!=='')));
     if(!$terms)return h($text);
     usort($terms,fn($a,$b)=>strlen($b)<=>strlen($a));

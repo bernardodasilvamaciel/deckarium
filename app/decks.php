@@ -148,22 +148,33 @@ $decks = deckQuery("SELECT d.*,c.name commander,c.id commander_card_id,(SELECT C
 $deck = $id ? deckQuery('SELECT * FROM builder_decks WHERE id=?',[$id])->fetch() : null;
 $commander = $deck && $deck['commander_id'] ? deckQuery("SELECT c.* FROM cards chosen JOIN cards c ON COALESCE(c.oracle_id,c.id)=COALESCE(chosen.oracle_id,chosen.id) LEFT JOIN builder_collection bc ON bc.scryfall_id=c.id WHERE chosen.id=? ORDER BY (COALESCE(bc.quantity,0)>0) DESC,(c.lang='en') DESC,(c.local_image IS NOT NULL) DESC,c.released_at DESC NULLS LAST,c.id LIMIT 1",[$deck['commander_id']])->fetch() : null;
 $identity = $commander ? (json_decode($commander['color_identity'],true) ?: []) : [];
+$identityMana = implode('', array_map(fn($color)=>'{'.$color.'}', $identity));
 $collection = deckQuery('SELECT COALESCE(SUM(quantity),0) total,COUNT(*) printings,COUNT(*) FILTER(WHERE c.id IS NULL) unmatched FROM builder_collection o LEFT JOIN cards c ON c.id=o.scryfall_id')->fetch();
+$setOptions = ($deck && $view==='discover' && (!$showSynergy || $choosingCommander)) ? deckQuery("SELECT set_code,MAX(set_name) set_name FROM cards WHERE set_code IS NOT NULL AND set_code<>'' GROUP BY set_code ORDER BY MAX(set_name),set_code")->fetchAll() : [];
 $q = substr(trim((string)($_GET['q']??'')),0,200);
 $oracle = substr(trim((string)($_GET['oracle']??($deck['terms']??''))),0,1000);
 $type = substr(trim((string)($_GET['type']??'')),0,120);
 $match = ($_GET['match']??'all')==='any' ? 'any' : 'all';
+$sort = (string)($_GET['sort'] ?? 'relevance');
+if (!in_array($sort,['relevance','name','newest','owned','synergy'],true)) $sort='relevance';
+$rarity = (string)($_GET['rarity'] ?? '');
+if (!in_array($rarity,['common','uncommon','rare','mythic','special'],true)) $rarity='';
+$setFilter = strtoupper(substr(trim((string)($_GET['set'] ?? '')),0,16));
+$cmcMin = is_numeric($_GET['cmc_min'] ?? null) ? max(0,(float)$_GET['cmc_min']):null;
+$cmcMax = is_numeric($_GET['cmc_max'] ?? null) ? max(0,(float)$_GET['cmc_max']):null;
 $ownedOnly = false;
+$excludeOwned = ($_GET['exclude_owned'] ?? '') === '1';
 $colorsOnly = ($_GET['colors']??'')==='1';
 $commanderColors=array_values(array_intersect((array)($_GET['commander_colors']??[]),['W','U','B','R','G','C']));
 $choosingCommander = isset($_GET['choose']);
 $commanderOwnedOnly = ($_GET['commander_owned'] ?? '1') === '1';
+$commanderPopular = ($_GET['commander_popular'] ?? '1') === '1';
 if($choosingCommander) $discoverMode='catalog';
 $page = max(1,min(10000,(int)($_GET['page']??1)));
 $terms = array_slice(deckTerms($oracle),0,12);
 $highlightTerms=array_merge($terms,deckTerms($type),$q!==''?[$q]:[]);
-$filterHidden = function() use($q,$oracle,$type,$match,$ownedOnly,$colorsOnly,$page): void {
-    foreach (['q'=>$q,'oracle'=>$oracle,'type'=>$type,'match'=>$match,'owned'=>$ownedOnly?'1':'','colors'=>$colorsOnly?'1':'','page'=>$page] as $k=>$v) echo '<input type="hidden" name="'.h($k).'" value="'.h($v).'">';
+$filterHidden = function() use($q,$oracle,$type,$match,$ownedOnly,$colorsOnly,$sort,$rarity,$setFilter,$cmcMin,$cmcMax,$excludeOwned,$page): void {
+    foreach (['q'=>$q,'oracle'=>$oracle,'type'=>$type,'match'=>$match,'owned'=>$ownedOnly?'1':'','colors'=>$colorsOnly?'1':'','sort'=>$sort,'rarity'=>$rarity,'set'=>$setFilter,'cmc_min'=>$cmcMin??'','cmc_max'=>$cmcMax??'','exclude_owned'=>$excludeOwned?'1':'','page'=>$page] as $k=>$v) echo '<input type="hidden" name="'.h($k).'" value="'.h((string)$v).'">';
 };
 $tokenFields = function(string $action, ?string $card = null) use($csrf,$id,$view,$selectionStage): void {
     echo '<input type="hidden" name="view" value="'.h($view).'"><input type="hidden" name="selection_stage" value="'.h($selectionStage).'">';
@@ -259,7 +270,12 @@ if ($deck && $view==='discover') {
     $conditions=[];foreach($terms as $term){$conditions[]="({$textExpr}) ILIKE ?";$params[]=$like($term);}
     if($conditions)$where[]='('.implode($match==='any'?' OR ':' AND ',$conditions).')';
     if($ownedOnly)$where[]='COALESCE(o.owned,0)>0';
+    if($excludeOwned && !$showSynergy)$where[]='COALESCE(o.owned,0)=0';
     if($colorsOnly && $commander){$where[]='c.color_identity <@ ?::jsonb';$params[]=json_encode($identity);}
+    if($rarity!==''){$where[]='c.rarity=?';$params[]=$rarity;}
+    if($setFilter!==''){$where[]='upper(c.set_code)=?';$params[]=$setFilter;}
+    if($cmcMin!==null){$where[]='COALESCE(c.cmc,0)>=?';$params[]=$cmcMin;}
+    if($cmcMax!==null){$where[]='COALESCE(c.cmc,0)<=?';$params[]=$cmcMax;}
     if($choosingCommander && $commanderColors){$where[]='c.color_identity <@ ?::jsonb';$params[]=json_encode($commanderColors);}
     if($choosingCommander){
         $where[]=deckCommanderSql();
@@ -274,11 +290,19 @@ if ($deck && $view==='discover') {
         $resultParams[]=$leader;
     }
      $commanderOrder = $choosingCommander
-         ? "(COALESCE(bc.quantity,0)>0) DESC,(COALESCE(o.owned,0)>0) DESC, NULLIF(c.raw->>'edhrec_rank','')::int ASC NULLS LAST, c.name, c.id"
+         ? ($commanderPopular
+             ? "NULLIF(c.raw->>'edhrec_rank','')::int ASC NULLS LAST,(COALESCE(bc.quantity,0)>0) DESC,(COALESCE(o.owned,0)>0) DESC,c.name,c.id"
+             : "(COALESCE(bc.quantity,0)>0) DESC,(COALESCE(o.owned,0)>0) DESC,NULLIF(c.raw->>'edhrec_rank','')::int ASC NULLS LAST,c.name,c.id")
          : "(COALESCE(bc.quantity,0)>0) DESC,COALESCE(o.owned,0) DESC,(c.lang='en') DESC,c.released_at DESC NULLS LAST,c.id";
      $resultOrder = $choosingCommander
-         ? "r.edhrec_rank ASC NULLS LAST,r.owned DESC,r.name,r.id"
-         : "r.owned_printing DESC,r.owned DESC,r.released_at DESC NULLS LAST,r.name,r.id";
+         ? ($commanderPopular ? "r.edhrec_rank ASC NULLS LAST,r.owned_printing DESC,r.name,r.id" : "r.owned_printing DESC,r.edhrec_rank ASC NULLS LAST,r.name,r.id")
+         : match($sort) {
+             'name' => 'r.name,r.id',
+             'newest' => 'r.released_at DESC NULLS LAST,r.name,r.id',
+             'owned' => 'r.owned_printing DESC,r.owned DESC,r.name,r.id',
+             'synergy' => 'synergy_score DESC NULLS LAST,r.name,r.id',
+             default => 'r.owned_printing DESC,r.owned DESC,r.released_at DESC NULLS LAST,r.name,r.id'
+         };
      $results=deckQuery(deckOwnedSql()."SELECT c.*,r.owned,r.owned_printing,r.edhrec_rank,{$synergySelect} FROM (SELECT DISTINCT ON(COALESCE(c.oracle_id,c.id)) c.id,c.name,c.released_at,COALESCE(o.owned,0) owned,COALESCE(bc.quantity,0) owned_printing,NULLIF(c.raw->>'edhrec_rank','')::int edhrec_rank FROM cards c LEFT JOIN owned o ON o.logical_id=COALESCE(c.oracle_id,c.id) LEFT JOIN builder_collection bc ON bc.scryfall_id=c.id {$whereSql} ORDER BY COALESCE(c.oracle_id,c.id),{$commanderOrder}) r JOIN cards c ON c.id=r.id{$synergyJoin} ORDER BY {$resultOrder} LIMIT 25 OFFSET {$offset}",$resultParams)->fetchAll();
     $hasMore=count($results)>24; $results=array_slice($results,0,24);
 }
@@ -294,7 +318,7 @@ pageHeader('Meus decks');
 <section><div class="section-heading"><div><h2>Meus decks</h2><p class="muted">Escolha um deck para continuar.</p></div></div>
 <?php if(!$decks): ?><p class="empty-state">Crie ou importe seu primeiro deck acima.</p><?php endif; ?>
 <div class="deck-library-rows"><?php foreach($decks as $d): ?>
-<article class="deck-library-row" <?php if($d['commander_card_id']): ?>style="--deck-art:url('/image.php?id=<?= h($d['commander_card_id']) ?>')"<?php endif; ?>><a href="?deck=<?= $d['id'] ?>"><span class="deck-library-copy"><strong><?= h($d['name']) ?></strong><span><?= h($d['commander']?:'Comandante a escolher') ?></span></span></a>
+<article class="deck-library-row" <?php if($d['commander_card_id']): ?>style="--deck-art:url('/image.php?id=<?= h($d['commander_card_id']) ?>')"<?php endif; ?>><a href="?deck=<?= $d['id'] ?>"><?php if($d['commander_card_id']): ?><img class="deck-library-commander" src="/image.php?id=<?= h($d['commander_card_id']) ?>" alt="" loading="lazy"><?php endif; ?><span class="deck-library-copy"><strong><?= h($d['name']) ?></strong><span><?= h($d['commander']?:'Comandante a escolher') ?></span></span></a>
 <span class="deck-library-count"><?= (int)$d['card_count'] ?> cartas</span><span class="deck-state <?= $d['status']==='ready'?'is-ready':'' ?>"><?= $d['status']==='ready'?'Finalizado':'Em planejamento' ?></span>
 <details class="deck-delete"><summary>Excluir</summary><form method="post"><input type="hidden" name="csrf" value="<?= h($csrf) ?>"><input type="hidden" name="deck" value="<?= $d['id'] ?>"><input type="hidden" name="action" value="delete_deck"><p>Excluir “<?= h($d['name']) ?>” e seus registros de upgrade? Sua coleção permanece salva.</p><button class="builder-remove">Confirmar exclusão</button></form></details></article>
 <?php endforeach; ?></div></section>
@@ -303,17 +327,19 @@ pageHeader('Meus decks');
 <div class="deck-workflow-bar <?= $isComplete?'is-complete':'' ?>"><div><strong><?= $isComplete?'Deck finalizado automaticamente':'Planejamento em andamento' ?></strong><span><?= $isComplete?'100 cartas aprovadas na seleção.':'A seleção é finalizada automaticamente quando chegar a 100 cartas no deck.' ?></span></div><span class="deck-progress"><?= $finalCount ?>/100 cartas</span></div>
 <?php if($view==='discover'): ?>
 <section id="intent" class="builder-intro">
-<div class="panel"><h2>Comandante</h2><?php if($commander): ?><div class="builder-commander"><?php if($src=cardImageUrl($commander)): ?><img src="<?= h($src) ?>" alt="<?= h($commander['name']) ?>" width="146" height="204"><?php endif; ?><div><h3><?= h($commander['name']) ?></h3><p>Identidade: <?= $identity?h(implode(' · ',$identity)):'incolor' ?></p><p><?= nl2br(h(deckText($commander))) ?></p></div></div><?php else: ?><p>Escolha uma criatura lendária para usar a identidade de cor como filtro.</p><?php endif; ?><a href="?deck=<?= $id ?>&choose=1&oracle=#explore">Escolher comandante</a><p class="muted">Esta versão trabalha com um comandante. Combinações de parceiros e Backgrounds ainda precisam de suporte específico.</p></div>
+<div class="panel"><h2>Comandante</h2><?php if($commander): ?><div class="builder-commander"><?php if($src=cardImageUrl($commander)): ?><img src="<?= h($src) ?>" alt="<?= h($commander['name']) ?>" width="146" height="204"><?php endif; ?><div><h3><?= h($commander['name']) ?></h3><p class="commander-identity"><strong>Identidade:</strong> <?= $identity?manaSymbols($identityMana):'<span class="muted">Incolor</span>' ?></p><p><?= nl2br(h(deckText($commander))) ?></p></div></div><?php else: ?><p>Escolha uma criatura lendária para usar a identidade de cor como filtro.</p><?php endif; ?><a href="?deck=<?= $id ?>&choose=1&oracle=#explore">Escolher comandante</a><p class="muted">Esta versão trabalha com um comandante. Combinações de parceiros e Backgrounds ainda precisam de suporte específico.</p></div>
 <form method="post" class="panel builder-form"><?php $tokenFields('strategy'); ?><h2>Minha intenção</h2><label>Estratégia e mecânicas<textarea name="strategy" rows="4" placeholder="Plano principal, temas secundários e o que quero evitar"><?= h($deck['strategy']) ?></textarea></label><label>Termos Oracle para explorar<input name="terms" value="<?= h($deck['terms']) ?>" placeholder="sacrifice; land; graveyard"></label><small>Separe palavras ou frases por ponto e vírgula. Estes termos são filtros escolhidos por você, não uma avaliação automática de sinergia.</small><button class="primary-link">Salvar intenção</button></form>
 </section>
 <?php require __DIR__.'/deck_synergy_view.php'; ?>
 <?php if($choosingCommander): ?><div class="commander-picker-intro"><strong>Escolha sua comandante</strong><span>Mostrando apenas cartas elegíveis. Pesquise pelo nome ou percorra a lista.</span></div><?php endif; ?>
-<?php if($choosingCommander): ?><fieldset class="commander-color-filter"><legend>Filtros para comandantes</legend><label class="commander-owned-toggle"><input type="checkbox" <?= $commanderOwnedOnly?'checked':'' ?>> Somente comandantes que possuo</label><?php foreach(['W'=>'Branco','U'=>'Azul','B'=>'Preto','R'=>'Vermelho','G'=>'Verde','C'=>'Incolor'] as $color=>$label): ?><label><input type="checkbox" name="commander_colors[]" value="<?= $color ?>" <?= in_array($color,$commanderColors,true)?'checked':'' ?>><?= $label ?></label><?php endforeach; ?><small>Marcado por padrão para priorizar a sua coleção. Desmarque para ver comandantes mais utilizados, mesmo que você ainda não os possua.</small></fieldset><?php endif; ?>
+<?php if($choosingCommander): ?><fieldset class="commander-color-filter"><legend>Filtros para comandantes</legend><label class="commander-owned-toggle"><input type="checkbox" <?= $commanderOwnedOnly?'checked':'' ?>> Somente comandantes que possuo</label><label class="commander-popular-toggle"><input type="checkbox" <?= $commanderPopular?'checked':'' ?>> Mais populares primeiro</label><?php foreach(['W'=>'Branco','U'=>'Azul','B'=>'Preto','R'=>'Vermelho','G'=>'Verde','C'=>'Incolor'] as $color=>$label): ?><label><input type="checkbox" name="commander_colors[]" value="<?= $color ?>" <?= in_array($color,$commanderColors,true)?'checked':'' ?>><?= $label ?></label><?php endforeach; ?><small>Você pode combinar coleção, popularidade e identidade de cor. Desmarque “Somente comandantes que possuo” para ampliar a lista.</small></fieldset><?php endif; ?>
 <?php if(!$showSynergy || $choosingCommander): ?>
 <section id="explore-catalog" class="section-block <?= $showSynergy?'':'catalog-mode' ?>"><div class="section-heading"><div><h2><?= $showSynergy?'Buscar no catálogo':'Explorar catálogo' ?></h2><p>Os resultados usam o mesmo espaço e a mesma apresentação das recomendações do comandante. Busca literal no Oracle em inglês, incluindo as duas faces.</p></div></div><p class="muted">Em Tipos e temas, separe os termos por ponto e vírgula. Basta um deles aparecer no tipo ou no Oracle: pirate; assassin; vehicle; treasure inclui também cartas que criam Tesouros. Esse grupo é combinado com os demais filtros.</p>
 <form class="builder-search builder-form" method="get"><input type="hidden" name="deck" value="<?= $id ?>"><?php if($choosingCommander): ?><input type="hidden" name="choose" value="1"><?php endif; ?><label>Nome<input name="q" value="<?= h($q) ?>" placeholder="Nome da carta"></label><label>Texto Oracle<input name="oracle" value="<?= h($oracle) ?>" placeholder="draw a card; sacrifice"></label><label>Tipos e temas<input name="type" value="<?= h($type) ?>" placeholder="pirate; assassin; vehicle; treasure"></label><label>Combinação do Oracle<select name="match"><option value="all" <?= $match==='all'?'selected':'' ?>>Todos os termos</option><option value="any" <?= $match==='any'?'selected':'' ?>>Qualquer termo</option></select></label><label class="builder-check"><input type="checkbox" name="owned" value="1" <?= $ownedOnly?'checked':'' ?>>Só minha coleção</label><label class="builder-check"><input type="checkbox" name="colors" value="1" <?= $colorsOnly?'checked':'' ?> <?= !$commander?'disabled':'' ?>>Identidade do comandante</label><button class="primary-link">Pesquisar cartas</button><a href="?deck=<?= $id ?>&oracle=#explore">Limpar filtros</a></form>
+<label class="search-sort">Ordenar resultados<select name="sort" data-builder-sort value="<?= h($sort) ?>"><option value="relevance" <?= $sort==='relevance'?'selected':'' ?>>Disponibilidade e relevância</option><option value="name" <?= $sort==='name'?'selected':'' ?>>Nome</option><option value="newest" <?= $sort==='newest'?'selected':'' ?>>Mais recentes</option><option value="owned" <?= $sort==='owned'?'selected':'' ?>>Mais cópias na coleção</option><option value="synergy" <?= $sort==='synergy'?'selected':'' ?>>Maior sinergia</option></select></label>
+<div class="builder-extra-filters"><label>Raridade<select name="rarity" data-builder-filter><option value="">Todas</option><option value="common" <?= $rarity==='common'?'selected':'' ?>>Comum</option><option value="uncommon" <?= $rarity==='uncommon'?'selected':'' ?>>Incomum</option><option value="rare" <?= $rarity==='rare'?'selected':'' ?>>Rara</option><option value="mythic" <?= $rarity==='mythic'?'selected':'' ?>>Mítica</option><option value="special" <?= $rarity==='special'?'selected':'' ?>>Especial</option></select></label><label>Edição<select name="set" data-builder-filter><option value="">Todas as edições</option><?php foreach($setOptions as $setOption): ?><option value="<?= h($setOption['set_code']) ?>" <?= $setFilter===$setOption['set_code']?'selected':'' ?>><?= h($setOption['set_name']) ?> (<?= h(strtoupper($setOption['set_code'])) ?>)</option><?php endforeach; ?></select></label><label>Custo mínimo<input type="number" name="cmc_min" data-builder-filter min="0" step="1" value="<?= $cmcMin===null?'':h((string)$cmcMin) ?>"></label><label>Custo máximo<input type="number" name="cmc_max" data-builder-filter min="0" step="1" value="<?= $cmcMax===null?'':h((string)$cmcMax) ?>"></label></div>
 <?php if(!$results): ?><p class="empty-state">Nenhuma carta corresponde aos filtros. Tente “qualquer termo” ou remova um filtro.</p><?php endif; ?>
-<div class="builder-results"><?php foreach($results as $card): ?><article class="builder-result"><?php if($src=cardImageUrl($card)): ?><a href="/card.php?id=<?= h($card['id']) ?>"><img src="<?= h($src) ?>" alt="<?= h($card['name']) ?>" width="146" height="204" loading="lazy"></a><?php endif; ?><div><h3><?= deckHighlight($card['name'],$highlightTerms) ?></h3><p class="builder-stock"><?= (int)$card['owned']>0?'Você possui '.(int)$card['owned'].' cópia(s)':'Falta na coleção' ?></p><p class="muted"><?= deckHighlight($card['type_line'],$highlightTerms) ?> · <?= manaSymbols($card['mana_cost']) ?></p><div class="builder-oracle"><p><?= nl2br(deckHighlight(deckText($card),$highlightTerms)) ?></p><?php foreach($terms as $term): if(stripos(deckText($card),$term)!==false): ?><small>Contém “<?= h($term) ?>” no Oracle.</small><?php endif; endforeach; ?></div><form method="post"><?php $tokenFields($choosingCommander?'commander':'add',$card['id']); $filterHidden(); ?><button class="secondary-link"><?= $choosingCommander?'Usar como comandante':'Adicionar às candidatas' ?></button></form></div></article><?php endforeach; ?></div>
+<div class="builder-results"><?php foreach($results as $card): ?><article class="builder-result"><?php if($src=cardImageUrl($card)): ?><a href="/card.php?id=<?= h($card['id']) ?>"><img src="<?= h($src) ?>" alt="<?= h((string)($card['name']??'')) ?>" width="146" height="204" loading="lazy"></a><?php endif; ?><div><h3><?= deckHighlight((string)($card['name']??''),$highlightTerms) ?></h3><p class="builder-stock"><?= (int)($card['owned']??0)>0?'Você possui '.(int)$card['owned'].' cópia(s)':'Falta na coleção' ?></p><p class="muted"><?= deckHighlight((string)($card['type_line']??''),$highlightTerms) ?> · <?= manaSymbols($card['mana_cost']??null) ?></p><div class="builder-oracle"><p><?= nl2br(deckHighlight(deckText($card),$highlightTerms)) ?></p><?php foreach($terms as $term): if(stripos(deckText($card),$term)!==false): ?><small>Contém “<?= h($term) ?>” no Oracle.</small><?php endif; endforeach; ?></div><form method="post"><?php $tokenFields($choosingCommander?'commander':'add',$card['id']); $filterHidden(); ?><button class="secondary-link"><?= $choosingCommander?'Usar como comandante':'Adicionar às candidatas' ?></button></form></div></article><?php endforeach; ?></div>
  <nav class="pager" aria-label="Resultados de cartas"><?php $base=$_GET;$base['deck']=$id; if($page>1): $base['page']=$page-1; ?><a href="?<?= h(http_build_query($base)) ?>#explore">Anterior</a><?php endif; ?><span>Página <?= $page ?></span><?php if($hasMore): $base['page']=$page+1; ?><a href="?<?= h(http_build_query($base)) ?>#explore">Próxima</a><?php endif; ?></nav>
  </section>
 <?php endif; ?>

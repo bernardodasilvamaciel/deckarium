@@ -57,23 +57,13 @@
   });
 
   document.querySelectorAll('.builder-result,.synergy-card').forEach(card => {
-    let details = card.querySelector('.card-hover-details');
-    if (!details && card.classList.contains('builder-result')) {
-      const title = card.querySelector('h3')?.textContent || '';
-      const meta = card.querySelector('.muted')?.textContent || '';
-      const oracle = card.querySelector('.builder-oracle')?.textContent || '';
-      details = document.createElement('div');
-      details.className = 'card-hover-details';
-      details.innerHTML = '<strong></strong><span></span><p></p>';
-      details.querySelector('strong').textContent = title;
-      details.querySelector('span').textContent = meta;
-      details.querySelector('p').textContent = oracle;
-      card.append(details);
-    }
     const trigger = card.querySelector('img');
-    if (!details || !trigger) return;
-    const show = () => details.classList.add('is-visible');
-    const hide = () => details.classList.remove('is-visible');
+    if (!trigger) return;
+    const preview = document.createElement('img');
+    preview.className = 'card-hover-card'; preview.alt = trigger.alt || ''; preview.src = trigger.currentSrc || trigger.src; preview.hidden = true;
+    card.append(preview);
+    const show = () => preview.hidden = false;
+    const hide = () => preview.hidden = true;
     trigger.addEventListener('mouseenter', show);
     trigger.addEventListener('mouseleave', hide);
     trigger.addEventListener('focus', show);
@@ -167,7 +157,15 @@
     const button = form.querySelector('button');
     if (button) { button.dataset.label = button.textContent; button.textContent = 'Buscando…'; button.setAttribute('aria-disabled','true'); }
   }));
-  document.querySelectorAll('form.builder-search').forEach(form => form.addEventListener('submit', () => {
+  document.querySelectorAll('form.builder-search').forEach((form, index) => {
+    form.id = form.id || 'builder-search-form-' + index;
+    const sort = document.querySelector('[data-builder-sort]');
+    if (sort) {
+      sort.setAttribute('form', form.id);
+      sort.addEventListener('change', () => form.requestSubmit());
+    }
+    document.querySelectorAll('[data-builder-filter]').forEach(filter => filter.setAttribute('form', form.id));
+    form.addEventListener('submit', () => {
     if (!form.querySelector('input[name="mode"]')) {
       const mode = document.createElement('input');
       mode.type = 'hidden'; mode.name = 'mode'; mode.value = 'catalog';
@@ -184,13 +182,26 @@
       owned.type = 'hidden'; owned.name = 'commander_owned'; owned.value = ownedToggle.checked ? '1' : '0';
       form.append(owned);
     }
+    const popularToggle = document.querySelector('.commander-popular-toggle input');
+    if (popularToggle) {
+      const popular = document.createElement('input');
+      popular.type = 'hidden'; popular.name = 'commander_popular'; popular.value = popularToggle.checked ? '1' : '0';
+      form.append(popular);
+    }
     const synergyToggle = document.querySelector('.synergy-controls input[name="synergy"]');
     if (synergyToggle && !synergyToggle.checked) {
       const synergy = document.createElement('input');
       synergy.type = 'hidden'; synergy.name = 'synergy'; synergy.value = '0';
       form.append(synergy);
     }
-  }));
+    const excludeOwned = document.querySelector('.catalog-only-toggle input[name="exclude_owned"]');
+    if (excludeOwned?.checked) {
+      const excluded = document.createElement('input');
+      excluded.type = 'hidden'; excluded.name = 'exclude_owned'; excluded.value = '1';
+      form.append(excluded);
+    }
+    });
+  });
   document.querySelectorAll('form.synergy-controls').forEach(form => form.addEventListener('submit', () => {
     if (!form.querySelector('input[name="synergy"]:checked') && !form.querySelector('input[name="synergy"][type="hidden"]')) {
       const synergy = document.createElement('input');
