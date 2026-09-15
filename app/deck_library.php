@@ -3,6 +3,18 @@ declare(strict_types=1);
 require_once __DIR__ . '/db.php';
 
 function deckSchema(): void {
+    db()->exec("ALTER TABLE cards ADD COLUMN IF NOT EXISTS edhrec_rank_cached int GENERATED ALWAYS AS (
+            CASE WHEN COALESCE(raw->>'edhrec_rank','') ~ '^[0-9]+$' THEN (raw->>'edhrec_rank')::int END
+        ) STORED;
+        ALTER TABLE cards ADD COLUMN IF NOT EXISTS commander_eligible boolean GENERATED ALWAYS AS (
+            ((COALESCE(raw->'card_faces'->0->>'type_line',type_line,'') LIKE '%Legendary%'
+                AND (COALESCE(raw->'card_faces'->0->>'type_line',type_line,'') LIKE '%Creature%'
+                    OR ((COALESCE(raw->'card_faces'->0->>'type_line',type_line,'') LIKE '%Vehicle%'
+                        OR COALESCE(raw->'card_faces'->0->>'type_line',type_line,'') LIKE '%Spacecraft%')
+                        AND COALESCE(raw->'card_faces'->0->>'power',raw->>'power') IS NOT NULL
+                        AND COALESCE(raw->'card_faces'->0->>'toughness',raw->>'toughness') IS NOT NULL)))
+             OR COALESCE(raw->'card_faces'->0->>'oracle_text',oracle_text,'') ILIKE '%can be your commander%')
+        ) STORED");
     db()->exec("CREATE TABLE IF NOT EXISTS builder_decks (
         id bigserial PRIMARY KEY, name text NOT NULL, commander_id uuid REFERENCES cards(id),
         strategy text NOT NULL DEFAULT '', terms text NOT NULL DEFAULT '', status text NOT NULL DEFAULT 'planning', created_at timestamptz DEFAULT now());
@@ -11,7 +23,9 @@ function deckSchema(): void {
         stage text NOT NULL CHECK(stage IN ('candidate','review','deck')), quantity int NOT NULL CHECK(quantity > 0),
         role text NOT NULL DEFAULT '', notes text NOT NULL DEFAULT '', PRIMARY KEY(deck_id,card_id));
         CREATE TABLE IF NOT EXISTS builder_collection (
-        scryfall_id uuid PRIMARY KEY, name text NOT NULL, quantity int NOT NULL CHECK(quantity > 0));
+        scryfall_id uuid NOT NULL, name text NOT NULL, quantity int NOT NULL CHECK(quantity > 0),
+        foil boolean NOT NULL DEFAULT false, PRIMARY KEY(scryfall_id,foil));
+        ALTER TABLE builder_collection ADD COLUMN IF NOT EXISTS foil boolean NOT NULL DEFAULT false;
         ALTER TABLE builder_decks ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'planning';
         CREATE TABLE IF NOT EXISTS deck_upgrades (
             id bigserial PRIMARY KEY, deck_id bigint NOT NULL REFERENCES builder_decks(id) ON DELETE CASCADE,
@@ -23,18 +37,33 @@ function deckSchema(): void {
             commander_id uuid NOT NULL REFERENCES cards(id) ON DELETE CASCADE, card_id uuid NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
             metric text NOT NULL DEFAULT 'synergy', score numeric NOT NULL, inclusion numeric NULL, deck_count int NULL,
             source_url text NOT NULL, synced_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(commander_id,card_id));");
+    db()->exec("DO \$\$ BEGIN
+        IF EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='builder_collection'::regclass AND conname='builder_collection_pkey' AND pg_get_constraintdef(oid)<>'PRIMARY KEY (scryfall_id, foil)') THEN
+            ALTER TABLE builder_collection DROP CONSTRAINT builder_collection_pkey;
+            ALTER TABLE builder_collection ADD PRIMARY KEY(scryfall_id,foil);
+        END IF;
+    END \$\$");
     db()->exec("CREATE INDEX IF NOT EXISTS builder_items_deck_stage_idx ON builder_items(deck_id,stage);
         CREATE INDEX IF NOT EXISTS builder_items_card_idx ON builder_items(card_id);
         CREATE INDEX IF NOT EXISTS deck_synergy_commander_score_idx ON deck_synergy(commander_id,score DESC);
+        CREATE INDEX IF NOT EXISTS cards_commander_picker_idx ON cards(edhrec_rank_cached,lower(name),id) WHERE commander_eligible;
         CREATE INDEX IF NOT EXISTS cards_color_identity_gin_idx ON cards USING gin(color_identity);");
+}
+
+function deckCheapestPriceSql(string $alias='c'): string {
+    $usd=sprintf('%.6F',(float)(getenv('USD_BRL_RATE')?:5.5));
+    $eur=sprintf('%.6F',(float)(getenv('EUR_BRL_RATE')?:6.0));
+    $normal="COALESCE(NULLIF({$alias}.prices->>'usd','')::numeric*{$usd},NULLIF({$alias}.prices->>'eur','')::numeric*{$eur})";
+    $foil="COALESCE(NULLIF({$alias}.prices->>'usd_foil','')::numeric*{$usd},NULLIF({$alias}.prices->>'eur_foil','')::numeric*{$eur})";
+    return "NULLIF(LEAST(COALESCE({$normal},1e18),COALESCE({$foil},1e18)),1e18)";
 }
 
 function deckFindPrinting(string $name): ?array {
     $name = trim(preg_replace('/\s+\([A-Z0-9]{2,8}\)\s+[^\s]+(?:\s+\*F\*)?$/i', '', $name) ?? $name);
     return deckQuery("SELECT c.*,COALESCE(o.quantity,0) owned_printing
-        FROM cards c LEFT JOIN builder_collection o ON o.scryfall_id=c.id
+        FROM cards c LEFT JOIN ".deckCollectionPrintingSql()." o ON o.scryfall_id=c.id
         WHERE lower(c.name)=lower(?) OR lower(split_part(c.name,' // ',1))=lower(?)
-        ORDER BY (o.quantity IS NOT NULL) DESC,(c.lang='en') DESC,(c.local_image IS NOT NULL) DESC,c.released_at DESC NULLS LAST LIMIT 1",[$name,$name])->fetch() ?: null;
+        ORDER BY (o.quantity IS NOT NULL) DESC,".deckCheapestPriceSql('c')." ASC NULLS LAST,(c.lang='en') DESC,(c.local_image IS NOT NULL) DESC,c.released_at DESC NULLS LAST LIMIT 1",[$name,$name])->fetch() ?: null;
 }
 
 function deckImportList(string $name, string $text): array {
@@ -119,9 +148,23 @@ function deckSyncEdhrec(array $commander): int {
 function deckQuery(string $sql, array $params = []): PDOStatement {
     $stmt = db()->prepare($sql); $stmt->execute($params); return $stmt;
 }
-function deckOwnedSql(): string {
-    return "WITH owned AS (SELECT COALESCE(c.oracle_id,c.id) logical_id,SUM(o.quantity)::int owned
-        FROM builder_collection o JOIN cards c ON c.id=o.scryfall_id GROUP BY COALESCE(c.oracle_id,c.id)) ";
+function deckOwnedSql(?int $excludeDeckId=null): string {
+    $sql="WITH owned AS (SELECT COALESCE(c.oracle_id,c.id) logical_id,SUM(o.quantity)::int owned
+        FROM builder_collection o JOIN cards c ON c.id=o.scryfall_id GROUP BY COALESCE(c.oracle_id,c.id))";
+    if($excludeDeckId!==null){
+        $deckId=max(0,$excludeDeckId);
+        $sql.=", used AS (SELECT logical_id,SUM(quantity)::int used FROM (
+            SELECT COALESCE(c.oracle_id,c.id) logical_id,SUM(i.quantity)::int quantity FROM builder_items i JOIN cards c ON c.id=i.card_id WHERE i.stage='deck' AND i.deck_id<>{$deckId} GROUP BY COALESCE(c.oracle_id,c.id)
+            UNION ALL SELECT COALESCE(c.oracle_id,c.id) logical_id,COUNT(*)::int quantity FROM builder_decks d JOIN cards c ON c.id=d.commander_id WHERE d.id<>{$deckId} GROUP BY COALESCE(c.oracle_id,c.id)
+        ) reservations GROUP BY logical_id)";
+    }
+    return $sql.' ';
+}
+function deckCollectionPrintingSql(): string {
+    return "(SELECT scryfall_id,SUM(quantity)::int quantity,
+        COALESCE(SUM(quantity) FILTER(WHERE NOT foil),0)::int normal_quantity,
+        COALESCE(SUM(quantity) FILTER(WHERE foil),0)::int foil_quantity
+        FROM builder_collection GROUP BY scryfall_id)";
 }
 function deckImport(string $path, bool $replace = true): array {
     $fp = fopen($path, 'r');
@@ -136,22 +179,41 @@ function deckImport(string $path, bool $replace = true): array {
         $line++; if ($row === [null]) continue;
         $id = trim($row[$map['Scryfall ID']] ?? ''); $qty = trim($row[$map['Quantity']] ?? '');
         if (!preg_match('/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i', $id) || !ctype_digit($qty) || (int)$qty < 1 || (int)$qty > 100000) throw new RuntimeException("ID ou quantidade inválida na linha {$line}. A coleção anterior foi preservada.");
-        $id = strtolower($id);
-        if (!isset($rows[$id])) $rows[$id] = ['name' => $row[$map['Name']] ?? '', 'quantity' => 0];
-        $rows[$id]['quantity'] += (int)$qty;
+        $id = strtolower($id); $foilValue=strtolower(trim((string)($row[$map['Foil']??-1]??'normal')));
+        $foilValues=['1','true','yes','sim','foil','etched'];$normalValues=['','0','false','no','nao','não','normal'];
+        if(!in_array($foilValue,array_merge($foilValues,$normalValues),true))throw new RuntimeException("Acabamento inválido na linha {$line}. Use normal, foil, 0 ou 1.");
+        $foil=in_array($foilValue,$foilValues,true); $key=$id.'|'.($foil?'1':'0');
+        if (!isset($rows[$key])) $rows[$key] = ['id'=>$id,'name' => $row[$map['Name']] ?? '', 'quantity' => 0,'foil'=>$foil];
+        $rows[$key]['quantity'] += (int)$qty;
     }
     fclose($fp);
     if (!$rows) throw new RuntimeException('Nenhuma carta válida no CSV.');
     db()->beginTransaction();
     try {
         if ($replace) db()->exec('DELETE FROM builder_collection');
-        foreach ($rows as $id => $row) {
-            if ($replace) deckQuery('INSERT INTO builder_collection VALUES (?,?,?)', [$id,$row['name'],$row['quantity']]);
-            else deckQuery('INSERT INTO builder_collection VALUES (?,?,?) ON CONFLICT(scryfall_id) DO UPDATE SET name=excluded.name,quantity=builder_collection.quantity+excluded.quantity', [$id,$row['name'],$row['quantity']]);
+        foreach ($rows as $row) {
+            $foilSql=$row['foil']?'true':'false';
+            if ($replace) deckQuery('INSERT INTO builder_collection(scryfall_id,name,quantity,foil) VALUES (?,?,?,?)', [$row['id'],$row['name'],$row['quantity'],$foilSql]);
+            else deckQuery('INSERT INTO builder_collection(scryfall_id,name,quantity,foil) VALUES (?,?,?,?) ON CONFLICT(scryfall_id,foil) DO UPDATE SET name=excluded.name,quantity=builder_collection.quantity+excluded.quantity', [$row['id'],$row['name'],$row['quantity'],$foilSql]);
         }
         db()->commit();
     } catch (Throwable $e) { db()->rollBack(); throw $e; }
     return ['printings'=>count($rows),'quantity'=>array_sum(array_column($rows,'quantity'))];
+}
+function deckLigaCsv(array $rows): string {
+    $fp=fopen('php://temp','w+');
+    fputcsv($fp,['Edicao (PTBR)','Edicao (EN)','Edicao (Sigla)','Card (PT)','Card (EN)','Quantidade','Qualidade (M NM SP MP HP D)','Idioma (BR EN DE ES FR IT JP KO RU TW)','Raridade (M R U C)','Cor (W U B R G M A L)','Extras','Card #','Comentario'],',','"','',"\r\n");
+    $languages=['pt'=>'BR','en'=>'EN','de'=>'DE','es'=>'ES','fr'=>'FR','it'=>'IT','ja'=>'JP','ko'=>'KO','ru'=>'RU','zht'=>'TW','zhs'=>'TW'];
+    $rarities=['mythic'=>'M','rare'=>'R','uncommon'=>'U','common'=>'C'];
+    foreach($rows as $row){
+        $colors=json_decode((string)($row['colors']??'[]'),true)?:[];
+        $color=str_contains((string)($row['type_line']??''),'Land')?'L':(str_contains((string)($row['type_line']??''),'Artifact')?'A':(count($colors)>1?'M':($colors[0]??'')));
+        $printed=''; $raw=$row['raw']??[]; if(is_string($raw))$raw=json_decode($raw,true)?:[];
+        if(($row['lang']??'en')==='pt')$printed=(string)($raw['printed_name']??'');
+        fputcsv($fp,['',(string)($row['set_name']??''),strtolower((string)($row['set_code']??'')),$printed,(string)$row['name'],(int)$row['export_quantity'],'NM',$languages[$row['lang']??'en']??'EN',$rarities[$row['rarity']??'']??'',$color,!empty($row['export_foil'])?'Foil':'',(string)($row['collector_number']??''),'Exportado do Deckarium'],',','"','',"\r\n");
+    }
+    rewind($fp); $csv=stream_get_contents($fp)?:''; fclose($fp);
+    return iconv('UTF-8','Windows-1252//TRANSLIT',$csv)?:$csv;
 }
 function deckText(array $card): string {
     $faces = json_decode((string)($card['card_faces'] ?? '[]'), true) ?: [];
@@ -175,10 +237,5 @@ function deckStageLabel(?string $stage): string {
     return ['candidate'=>'Candidatas','review'=>'Em avaliação','deck'=>'No deck'][$stage ?? ''] ?? 'Já selecionada';
 }
 function deckCommanderSql(): string {
-    // Front face only. Legendary Vehicles / Spacecraft: Wizards EOE update bulletin.
-    $type="COALESCE(c.raw->'card_faces'->0->>'type_line',c.type_line,'')";
-    $oracle="COALESCE(c.raw->'card_faces'->0->>'oracle_text',c.oracle_text,'')";
-    $power="COALESCE(c.raw->'card_faces'->0->>'power',c.raw->>'power')";
-    $toughness="COALESCE(c.raw->'card_faces'->0->>'toughness',c.raw->>'toughness')";
-    return "(({$type} LIKE '%Legendary%' AND ({$type} LIKE '%Creature%' OR (({$type} LIKE '%Vehicle%' OR {$type} LIKE '%Spacecraft%') AND {$power} IS NOT NULL AND {$toughness} IS NOT NULL))) OR {$oracle} ILIKE '%can be your commander%')";
+    return 'c.commander_eligible';
 }

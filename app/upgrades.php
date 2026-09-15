@@ -18,7 +18,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
             $remove=(string)($_POST['remove_card']??''); $add=(string)($_POST['add_card']??'');
             if(!preg_match('/^[a-f0-9-]{36}$/i',$remove)||!preg_match('/^[a-f0-9-]{36}$/i',$add)) throw new RuntimeException('Escolha as duas cartas da troca.');
             $out=deckQuery("SELECT c.* FROM builder_items i JOIN cards c ON c.id=i.card_id WHERE i.deck_id=? AND i.card_id=? AND i.stage='deck'",[$deckId,$remove])->fetch();
-            $incoming=deckQuery('SELECT c.*,COALESCE(o.quantity,0) owned_printing FROM cards c LEFT JOIN builder_collection o ON o.scryfall_id=c.id WHERE c.id=?',[$add])->fetch();
+            $incoming=deckQuery('SELECT c.*,COALESCE(o.quantity,0) owned_printing FROM cards c LEFT JOIN '.deckCollectionPrintingSql().' o ON o.scryfall_id=c.id WHERE c.id=?',[$add])->fetch();
             if(!$out) throw new RuntimeException('A carta que sai não pertence à lista finalizada deste deck.');
             if(!$incoming) throw new RuntimeException('Escolha uma impressão existente no catálogo local para entrar.');
             if(($out['oracle_id']?:$out['id'])===($incoming['oracle_id']?:$incoming['id'])) throw new RuntimeException('Escolha cartas diferentes para registrar a troca.');
@@ -39,15 +39,15 @@ $decks=deckQuery("SELECT d.*,c.name commander,(SELECT COUNT(*) FROM deck_upgrade
 $deck=$deckId?deckQuery("SELECT d.*,c.name commander,c.color_identity FROM builder_decks d LEFT JOIN cards c ON c.id=d.commander_id WHERE d.id=? AND d.status='ready'",[$deckId])->fetch():null;
 if(!$deck)$deckId=0;
 $outId=(string)($_GET['out']??''); $q=substr(trim((string)($_GET['q']??'')),0,160);
-$deckCards=$deck?deckQuery("SELECT c.*,i.quantity,COALESCE(bc.quantity,0) owned_printing FROM builder_items i JOIN cards c ON c.id=i.card_id LEFT JOIN builder_collection bc ON bc.scryfall_id=c.id WHERE i.deck_id=? AND i.stage='deck' ORDER BY c.name",[$deckId])->fetchAll():[];
+$deckCards=$deck?deckQuery("SELECT c.*,i.quantity,COALESCE(bc.quantity,0) owned_printing FROM builder_items i JOIN cards c ON c.id=i.card_id LEFT JOIN ".deckCollectionPrintingSql()." bc ON bc.scryfall_id=c.id WHERE i.deck_id=? AND i.stage='deck' ORDER BY c.name",[$deckId])->fetchAll():[];
 $outCard=null; foreach($deckCards as $candidate) if($candidate['id']===$outId)$outCard=$candidate;
 $incoming=[];
 if($deck&&$outCard&&$q!==''){
     $like='%'.str_replace(['\\','%','_'],['\\\\','\\%','\\_'],$q).'%';
-    $incoming=deckQuery("SELECT c.*,COALESCE(o.quantity,0) owned_printing FROM cards c LEFT JOIN builder_collection o ON o.scryfall_id=c.id WHERE c.name ILIKE ? AND COALESCE(c.oracle_id,c.id)<>?::uuid ORDER BY (o.quantity IS NOT NULL) DESC,c.name,(c.lang='en') DESC,c.released_at DESC NULLS LAST LIMIT 24",[$like,$outCard['oracle_id']?:$outCard['id']])->fetchAll();
+    $incoming=deckQuery("SELECT c.*,COALESCE(o.quantity,0) owned_printing FROM cards c LEFT JOIN ".deckCollectionPrintingSql()." o ON o.scryfall_id=c.id WHERE c.name ILIKE ? AND COALESCE(c.oracle_id,c.id)<>?::uuid ORDER BY (o.quantity IS NOT NULL) DESC,c.name,".deckCheapestPriceSql('c')." ASC NULLS LAST,(c.lang='en') DESC,c.released_at DESC NULLS LAST LIMIT 24",[$like,$outCard['oracle_id']?:$outCard['id']])->fetchAll();
 }
 $plans=$deck?deckQuery("SELECT u.* FROM deck_upgrades u WHERE u.deck_id=? ORDER BY (u.status='planned') DESC,u.created_at DESC",[$deckId])->fetchAll():[];
-foreach($plans as &$plan){$plan['remove_card']=deckQuery('SELECT c.*,COALESCE(o.quantity,0) owned_printing FROM cards c LEFT JOIN builder_collection o ON o.scryfall_id=c.id WHERE c.id=?',[$plan['remove_card_id']])->fetch();$plan['add_card']=deckQuery('SELECT c.*,COALESCE(o.quantity,0) owned_printing FROM cards c LEFT JOIN builder_collection o ON o.scryfall_id=c.id WHERE c.id=?',[$plan['add_card_id']])->fetch();}unset($plan);
+foreach($plans as &$plan){$plan['remove_card']=deckQuery('SELECT c.*,COALESCE(o.quantity,0) owned_printing FROM cards c LEFT JOIN '.deckCollectionPrintingSql().' o ON o.scryfall_id=c.id WHERE c.id=?',[$plan['remove_card_id']])->fetch();$plan['add_card']=deckQuery('SELECT c.*,COALESCE(o.quantity,0) owned_printing FROM cards c LEFT JOIN '.deckCollectionPrintingSql().' o ON o.scryfall_id=c.id WHERE c.id=?',[$plan['add_card_id']])->fetch();}unset($plan);
 pageHeader('Upgrades');
 ?>
 <section class="hero upgrade-hero"><div><h1>Planeje a próxima versão</h1><p>Escolha uma carta do deck atual e qualquer impressão do catálogo para entrar no lugar. O Deckarium informa se ela está na coleção, mas não limita sua escolha.</p></div><a class="text-link" href="/decks.php">Criar ou planejar decks</a></section>

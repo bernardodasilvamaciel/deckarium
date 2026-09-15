@@ -76,6 +76,13 @@
     stack.addEventListener('click', toggle);
     stack.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(); } });
   });
+  document.querySelectorAll('[data-deck-delete]').forEach(trigger => {
+    const dialog = document.getElementById(trigger.dataset.deckDelete);
+    if (!(dialog instanceof HTMLDialogElement)) return;
+    trigger.addEventListener('click', () => dialog.showModal());
+    dialog.querySelectorAll('[data-dialog-close]').forEach(button => button.addEventListener('click', () => dialog.close()));
+    dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+  });
   const previewLinks = document.querySelectorAll('[data-card-preview], .mana-card-item');
   if (previewLinks.length) {
     const preview = document.createElement('img');
@@ -159,56 +166,15 @@
   }));
   document.querySelectorAll('form.builder-search').forEach((form, index) => {
     form.id = form.id || 'builder-search-form-' + index;
-    const sort = document.querySelector('[data-builder-sort]');
+    const sort = form.querySelector('[data-builder-sort]');
     if (sort) {
-      sort.setAttribute('form', form.id);
       sort.addEventListener('change', () => form.requestSubmit());
     }
-    document.querySelectorAll('[data-builder-filter]').forEach(filter => filter.setAttribute('form', form.id));
     form.addEventListener('submit', () => {
-    if (!form.querySelector('input[name="mode"]')) {
-      const mode = document.createElement('input');
-      mode.type = 'hidden'; mode.name = 'mode'; mode.value = 'catalog';
-      form.append(mode);
-    }
-    document.querySelectorAll('.commander-color-filter input[name="commander_colors[]"]:checked').forEach(checkbox => {
-      const color = document.createElement('input');
-      color.type = 'hidden'; color.name = 'commander_colors[]'; color.value = checkbox.value;
-      form.append(color);
-    });
-    const ownedToggle = document.querySelector('.commander-owned-toggle input');
-    if (ownedToggle) {
-      const owned = document.createElement('input');
-      owned.type = 'hidden'; owned.name = 'commander_owned'; owned.value = ownedToggle.checked ? '1' : '0';
-      form.append(owned);
-    }
-    const popularToggle = document.querySelector('.commander-popular-toggle input');
-    if (popularToggle) {
-      const popular = document.createElement('input');
-      popular.type = 'hidden'; popular.name = 'commander_popular'; popular.value = popularToggle.checked ? '1' : '0';
-      form.append(popular);
-    }
-    const synergyToggle = document.querySelector('.synergy-controls input[name="synergy"]');
-    if (synergyToggle && !synergyToggle.checked) {
-      const synergy = document.createElement('input');
-      synergy.type = 'hidden'; synergy.name = 'synergy'; synergy.value = '0';
-      form.append(synergy);
-    }
-    const excludeOwned = document.querySelector('.catalog-only-toggle input[name="exclude_owned"]');
-    if (excludeOwned?.checked) {
-      const excluded = document.createElement('input');
-      excluded.type = 'hidden'; excluded.name = 'exclude_owned'; excluded.value = '1';
-      form.append(excluded);
-    }
+      const button = form.querySelector('button[type="submit"],button:not([type])');
+      if (button) { button.dataset.label = button.textContent; button.textContent = 'Aplicando…'; button.setAttribute('aria-disabled','true'); }
     });
   });
-  document.querySelectorAll('form.synergy-controls').forEach(form => form.addEventListener('submit', () => {
-    if (!form.querySelector('input[name="synergy"]:checked') && !form.querySelector('input[name="synergy"][type="hidden"]')) {
-      const synergy = document.createElement('input');
-      synergy.type = 'hidden'; synergy.name = 'synergy'; synergy.value = '0';
-      form.append(synergy);
-    }
-  }));
   document.querySelectorAll('.builder-results form').forEach(form => form.addEventListener('submit', () => {
     try { sessionStorage.setItem('builder-return-scroll', String(window.scrollY)); } catch (_) {}
   }));
@@ -242,33 +208,7 @@
       if (button) { button.disabled = true; button.textContent = 'Já adicionada · ' + selected.label.toLowerCase(); }
     });
   }
-  const exploreSynergy = window.builderExploreSynergy || {};
-  if (Object.keys(exploreSynergy).length) {
-    document.querySelectorAll('.builder-results article').forEach(article => {
-      const link = article.querySelector('a[href*="/card.php?id="]');
-      const id = link?.href.match(/[?&]id=([^&]+)/)?.[1];
-      const metric = id && exploreSynergy[id];
-      if (!metric || article.querySelector('.builder-synergy')) return;
-      const badge = document.createElement('span');
-      badge.className = 'builder-synergy';
-      badge.style.cssText = 'display:inline-flex;margin:0 0 8px;padding:4px 8px;border-radius:999px;background:#e7efe8;color:var(--accent);font-size:.74rem;font-weight:800';
-      badge.textContent = metric.metric === 'lift'
-        ? 'Lift EDHREC: ' + Number(metric.score).toLocaleString('pt-BR', { maximumFractionDigits: 2 })
-        : 'Sinergia EDHREC: ' + (metric.score >= 0 ? '+' : '') + Math.round(Number(metric.score) * 100) + '%';
-      article.querySelector('h3')?.after(badge);
-    });
-  }
   if (Object.keys(selection).length) {
-    document.querySelectorAll('.builder-results article').forEach(article => {
-      const link = article.querySelector('a[href*="/card.php?id="]');
-      const id = link?.href.match(/[?&]id=([^&]+)/)?.[1];
-      const item = id && selection[id];
-      if (!item) return;
-      const action = article.querySelector('form button');
-      if (action) { action.disabled = true; action.textContent = `Já adicionada · ${item.label}`; action.classList.add('is-selected'); }
-      const badge = document.createElement('span'); badge.className = 'builder-selected-badge'; badge.textContent = `Já adicionada · ${item.label}`;
-      article.querySelector('h3')?.after(badge);
-    });
     document.querySelectorAll('.builder-item').forEach(form => {
       const link = form.querySelector('a[href*="/card.php?id="]');
       const id = link?.href.match(/[?&]id=([^&]+)/)?.[1];

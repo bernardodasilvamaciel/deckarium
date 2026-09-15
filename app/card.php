@@ -94,7 +94,7 @@ $back = cardImageUrl($card, 'back', 'normal');
       <dt>Lançamento</dt><dd><?= h(displayDate($card['released_at'])) ?></dd>
       <dt>Preços desta impressão</dt><dd class="printing-price-detail"><?= h(deckPriceVariantsLabel($card)) ?></dd>
     </dl>
-    <p class="source-note price-source-note">Fonte: preços USD/EUR desta impressão no Scryfall, convertidos para reais pelo câmbio configurado no app (USD_BRL_RATE padrão 5,50; EUR_BRL_RATE padrão 6,00). Foil usa a cotação foil; o CSV não define o preço.</p>
+    <p class="source-note price-source-note">Fonte: preços USD/EUR desta impressão no Scryfall, convertidos para reais pelo câmbio configurado.</p>
    </div>
 
     <?php if (count($printings) > 1): ?>

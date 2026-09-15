@@ -27,6 +27,18 @@ CREATE TABLE IF NOT EXISTS cards (
     legalities JSONB NOT NULL DEFAULT '{}'::jsonb,
     card_faces JSONB NOT NULL DEFAULT '[]'::jsonb,
     raw JSONB NOT NULL,
+    edhrec_rank_cached INTEGER GENERATED ALWAYS AS (
+        CASE WHEN COALESCE(raw->>'edhrec_rank','') ~ '^[0-9]+$' THEN (raw->>'edhrec_rank')::int END
+    ) STORED,
+    commander_eligible BOOLEAN GENERATED ALWAYS AS (
+        ((COALESCE(raw->'card_faces'->0->>'type_line',type_line,'') LIKE '%Legendary%'
+            AND (COALESCE(raw->'card_faces'->0->>'type_line',type_line,'') LIKE '%Creature%'
+                OR ((COALESCE(raw->'card_faces'->0->>'type_line',type_line,'') LIKE '%Vehicle%'
+                    OR COALESCE(raw->'card_faces'->0->>'type_line',type_line,'') LIKE '%Spacecraft%')
+                    AND COALESCE(raw->'card_faces'->0->>'power',raw->>'power') IS NOT NULL
+                    AND COALESCE(raw->'card_faces'->0->>'toughness',raw->>'toughness') IS NOT NULL)))
+         OR COALESCE(raw->'card_faces'->0->>'oracle_text',oracle_text,'') ILIKE '%can be your commander%')
+    ) STORED,
     imported_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -34,6 +46,7 @@ CREATE INDEX IF NOT EXISTS cards_name_trgm_idx ON cards USING gin (name gin_trgm
 CREATE INDEX IF NOT EXISTS cards_oracle_id_idx ON cards (oracle_id);
 CREATE INDEX IF NOT EXISTS cards_set_code_idx ON cards (set_code);
 CREATE INDEX IF NOT EXISTS cards_released_at_idx ON cards (released_at DESC);
+CREATE INDEX IF NOT EXISTS cards_commander_picker_idx ON cards (edhrec_rank_cached, lower(name), id) WHERE commander_eligible;
 
 CREATE TABLE IF NOT EXISTS sync_status (
     bulk_type TEXT PRIMARY KEY,
@@ -41,6 +54,14 @@ CREATE TABLE IF NOT EXISTS sync_status (
     imported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     source_url TEXT NULL,
     card_count BIGINT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS builder_collection (
+    scryfall_id UUID NOT NULL,
+    name TEXT NOT NULL,
+    quantity INTEGER NOT NULL CHECK(quantity > 0),
+    foil BOOLEAN NOT NULL DEFAULT FALSE,
+    PRIMARY KEY (scryfall_id, foil)
 );
 
 CREATE TABLE IF NOT EXISTS upgrade_items (

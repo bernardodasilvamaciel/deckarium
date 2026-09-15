@@ -15,7 +15,7 @@ $commanderEntry = null;
 if ($selectionStage==='deck' && $commander) {
     $commanderEntry = $commander;
     $commanderEntry['stage']='deck'; $commanderEntry['quantity']=1; $commanderEntry['role']='Comandante'; $commanderEntry['notes']='';
-    $commanderEntry['owned_printing']=(int)deckQuery('SELECT COALESCE(quantity,0) FROM builder_collection WHERE scryfall_id=?',[$commander['id']])->fetchColumn();
+    $commanderEntry['owned_printing']=(int)deckQuery('SELECT COALESCE(SUM(quantity),0) FROM builder_collection WHERE scryfall_id=?',[$commander['id']])->fetchColumn();
     $commanderEntry['owned']=(int)deckQuery(deckOwnedSql().'SELECT COALESCE((SELECT owned FROM owned WHERE logical_id=?::uuid),0)',[$commander['oracle_id']?:$commander['id']])->fetchColumn();
     $commanderEntry['other_used']=(int)deckQuery("SELECT COALESCE(SUM(x.quantity),0) FROM (SELECT SUM(i.quantity)::int quantity FROM builder_items i JOIN cards c ON c.id=i.card_id WHERE i.stage='deck' AND i.deck_id<>? AND COALESCE(c.oracle_id,c.id)=?::uuid UNION ALL SELECT COUNT(*)::int FROM builder_decks d JOIN cards c ON c.id=d.commander_id WHERE d.id<>? AND COALESCE(c.oracle_id,c.id)=?::uuid) x",[$id,$commander['oracle_id']?:$commander['id'],$id,$commander['oracle_id']?:$commander['id']])->fetchColumn();
     $groups = ['Comandante'=>[$commanderEntry]] + $groups;

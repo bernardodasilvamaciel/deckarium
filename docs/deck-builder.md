@@ -4,19 +4,19 @@ Acesse `http://localhost:8080/decks.php` ou **Meus decks** no menu. O módulo fu
 
 ## Fluxo
 
-1. Importe a exportação completa CSV do ManaBox, com `Name`, `Scryfall ID` e `Quantity`. A importação substitui as quantidades da coleção, preservando os decks; arquivos inválidos preservam a coleção anterior. Impressões desconhecidas são armazenadas e sinalizadas.
+1. Importe a exportação completa CSV do ManaBox, com `Name`, `Scryfall ID`, `Quantity` e, quando disponível, `Foil`. A importação mantém versões normais e foil separadas, substitui as quantidades da coleção e preserva os decks; arquivos inválidos preservam a coleção anterior. Impressões desconhecidas são armazenadas e sinalizadas.
 2. Planeje um deck do zero ou cole uma exportação textual do Moxfield. Cabeçalhos `Commander` e `Deck` são reconhecidos; listas simples no formato `1 Nome da carta` também funcionam. A importação escolhe primeiro a impressão exata presente na coleção.
-3. Escolha seu comandante e registre a estratégia e os termos que deseja explorar.
-4. Busque palavras ou frases literais do Oracle em inglês, separadas por ponto e vírgula: `sacrifice; land; graveyard`. **Todos os termos** usa AND; **Qualquer termo** usa OR. Ambas as faces são pesquisadas. Combine com nome, tipo, identidade de cor e **Só minha coleção**.
+3. Ao criar um deck, escolha imediatamente uma comandante na lista. A mesma busca e os mesmos filtros usados depois para explorar o catálogo já funcionam nessa etapa; apenas a ordenação por sinergia fica indisponível até existir uma comandante de referência.
+4. Depois da escolha, registre a estratégia e busque palavras ou frases literais do Oracle em inglês, separadas por ponto e vírgula: `sacrifice; land; graveyard`. **Todos os termos** usa AND; **Qualquer termo** usa OR. Ambas as faces são pesquisadas. Combine nome, tipo, disponibilidade, identidade de cor, raridade, edição e custo no mesmo painel.
 5. Adicione cartas às candidatas e mova-as entre candidatas, em avaliação e deck. Você define quantidade, função e observações. A edição expandida mostra imagem, tipo, custo e texto Oracle.
 6. A lista é finalizada automaticamente quando comandante + cartas aprovadas chegam a 100 cartas. Cada troca é planejada dentro da seleção, relacionando uma carta do deck com qualquer impressão do catálogo e indicando quando ela está disponível na coleção.
-7. Consulte a composição e exporte o deck ou as cópias faltantes.
+7. Consulte a composição e o valor estimado. Exporte o deck em texto, as cópias faltantes ou um CSV no padrão da Liga para pesquisar preços do deck completo ou somente do que falta.
 
 ## Recomendações do EDHREC
 
 O módulo é dividido em **Biblioteca**, **Comandante e descobertas** e **Minha seleção**. Na biblioteca, cada deck tem exclusão com confirmação, sem apagar cartas da coleção. A seleção tem abas independentes: candidatas em texto agrupado por tipo (prévia ao passar o mouse ou focar; toque abre o editor), avaliação com notas e ações rápidas, e deck com galeria por tipo. Mover uma carta entre etapas preserva quantidade, função e observações.
 
-**Incluir cartas fora da coleção** vem ativado. Desmarque e aplique o filtro para limitar às cartas possuídas. As recomendações são paginadas em grupos de 18, ordenadas pela métrica recebida e deduplicadas pela identidade Oracle. Outra impressão da mesma carta conta como propriedade e como seleção já existente. Quando possível, a impressão da coleção é mostrada; fora dela, uma impressão física tem preferência. Cada recomendação permite adicionar às candidatas.
+O painel de exploração combina todos os filtros e usa **Ordenar resultados** para alternar entre sinergia, relevância, nome, novidade e disponibilidade. **Disponibilidade** permite mostrar tudo, somente a coleção ou somente o que falta. Os resultados são paginados em grupos de 24 e deduplicados pela identidade Oracle. Outra impressão da mesma carta conta como propriedade e como seleção já existente. Quando possível, a impressão da coleção é mostrada; fora dela, uma impressão física tem preferência. Cada resultado permite adicionar a carta às candidatas.
 
 Com um comandante definido, **Atualizar do EDHREC** busca recomendações sob demanda e grava métrica, fonte e data no cache local. O sistema preserva se o valor recebido é `synergy` ou `lift`, pois as escalas não são equivalentes. Esses números representam associação e popularidade entre listas, não uma avaliação objetiva de força. Se a rede ou o EDHREC estiver indisponível, a cache anterior é preservada e o restante do construtor continua funcionando.
 

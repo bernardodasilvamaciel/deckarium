@@ -91,13 +91,36 @@ function cardTile(array $card): void
     echo '<article class="card-tile"><a class="card-art" href="' . h($url) . '">';
     if ($image) echo '<img loading="lazy" decoding="async" width="488" height="680" src="' . h($image) . '" alt="' . h($card['name']) . '">';
     else echo '<div class="placeholder"><strong>' . h($card['name']) . '</strong><span>Imagem indisponível</span></div>';
-    echo '</a><div class="card-meta"><a href="' . h($url) . '">' . h($card['name']) . '</a><small>' . h(strtoupper((string)$card['set_code'])) . ' · #' . h((string)$card['collector_number']) . '</small><small class="card-price">' . h(deckPriceLabel($card)) . '</small></div></article>';
+    $priceLabel=array_key_exists('foil',$card)?deckFinishPriceLabel($card,deckIsFoil($card['foil'])):deckPriceLabel($card);
+    echo '</a><div class="card-meta"><a href="' . h($url) . '">' . h($card['name']) . '</a><small>' . h(strtoupper((string)$card['set_code'])) . ' · #' . h((string)$card['collector_number']) . '</small><small class="card-price">' . h($priceLabel) . '</small></div></article>';
 }
 
 function deckPriceBrl(array $card): ?float
 {
     $options=deckPriceOptions($card);
     return $options['normal'] ?? $options['foil'] ?? null;
+}
+function deckIsFoil(mixed $value): bool
+{
+    return filter_var($value,FILTER_VALIDATE_BOOLEAN);
+}
+function deckFinishPriceBrl(array $card,bool $foil): ?float
+{
+    $options=deckPriceOptions($card);
+    return $foil?$options['foil']:$options['normal'];
+}
+function deckFinishPriceLabel(array $card,bool $foil): string
+{
+    $price=deckFinishPriceBrl($card,$foil);
+    return ($foil?'Foil · ':'Não foil · ').($price===null?'Preço indisponível':'R$ '.number_format($price,2,',','.'));
+}
+function deckSelectedPriceBrl(array $card): ?float
+{
+    $options=deckPriceOptions($card);
+    if((int)($card['normal_quantity']??0)>0 && $options['normal']!==null)return $options['normal'];
+    if((int)($card['foil_quantity']??0)>0 && $options['foil']!==null)return $options['foil'];
+    $available=array_values(array_filter($options,fn($price)=>$price!==null));
+    return $available?min($available):null;
 }
 function deckPriceOptions(array $card): array
 {
