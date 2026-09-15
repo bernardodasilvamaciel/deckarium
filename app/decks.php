@@ -150,7 +150,6 @@ $commander = $deck && $deck['commander_id'] ? deckQuery("SELECT c.* FROM cards c
 $identity = $commander ? (json_decode($commander['color_identity'],true) ?: []) : [];
 $identityMana = implode('', array_map(fn($color)=>'{'.$color.'}', $identity));
 $collection = deckQuery('SELECT COALESCE(SUM(quantity),0) total,COUNT(*) printings,COUNT(*) FILTER(WHERE c.id IS NULL) unmatched FROM builder_collection o LEFT JOIN cards c ON c.id=o.scryfall_id')->fetch();
-$setOptions = ($deck && $view==='discover' && (!$showSynergy || $choosingCommander)) ? deckQuery("SELECT set_code,MAX(set_name) set_name FROM cards WHERE set_code IS NOT NULL AND set_code<>'' GROUP BY set_code ORDER BY MAX(set_name),set_code")->fetchAll() : [];
 $q = substr(trim((string)($_GET['q']??'')),0,200);
 $oracle = substr(trim((string)($_GET['oracle']??($deck['terms']??''))),0,1000);
 $type = substr(trim((string)($_GET['type']??'')),0,120);
@@ -170,6 +169,7 @@ $choosingCommander = isset($_GET['choose']);
 $commanderOwnedOnly = ($_GET['commander_owned'] ?? '1') === '1';
 $commanderPopular = ($_GET['commander_popular'] ?? '1') === '1';
 if($choosingCommander) $discoverMode='catalog';
+$setOptions = ($deck && $view==='discover' && (!$showSynergy || $choosingCommander)) ? deckQuery("SELECT set_code,MAX(set_name) set_name FROM cards WHERE set_code IS NOT NULL AND set_code<>'' GROUP BY set_code ORDER BY MAX(set_name),set_code")->fetchAll() : [];
 $page = max(1,min(10000,(int)($_GET['page']??1)));
 $terms = array_slice(deckTerms($oracle),0,12);
 $highlightTerms=array_merge($terms,deckTerms($type),$q!==''?[$q]:[]);
