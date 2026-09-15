@@ -1,6 +1,128 @@
 (() => {
+  const bindPrintingAjax = () => {
+    document.querySelectorAll('[data-printing-link]').forEach(link => {
+      if (link.dataset.ajaxBound) return;
+      link.dataset.ajaxBound = 'true';
+      link.addEventListener('click', async event => {
+        event.preventDefault();
+        if (link.classList.contains('is-loading')) return;
+        link.classList.add('is-loading');
+        const currentFacts = document.querySelector('[data-card-facts]');
+        const currentImages = document.querySelector('.detail-images');
+        const currentActions = document.querySelector('[data-card-actions]');
+        try {
+          const response = await fetch(link.href, { headers: { 'X-Requested-With': 'fetch' }, cache: 'no-store' });
+          if (!response.ok) throw new Error('Não foi possível carregar esta impressão.');
+          const html = await response.text();
+          const parsed = new DOMParser().parseFromString(html, 'text/html');
+          const nextFacts = parsed.querySelector('[data-card-facts]');
+          const nextImages = parsed.querySelector('.detail-images');
+          const nextActions = parsed.querySelector('[data-card-actions]');
+          if (!nextFacts || !nextImages) throw new Error('Resposta incompleta.');
+          currentFacts?.replaceWith(nextFacts);
+          currentImages?.replaceWith(nextImages);
+          if (currentActions && nextActions) currentActions.replaceWith(nextActions);
+          document.title = parsed.title || document.title;
+          history.pushState({}, '', link.href);
+          document.querySelectorAll('[data-printing-link]').forEach(item => {
+            item.classList.toggle('current', item.href === link.href);
+          });
+          bindPrintingAjax();
+        } catch (_) {
+          window.location.href = link.href;
+        } finally {
+          link.classList.remove('is-loading');
+        }
+      });
+    });
+  };
+  bindPrintingAjax();
+
+  document.querySelectorAll('[data-mana-cost]').forEach(button => {
+    button.addEventListener('click', () => {
+      const target = Array.from(document.querySelectorAll('[data-mana-list]')).find(item => item.dataset.manaList === button.dataset.manaCost);
+      if (!target) return;
+      const wasOpen = !target.hidden;
+      document.querySelectorAll('[data-mana-list]').forEach(list => { list.hidden = true; });
+      document.querySelectorAll('[data-mana-cost]').forEach(item => {
+        item.setAttribute('aria-expanded', 'false');
+        item.classList.remove('is-selected');
+      });
+      if (!wasOpen) {
+        target.hidden = false;
+        button.setAttribute('aria-expanded', 'true');
+        button.classList.add('is-selected');
+      }
+    });
+  });
+
+  document.querySelectorAll('.builder-result,.synergy-card').forEach(card => {
+    let details = card.querySelector('.card-hover-details');
+    if (!details && card.classList.contains('builder-result')) {
+      const title = card.querySelector('h3')?.textContent || '';
+      const meta = card.querySelector('.muted')?.textContent || '';
+      const oracle = card.querySelector('.builder-oracle')?.textContent || '';
+      details = document.createElement('div');
+      details.className = 'card-hover-details';
+      details.innerHTML = '<strong></strong><span></span><p></p>';
+      details.querySelector('strong').textContent = title;
+      details.querySelector('span').textContent = meta;
+      details.querySelector('p').textContent = oracle;
+      card.append(details);
+    }
+    const trigger = card.querySelector('img');
+    if (!details || !trigger) return;
+    const show = () => details.classList.add('is-visible');
+    const hide = () => details.classList.remove('is-visible');
+    trigger.addEventListener('mouseenter', show);
+    trigger.addEventListener('mouseleave', hide);
+    trigger.addEventListener('focus', show);
+    trigger.addEventListener('blur', hide);
+  });
+
+  document.querySelectorAll('.upgrade-stack').forEach(stack => {
+    stack.setAttribute('role','button'); stack.setAttribute('tabindex','0'); stack.setAttribute('aria-label','Alternar carta do upgrade');
+    const toggle = event => { event.preventDefault(); stack.classList.toggle('show-old'); };
+    stack.addEventListener('click', toggle);
+    stack.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(); } });
+  });
+  const previewLinks = document.querySelectorAll('[data-card-preview], .mana-card-item');
+  if (previewLinks.length) {
+    const preview = document.createElement('img');
+    preview.className = 'card-hover-preview'; preview.alt = ''; preview.hidden = true;
+    document.body.append(preview);
+    const hidePreview = () => { preview.hidden = true; };
+    const showPreview = link => {
+      const previewSrc = link.dataset.cardPreview || link.querySelector('img')?.src;
+      if (!previewSrc) return;
+      preview.src = previewSrc;
+      const rect = link.getBoundingClientRect();
+      const width = Math.min(230, window.innerWidth - 24);
+      preview.style.width = width + 'px';
+      preview.style.left = Math.max(12, Math.min(rect.right + 14, window.innerWidth - width - 12)) + 'px';
+      preview.style.top = Math.max(12, Math.min(rect.top, window.innerHeight - width * 1.4 - 12)) + 'px';
+      preview.hidden = false;
+    };
+    previewLinks.forEach(link => {
+      link.addEventListener('mouseenter', () => { if (matchMedia('(hover: hover)').matches) showPreview(link); });
+      link.addEventListener('mouseleave', hidePreview);
+      link.addEventListener('focus', () => showPreview(link));
+      link.addEventListener('blur', hidePreview);
+      link.addEventListener('click', event => {
+        if (matchMedia('(hover: none)').matches) {
+          const editor = link.closest('.selection-card')?.querySelector('.selection-editor');
+          if (editor) { event.preventDefault(); hidePreview(); editor.open = !editor.open; }
+        }
+      });
+    });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') hidePreview(); });
+    window.addEventListener('scroll', hidePreview, true);
+    window.addEventListener('resize', hidePreview);
+    preview.addEventListener('error', hidePreview);
+  }
   const unavailable = (img) => {
     if (!(img instanceof HTMLImageElement) || img.dataset.failed) return;
+    if (img.classList.contains('card-hover-preview')) { img.hidden = true; return; }
     if (img.classList.contains('set-icon')) return;
     img.dataset.failed = 'true';
     if (img.classList.contains('mana-symbol') || img.classList.contains('brand-mark')) {
@@ -45,10 +167,86 @@
     const button = form.querySelector('button');
     if (button) { button.dataset.label = button.textContent; button.textContent = 'Buscando…'; button.setAttribute('aria-disabled','true'); }
   }));
+  document.querySelectorAll('form.builder-search').forEach(form => form.addEventListener('submit', () => {
+    if (!form.querySelector('input[name="mode"]')) {
+      const mode = document.createElement('input');
+      mode.type = 'hidden'; mode.name = 'mode'; mode.value = 'catalog';
+      form.append(mode);
+    }
+    document.querySelectorAll('.commander-color-filter input[name="commander_colors[]"]:checked').forEach(checkbox => {
+      const color = document.createElement('input');
+      color.type = 'hidden'; color.name = 'commander_colors[]'; color.value = checkbox.value;
+      form.append(color);
+    });
+    const ownedToggle = document.querySelector('.commander-owned-toggle input');
+    if (ownedToggle) {
+      const owned = document.createElement('input');
+      owned.type = 'hidden'; owned.name = 'commander_owned'; owned.value = ownedToggle.checked ? '1' : '0';
+      form.append(owned);
+    }
+    const synergyToggle = document.querySelector('.synergy-controls input[name="synergy"]');
+    if (synergyToggle && !synergyToggle.checked) {
+      const synergy = document.createElement('input');
+      synergy.type = 'hidden'; synergy.name = 'synergy'; synergy.value = '0';
+      form.append(synergy);
+    }
+  }));
+  document.querySelectorAll('form.synergy-controls').forEach(form => form.addEventListener('submit', () => {
+    if (!form.querySelector('input[name="synergy"]:checked') && !form.querySelector('input[name="synergy"][type="hidden"]')) {
+      const synergy = document.createElement('input');
+      synergy.type = 'hidden'; synergy.name = 'synergy'; synergy.value = '0';
+      form.append(synergy);
+    }
+  }));
   document.querySelectorAll('.builder-results form').forEach(form => form.addEventListener('submit', () => {
     try { sessionStorage.setItem('builder-return-scroll', String(window.scrollY)); } catch (_) {}
   }));
   const selection = window.builderSelection || {};
+  if (window.builderHasCommander === false && !window.builderChoosingCommander) {
+    document.querySelectorAll('.builder-results article form').forEach(form => {
+      form.hidden = true;
+    });
+    const results = document.querySelector('.builder-results');
+    if (results && !document.querySelector('.commander-required-note')) {
+      const note = document.createElement('p');
+      note.className = 'commander-required-note';
+      note.textContent = 'Escolha uma comandante para liberar a adição de cartas às candidatas.';
+      note.style.cssText = 'margin:18px 0;padding:12px 14px;border-radius:8px;background:#fff8e9;color:var(--ink);font-weight:700';
+      results.before(note);
+    }
+  }
+  const exploreSelection = window.builderExploreSelection || {};
+  if (Object.keys(exploreSelection).length) {
+    document.querySelectorAll('.builder-results article').forEach(article => {
+      const link = article.querySelector('a[href*="/card.php?id="]');
+      const id = link?.href.match(/[?&]id=([^&]+)/)?.[1];
+      const selected = id && exploreSelection[id];
+      if (!selected || article.querySelector('.builder-selection-status')) return;
+      const status = document.createElement('span');
+      status.className = 'builder-selection-status';
+      status.style.cssText = 'display:block;margin:0 0 8px;color:var(--accent);font-size:.78rem;font-weight:800';
+      status.textContent = 'Já está em ' + selected.label.toLowerCase();
+      article.querySelector('h3')?.after(status);
+      const button = article.querySelector('form button');
+      if (button) { button.disabled = true; button.textContent = 'Já adicionada · ' + selected.label.toLowerCase(); }
+    });
+  }
+  const exploreSynergy = window.builderExploreSynergy || {};
+  if (Object.keys(exploreSynergy).length) {
+    document.querySelectorAll('.builder-results article').forEach(article => {
+      const link = article.querySelector('a[href*="/card.php?id="]');
+      const id = link?.href.match(/[?&]id=([^&]+)/)?.[1];
+      const metric = id && exploreSynergy[id];
+      if (!metric || article.querySelector('.builder-synergy')) return;
+      const badge = document.createElement('span');
+      badge.className = 'builder-synergy';
+      badge.style.cssText = 'display:inline-flex;margin:0 0 8px;padding:4px 8px;border-radius:999px;background:#e7efe8;color:var(--accent);font-size:.74rem;font-weight:800';
+      badge.textContent = metric.metric === 'lift'
+        ? 'Lift EDHREC: ' + Number(metric.score).toLocaleString('pt-BR', { maximumFractionDigits: 2 })
+        : 'Sinergia EDHREC: ' + (metric.score >= 0 ? '+' : '') + Math.round(Number(metric.score) * 100) + '%';
+      article.querySelector('h3')?.after(badge);
+    });
+  }
   if (Object.keys(selection).length) {
     document.querySelectorAll('.builder-results article').forEach(article => {
       const link = article.querySelector('a[href*="/card.php?id="]');

@@ -1,15 +1,15 @@
 {
-    "state": "stopped_by_user",
+    "state": "completed",
     "mode": "all",
     "size": "normal",
-    "downloaded": 0,
+    "downloaded": 66784,
     "failed": 0,
-    "existing": 0,
-    "selected": 0,
-    "processed": 0,
-    "total": 0,
-    "bytes": 0,
+    "existing": 55076,
+    "selected": 117778,
+    "processed": 121860,
+    "total": 121860,
+    "bytes": 7634805551,
     "resumed": true,
-    "started_at": 1789402145,
-    "updated_at": 1789402150
+    "started_at": 1789431003,
+    "updated_at": 1789440409
 }

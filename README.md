@@ -169,3 +169,37 @@ Corrige a consulta da home que usava o operador JSONB `?`. O PDO PostgreSQL pode
 ## Oficina de decks Commander
 
 Novo módulo em http://localhost:8080/decks.php. Importação de coleção, busca Oracle e seleção manual de cartas. Consulte [o guia do módulo](docs/deck-builder.md).
+
+## Guia rápido para rodar localmente
+
+Pré-requisitos: Docker Desktop com Compose habilitado e Git. No PowerShell:
+
+~~~powershell
+git clone <url-do-repositorio>
+cd mtg-local-scryfall
+Copy-Item .env.example .env -ErrorAction SilentlyContinue
+docker compose up -d --build
+~~~
+
+Abra http://localhost:8080. O PostgreSQL fica disponível em localhost:5435 para ferramentas externas; dentro do Compose, o host do banco é db.
+
+Para importar ou atualizar o catálogo Scryfall:
+
+~~~powershell
+docker compose exec app php bin/sync_scryfall.php default_cards
+~~~
+
+Depois, em Minha coleção, importe um CSV com as colunas Name,Scryfall ID,Quantity. Em Meus decks, crie um planejamento ou importe uma lista do Moxfield. Escolha a comandante antes de adicionar cartas às candidatas; a seleção segue candidatas → avaliação → deck e finaliza automaticamente em 100 cartas.
+
+Comandos úteis:
+
+~~~powershell
+docker compose ps
+docker compose logs -f app
+docker compose exec app php -l /var/www/html/decks.php
+docker compose down
+~~~
+
+Os dados do PostgreSQL e as imagens ficam nos volumes/pastas configurados pelo docker-compose.yml. Não use docker compose down -v sem fazer backup, pois isso remove os volumes do banco.
+
+O módulo de decks, sinergias do EDHREC, preços e fluxo de upgrades está documentado em [docs/deck-builder.md](docs/deck-builder.md).

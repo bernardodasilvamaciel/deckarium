@@ -91,7 +91,44 @@ function cardTile(array $card): void
     echo '<article class="card-tile"><a class="card-art" href="' . h($url) . '">';
     if ($image) echo '<img loading="lazy" decoding="async" width="488" height="680" src="' . h($image) . '" alt="' . h($card['name']) . '">';
     else echo '<div class="placeholder"><strong>' . h($card['name']) . '</strong><span>Imagem indisponível</span></div>';
-    echo '</a><div class="card-meta"><a href="' . h($url) . '">' . h($card['name']) . '</a><small>' . h(strtoupper((string)$card['set_code'])) . ' · #' . h((string)$card['collector_number']) . '</small></div></article>';
+    echo '</a><div class="card-meta"><a href="' . h($url) . '">' . h($card['name']) . '</a><small>' . h(strtoupper((string)$card['set_code'])) . ' · #' . h((string)$card['collector_number']) . '</small><small class="card-price">' . h(deckPriceLabel($card)) . '</small></div></article>';
+}
+
+function deckPriceBrl(array $card): ?float
+{
+    $options=deckPriceOptions($card);
+    return $options['normal'] ?? $options['foil'] ?? null;
+}
+function deckPriceOptions(array $card): array
+{
+    $prices=$card['prices']??[];
+    if(is_string($prices)) $prices=json_decode($prices,true) ?: [];
+    $hasNumericPrice = is_array($prices) && (bool)array_filter($prices, static fn($value) => is_numeric($value));
+    if(!$hasNumericPrice && !empty($card['raw'])) {
+        $raw=$card['raw'];
+        if(is_string($raw)) $raw=json_decode($raw,true) ?: [];
+        if(is_array($raw) && isset($raw['prices'])) $prices=$raw['prices'];
+    }
+    if(!is_array($prices)) return ['normal'=>null,'foil'=>null];
+    $usdRate=(float)(getenv('USD_BRL_RATE') ?: 5.5); $eurRate=(float)(getenv('EUR_BRL_RATE') ?: 6.0);
+    $convert=function($usd,$eur) use($usdRate,$eurRate): ?float {
+        if($usd!==null && is_numeric($usd)) return round((float)$usd*$usdRate,2);
+        if($eur!==null && is_numeric($eur)) return round((float)$eur*$eurRate,2);
+        return null;
+    };
+    return ['normal'=>$convert($prices['usd']??null,$prices['eur']??null),'foil'=>$convert($prices['usd_foil']??null,$prices['eur_foil']??null)];
+}
+function deckPriceVariantsLabel(array $card): string
+{
+    $options=deckPriceOptions($card); $parts=[];
+    if($options['normal']!==null) $parts[]='Não foil: R$ '.number_format($options['normal'],2,',','.');
+    if($options['foil']!==null) $parts[]='Foil: R$ '.number_format($options['foil'],2,',','.');
+    return $parts ? implode(' · ',$parts) : 'Preço indisponível';
+}
+function deckPriceLabel(array $card): string
+{
+    $price=deckPriceBrl($card);
+    return $price===null?'Preço indisponível':'R$ '.number_format($price,2,',','.');
 }
 
 function jsonArrayToText($value): string

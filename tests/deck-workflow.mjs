@@ -18,7 +18,9 @@ try {
  h=await get(`/decks.php?deck=${deck}&q=Fabled%20Passage&oracle=xyznooracleterm&type=pirate%3Bland`);assert(h.includes('Nenhuma carta corresponde'));
  h=await get(`/decks.php?deck=${deck}&q=Fabled%20Passage&oracle=&owned=1`);const card=h.match(/name="card" value="([^"]+)"/)[1];
  await post({action:'add',card,oracle:''});await post({action:'item',card,stage:'review',quantity:'1',role:'Terrenos',notes:'Habilita sacrifício',oracle:''});
- h=await get(`/decks.php?deck=${deck}&oracle=`);assert(h.includes('Habilita sacrifício'));
+ h=await get(`/decks.php?deck=${deck}&view=selection&stage=review`);assert(h.includes('Habilita sacrifício'));
+ const moved=await post({action:'move',card,stage:'deck',view:'selection',selection_stage:'review'});assert(moved.includes('view=selection&stage=review'));
+ h=await get(`/decks.php?deck=${deck}&view=selection&stage=deck`);assert(h.includes('Habilita sacrifício'));assert(h.includes('selection-art'));
  await post({action:'item',card,stage:'deck',quantity:'999',role:'Terrenos',notes:'Teste de quantidade',oracle:''});
  const shopping=await get(`/decks.php?deck=${deck}&export=shopping`);assert(/\d+ Fabled Passage/.test(shopping));
  const exported=await get(`/decks.php?deck=${deck}&export=deck`);assert(exported.includes('999 Fabled Passage'));assert(exported.includes('1 Hearthhull, the Worldseed'));
