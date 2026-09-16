@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/deck_insights.php';
+require_once __DIR__ . '/deck_scoring.php';
 
 function deckSchema(): void {
     db()->exec("ALTER TABLE cards ADD COLUMN IF NOT EXISTS edhrec_rank_cached int GENERATED ALWAYS AS (
@@ -27,22 +29,21 @@ function deckSchema(): void {
         foil boolean NOT NULL DEFAULT false, PRIMARY KEY(scryfall_id,foil));
         ALTER TABLE builder_collection ADD COLUMN IF NOT EXISTS foil boolean NOT NULL DEFAULT false;
         ALTER TABLE builder_decks ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'planning';
+        ALTER TABLE builder_decks ADD COLUMN IF NOT EXISTS scoring_config jsonb NULL;
         CREATE TABLE IF NOT EXISTS deck_upgrades (
             id bigserial PRIMARY KEY, deck_id bigint NOT NULL REFERENCES builder_decks(id) ON DELETE CASCADE,
             remove_card_id uuid NOT NULL REFERENCES cards(id), add_card_id uuid NOT NULL REFERENCES cards(id),
             reason text NOT NULL DEFAULT '', status text NOT NULL DEFAULT 'planned', created_at timestamptz NOT NULL DEFAULT now(),
             CHECK (status IN ('planned','done')));
         CREATE INDEX IF NOT EXISTS deck_upgrades_deck_idx ON deck_upgrades(deck_id, status, created_at DESC);
+        CREATE TABLE IF NOT EXISTS deck_commander_insights (
+            commander_id uuid PRIMARY KEY REFERENCES cards(id) ON DELETE CASCADE,
+            source_url text NOT NULL, payload jsonb NOT NULL, synced_at timestamptz NOT NULL DEFAULT now());
         CREATE TABLE IF NOT EXISTS deck_synergy (
             commander_id uuid NOT NULL REFERENCES cards(id) ON DELETE CASCADE, card_id uuid NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
             metric text NOT NULL DEFAULT 'synergy', score numeric NOT NULL, inclusion numeric NULL, deck_count int NULL,
             source_url text NOT NULL, synced_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(commander_id,card_id));");
-    db()->exec("DO \$\$ BEGIN
-        IF EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='builder_collection'::regclass AND conname='builder_collection_pkey' AND pg_get_constraintdef(oid)<>'PRIMARY KEY (scryfall_id, foil)') THEN
-            ALTER TABLE builder_collection DROP CONSTRAINT builder_collection_pkey;
-            ALTER TABLE builder_collection ADD PRIMARY KEY(scryfall_id,foil);
-        END IF;
-    END \$\$");
+    // A chave primária da coleção inclui o dono (user_id) e é mantida pela migração em auth.php.
     db()->exec("CREATE INDEX IF NOT EXISTS builder_items_deck_stage_idx ON builder_items(deck_id,stage);
         CREATE INDEX IF NOT EXISTS builder_items_card_idx ON builder_items(card_id);
         CREATE INDEX IF NOT EXISTS deck_synergy_commander_score_idx ON deck_synergy(commander_id,score DESC);
@@ -86,7 +87,8 @@ function deckImportList(string $name, string $text): array {
     if(!$entries) throw new RuntimeException('Nenhuma carta da lista foi encontrada no catálogo local. Use o formato “1 Nome da carta”.');
     db()->beginTransaction();
     try {
-        $deckId=(int)deckQuery("INSERT INTO builder_decks(name,status) VALUES (?,'ready') RETURNING id",[$name])->fetchColumn();
+        if(deckOwnerId()<1) throw new RuntimeException('Entre na sua conta para importar um deck.');
+        $deckId=(int)deckQuery("INSERT INTO builder_decks(user_id,name,status) VALUES (?,?,'ready') RETURNING id",[deckOwnerId(),$name])->fetchColumn();
         $commander=null; $logical=[];
         foreach($entries as $entry){
             $card=$entry['card']; $logicalId=(string)($card['oracle_id'] ?: $card['id']);
@@ -113,13 +115,28 @@ function deckEdhrecCards(array $node, array &$cards): void {
     foreach($node as $value) if(is_array($value)) deckEdhrecCards($value,$cards);
 }
 
+function deckEdhrecBase(): string {
+    return rtrim((string)(getenv('EDHREC_JSON_BASE') ?: 'https://json.edhrec.com'), '/');
+}
+
+/** GET JSON com tempo limite; devolve null quando a fonte não responde ou não retorna JSON. */
+function deckHttpJson(string $url, int $timeout = 10): ?array {
+    $context=stream_context_create(['http'=>['timeout'=>$timeout,'user_agent'=>'Deckarium/1.0 personal collection app','ignore_errors'=>true,'header'=>"Accept: application/json\r\n"]]);
+    $raw=@file_get_contents($url,false,$context);
+    if($raw===false) return null;
+    $status=0;
+    foreach(($http_response_header ?? []) as $line) if(preg_match('#^HTTP/\S+\s+(\d{3})#',$line,$m)) $status=(int)$m[1];
+    if($status>=400) return null;
+    $data=json_decode($raw,true);
+    return is_array($data) ? $data : null;
+}
+
 function deckSyncEdhrec(array $commander): int {
     $slug=deckEdhrecSlug((string)$commander['name']);
-    $source='https://edhrec.com/commanders/'.$slug; $jsonUrl='https://json.edhrec.com/pages/commanders/'.$slug.'.json';
-    $context=stream_context_create(['http'=>['timeout'=>12,'user_agent'=>'Deckarium/1.0 personal collection app','ignore_errors'=>true]]);
-    $raw=@file_get_contents($jsonUrl,false,$context);
-    if($raw===false) throw new RuntimeException('O EDHREC não respondeu. Sua cache anterior foi preservada; tente novamente mais tarde.');
-    $data=json_decode($raw,true); if(!is_array($data)) throw new RuntimeException('O EDHREC retornou dados inesperados. Sua cache anterior foi preservada.');
+    $source='https://edhrec.com/commanders/'.$slug;
+    $data=deckHttpJson(deckEdhrecBase().'/pages/commanders/'.$slug.'.json',12);
+    if($data===null) throw new RuntimeException('O EDHREC não respondeu. Sua cache anterior foi preservada; tente novamente mais tarde.');
+    try { deckStoreCommanderInsights($commander,$data,$source); } catch (Throwable) { /* os dados de sinergia continuam úteis mesmo sem o guia */ }
     $found=[]; deckEdhrecCards($data,$found); $saved=0; $best=[];
     foreach($found as $row){
         $card=deckFindPrinting((string)$row['name']); if(!$card) continue;
@@ -145,26 +162,74 @@ function deckSyncEdhrec(array $commander): int {
     if(!$saved) throw new RuntimeException('Nenhuma recomendação compatível com o catálogo local foi encontrada.');
     return $saved;
 }
+
+function deckStrategyCatalog(): array {
+    return [
+        'sacrifice'=>['name'=>'Sacrifício e Aristocrats','description'=>'Gere valor ao sacrificar criaturas, permanentes e fichas.','patterns'=>['sacrifice','dies','death','blood token','treasure'],'colors'=>['B','R']],
+        'tokens'=>['name'=>'Fichas e enxame','description'=>'Crie muitas fichas e transforme quantidade em pressão ou valor.','patterns'=>['token','populate','go wide'],'colors'=>['W','G','R']],
+        'graveyard'=>['name'=>'Cemitério e reanimação','description'=>'Use o cemitério como uma segunda mão e recupere ameaças.','patterns'=>['graveyard','reanimate','dies'],'colors'=>['B','G','U']],
+        'ramp'=>['name'=>'Ramp e valor','description'=>'Acelere mana, compre cartas e mantenha recursos ao longo da partida.','patterns'=>['basic land','add ','draw a card','treasure'],'colors'=>['G','R','U']],
+        'blink'=>['name'=>'Blink e efeitos de entrada','description'=>'Repita efeitos de entrada e saída de campo para gerar vantagem.','patterns'=>['enters the battlefield','exile','blink','flicker'],'colors'=>['W','U']],
+        'voltron'=>['name'=>'Voltron','description'=>'Concentre a partida em uma ameaça equipada e difícil de remover.','patterns'=>['equipment','aura','gets +','double strike','hexproof'],'colors'=>['W','R','U']],
+        'control'=>['name'=>'Controle','description'=>'Interrompa o plano adversário e vença com vantagem incremental.','patterns'=>['counter target','destroy target','exile target','return target'],'colors'=>['U','B','W']],
+        'tribal'=>['name'=>'Tribal','description'=>'Construa ao redor de um tipo de criatura recorrente do comandante.','patterns'=>['pirate','merfolk','elf','goblin','zombie','vampire','dragon','artifact'],'colors'=>[]],
+    ];
+}
+function deckCommanderStrategies(array $commander): array {
+    static $cache=[]; $key=(string)$commander['id']; if(isset($cache[$key])) return $cache[$key];
+    $text=strtolower((string)($commander['name'].' '.($commander['type_line']??'').' '.deckText($commander))); $out=[];
+    $identity=json_decode($commander['color_identity'],true)?:[];
+    foreach(deckStrategyCatalog() as $slug=>$strategy){$score=0;foreach($strategy['patterns'] as $pattern)if(preg_match('/'.$pattern.'/i',$text))$score+=3;foreach($strategy['colors'] as $color)if(in_array($color,$identity,true))$score+=1; if($slug==='tribal'&&preg_match('/—\s*([^—]+)/u',(string)($commander['type_line']??''),$m)&&$m[1]!=='')$score+=2; if($score>0)$out[]=$strategy+['slug'=>$slug,'score'=>$score];}
+    usort($out,fn($a,$b)=>$b['score']<=>$a['score']); if(!$out){$out=array_map(fn($s,$slug)=>$s+['slug'=>$slug,'score'=>0],array_slice(deckStrategyCatalog(),0,6),array_keys(array_slice(deckStrategyCatalog(),0,6)));}
+    return $cache[$key]=array_slice($out,0,6);
+}
+function deckStrategyCards(array $commander,array $strategy): array {
+    $params=[]; $where=[]; foreach($strategy['patterns'] as $pattern){$where[]='(c.oracle_text ILIKE ? OR c.type_line ILIKE ?)';$params[]='%'.$pattern.'%';$params[]='%'.$pattern.'%';}
+    $identity=json_encode(json_decode($commander['color_identity'],true)?:[]);
+    return deckQuery("SELECT c.id,c.name,c.type_line,c.prices,c.raw,COALESCE(bc.quantity,0) owned,COALESCE(ds.score,0) synergy_score FROM cards c LEFT JOIN ".deckCollectionPrintingSql()." bc ON bc.scryfall_id=c.id LEFT JOIN deck_synergy ds ON ds.commander_id=? AND ds.card_id=c.id WHERE c.color_identity <@ ?::jsonb AND c.id<>? AND (".implode(' OR ',$where).") ORDER BY COALESCE(ds.score,0) DESC,COALESCE(bc.quantity,0) DESC,c.name LIMIT 8",array_merge([$commander['id'],$identity,$commander['id']],$params))->fetchAll();
+}
+function deckComboCatalog(): array {
+    return [
+        ['name'=>'Thassa’s Oracle + Consultation','cards'=>['Thassa\'s Oracle','Demonic Consultation'],'result'=>'Exile sua biblioteca e vença ao resolver a habilidade da Oracle.'],
+        ['name'=>'Exquisite Blood + Sanguine Bond','cards'=>['Exquisite Blood','Sanguine Bond'],'result'=>'Qualquer perda de vida inicia um loop de drenagem.'],
+        ['name'=>'Isochron Scepter + Dramatic Reversal','cards'=>['Isochron Scepter','Dramatic Reversal'],'result'=>'Com permanentes não-terreno gerando mana suficiente, produza mana infinita.'],
+        ['name'=>'Mikaeus + Triskelion','cards'=>['Mikaeus, the Unhallowed','Triskelion'],'result'=>'Remova marcadores e repita dano infinito com as habilidades das criaturas.'],
+    ];
+}
+function deckCombosForCommander(array $commander): array {
+    static $cache=[];$key=(string)$commander['id'];if(isset($cache[$key]))return $cache[$key];$names=[];foreach(deckComboCatalog() as $combo)foreach($combo['cards'] as $name)$names[]=$name;
+    $place=implode(',',array_fill(0,count($names),'?'));$rows=deckQuery("SELECT c.*,COALESCE(bc.quantity,0) owned FROM cards c LEFT JOIN ".deckCollectionPrintingSql()." bc ON bc.scryfall_id=c.id WHERE lower(c.name) IN (".$place.")",array_map('strtolower',$names))->fetchAll();$by=[];foreach($rows as $row)$by[strtolower($row['name'])]=$row;$out=[];
+    foreach(deckComboCatalog() as $combo){$cards=[];$legal=true;foreach($combo['cards'] as $name){$card=$by[strtolower($name)]??null;if(!$card||array_diff(json_decode($card['color_identity'],true)?:[],json_decode($commander['color_identity'],true)?:[])){$legal=false;break;}$cards[]=$card;}if($legal)$out[]=$combo+['cards_data'=>$cards];}return $cache[$key]=$out;
+}
+function deckGameChangerNames(): array { static $names=null; return $names??=array_fill_keys(array_map('deckGameChangerKey',deckScoreGameChangers()),true); }
+function deckGameChangerKey(string $name): string { $name=strtolower(trim(str_replace(['’','‘','`'],"'",$name))); $ascii=@iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$name); if(is_string($ascii)&&$ascii!=='')$name=$ascii; return preg_replace('/[^a-z0-9]+/',' ', $name) ? trim((string)preg_replace('/[^a-z0-9]+/',' ', $name)) : $name; }
+function deckIsGameChanger(array $card): bool { return isset(deckGameChangerNames()[deckGameChangerKey((string)($card['name']??''))]); }
 function deckQuery(string $sql, array $params = []): PDOStatement {
     $stmt = db()->prepare($sql); $stmt->execute($params); return $stmt;
 }
+/** Dono dos dados pessoais consultados nesta requisição (coleção, decks). */
+function deckOwnerId(): int {
+    return function_exists('authUserId') ? authUserId() : 0;
+}
 function deckOwnedSql(?int $excludeDeckId=null): string {
+    $userId=deckOwnerId();
     $sql="WITH owned AS (SELECT COALESCE(c.oracle_id,c.id) logical_id,SUM(o.quantity)::int owned
-        FROM builder_collection o JOIN cards c ON c.id=o.scryfall_id GROUP BY COALESCE(c.oracle_id,c.id))";
+        FROM builder_collection o JOIN cards c ON c.id=o.scryfall_id WHERE o.user_id={$userId} GROUP BY COALESCE(c.oracle_id,c.id))";
     if($excludeDeckId!==null){
         $deckId=max(0,$excludeDeckId);
         $sql.=", used AS (SELECT logical_id,SUM(quantity)::int used FROM (
-            SELECT COALESCE(c.oracle_id,c.id) logical_id,SUM(i.quantity)::int quantity FROM builder_items i JOIN cards c ON c.id=i.card_id WHERE i.stage='deck' AND i.deck_id<>{$deckId} GROUP BY COALESCE(c.oracle_id,c.id)
-            UNION ALL SELECT COALESCE(c.oracle_id,c.id) logical_id,COUNT(*)::int quantity FROM builder_decks d JOIN cards c ON c.id=d.commander_id WHERE d.id<>{$deckId} GROUP BY COALESCE(c.oracle_id,c.id)
+            SELECT COALESCE(c.oracle_id,c.id) logical_id,SUM(i.quantity)::int quantity FROM builder_items i JOIN builder_decks ud ON ud.id=i.deck_id AND ud.user_id={$userId} JOIN cards c ON c.id=i.card_id WHERE i.stage='deck' AND i.deck_id<>{$deckId} GROUP BY COALESCE(c.oracle_id,c.id)
+            UNION ALL SELECT COALESCE(c.oracle_id,c.id) logical_id,COUNT(*)::int quantity FROM builder_decks d JOIN cards c ON c.id=d.commander_id WHERE d.id<>{$deckId} AND d.user_id={$userId} GROUP BY COALESCE(c.oracle_id,c.id)
         ) reservations GROUP BY logical_id)";
     }
     return $sql.' ';
 }
 function deckCollectionPrintingSql(): string {
+    $userId=deckOwnerId();
     return "(SELECT scryfall_id,SUM(quantity)::int quantity,
         COALESCE(SUM(quantity) FILTER(WHERE NOT foil),0)::int normal_quantity,
         COALESCE(SUM(quantity) FILTER(WHERE foil),0)::int foil_quantity
-        FROM builder_collection GROUP BY scryfall_id)";
+        FROM builder_collection WHERE user_id={$userId} GROUP BY scryfall_id)";
 }
 function deckImport(string $path, bool $replace = true): array {
     $fp = fopen($path, 'r');
@@ -190,11 +255,13 @@ function deckImport(string $path, bool $replace = true): array {
     if (!$rows) throw new RuntimeException('Nenhuma carta válida no CSV.');
     db()->beginTransaction();
     try {
-        if ($replace) db()->exec('DELETE FROM builder_collection');
+        $userId=deckOwnerId();
+        if ($userId<1) throw new RuntimeException('Entre na sua conta para importar a coleção.');
+        if ($replace) deckQuery('DELETE FROM builder_collection WHERE user_id=?',[$userId]);
         foreach ($rows as $row) {
             $foilSql=$row['foil']?'true':'false';
-            if ($replace) deckQuery('INSERT INTO builder_collection(scryfall_id,name,quantity,foil) VALUES (?,?,?,?)', [$row['id'],$row['name'],$row['quantity'],$foilSql]);
-            else deckQuery('INSERT INTO builder_collection(scryfall_id,name,quantity,foil) VALUES (?,?,?,?) ON CONFLICT(scryfall_id,foil) DO UPDATE SET name=excluded.name,quantity=builder_collection.quantity+excluded.quantity', [$row['id'],$row['name'],$row['quantity'],$foilSql]);
+            if ($replace) deckQuery('INSERT INTO builder_collection(user_id,scryfall_id,name,quantity,foil) VALUES (?,?,?,?,?)', [$userId,$row['id'],$row['name'],$row['quantity'],$foilSql]);
+            else deckQuery('INSERT INTO builder_collection(user_id,scryfall_id,name,quantity,foil) VALUES (?,?,?,?,?) ON CONFLICT(user_id,scryfall_id,foil) DO UPDATE SET name=excluded.name,quantity=builder_collection.quantity+excluded.quantity', [$userId,$row['id'],$row['name'],$row['quantity'],$foilSql]);
         }
         db()->commit();
     } catch (Throwable $e) { db()->rollBack(); throw $e; }

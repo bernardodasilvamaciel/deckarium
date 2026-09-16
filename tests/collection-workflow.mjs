@@ -1,7 +1,8 @@
+import { login } from './auth-helper.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 
-const base='http://localhost:8080'; let cookie=''; const printing=randomUUID();
+const base=process.env.DECKARIUM_BASE||'http://localhost:8080'; let cookie=await login(base); const printing=randomUUID();
 async function request(path,options={}){const response=await fetch(base+path,{redirect:'manual',...options,headers:{cookie,...(options.headers||{})}});const set=response.headers.get('set-cookie');if(set)cookie=set.split(';')[0];return response;}
 async function page(path){const response=await request(path);assert.equal(response.status,200);return response.text();}
 const token=html=>html.match(/name="csrf" value="([^"]+)"/)?.[1];

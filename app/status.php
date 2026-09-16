@@ -4,12 +4,14 @@ require __DIR__ . '/db.php';
 require __DIR__ . '/functions.php';
 require __DIR__ . '/partials.php';
 require __DIR__ . '/catalog_cache.php';
+authRequireAdmin();
 $stats = catalogCached('status-counts', fn() => db()->query('SELECT count(*) AS printings, count(DISTINCT COALESCE(oracle_id,id)) AS unique_cards FROM cards')->fetchAll(), 300)[0];
 $sync = db()->query('SELECT * FROM sync_status ORDER BY imported_at DESC')->fetchAll();
 $config = require __DIR__ . '/config.php';
 $progress = json_decode((string)@file_get_contents($config['storage_dir'] . '/download-progress.json'), true) ?: [];
 $labels = ['starting'=>'Preparando download','running'=>'Download em andamento','completed'=>'Download concluído','completed_with_errors'=>'Concluído com imagens pendentes','disk_full'=>'Pausado: espaço insuficiente','stopped_by_user'=>'Download pausado pelo usuário','stale'=>'Progresso sem atualização recente'];
 require __DIR__ . '/download_state.php';
+require __DIR__ . '/sync_state.php';
 $state = downloadState($config['storage_dir'],$progress);
 $labels += ['interrupted'=>'Download interrompido. Retome para continuar','network_error'=>'Pausado após falhas de conexão','stopping'=>'Pausando download'];
 $pauseRequested = is_file($config['storage_dir'] . '/STOP_DOWNLOAD');
@@ -21,6 +23,7 @@ $progressTotal = max(0, (int)($progress['total'] ?? 0));
 $progressProcessed = max(0, (int)($progress['processed'] ?? ((int)($progress['downloaded'] ?? 0) + (int)($progress['existing'] ?? 0) + (int)($progress['failed'] ?? 0))));
 $progressPercent = $progressTotal > 0 ? min(100, (int)round(($progressProcessed / $progressTotal) * 100)) : null;
 $downloadActive = in_array($state, ['running','starting','stopping'], true);
+$syncState = syncCatalogProgress(rtrim($config['storage_dir'], '/'));
 pageHeader('Status do acervo');
 ?>
 <section class="hero"><div><h1>Seu acervo local.</h1><p>Dados importados, imagens disponíveis e andamento dos downloads.</p></div><a class="text-link" href="/status.php">Atualizar página</a></section>
@@ -52,10 +55,28 @@ pageHeader('Status do acervo');
 </div>
 <div class="status-feedback" data-status-feedback role="status" aria-live="polite" hidden></div>
 </section>
-<section class="panel help-panel"><h2>Sincronizações</h2>
-<div class="sync-actions"><p class="muted">Consulte o manifesto do Scryfall para saber se há uma versão mais recente do acervo.</p><button class="secondary-link" type="button" data-check-updates>Verificar atualizações</button></div>
+<section class="panel help-panel sync-panel" data-sync-panel data-state="<?= h($syncState['state']) ?>">
+<div class="section-heading"><h2>Catálogo do Scryfall</h2><span class="status-tag" data-sync-label<?= $syncState['state']===''?' hidden':'' ?>><?= h($syncState['label']) ?></span></div>
+<div class="sync-actions">
+  <p class="muted">Verifique se o Scryfall publicou dados novos e baixe a atualização aqui mesmo. Cartas, preços e legalidades são atualizados; sua coleção e seus decks continuam intactos.</p>
+  <div class="status-controls">
+    <button class="secondary-link" type="button" data-check-updates>Verificar atualizações</button>
+    <button class="primary-link" type="button" data-sync-start<?= $syncState['active'] ? ' disabled' : '' ?>><?= $syncState['active'] ? 'Atualizando…' : 'Baixar atualização' ?></button>
+  </div>
+</div>
+<div class="sync-progress" data-sync-progress<?= $syncState['active'] ? '' : ' hidden' ?>>
+  <ol class="sync-steps" aria-label="Etapas da sincronização">
+    <li data-sync-step="checking">Consultar</li><li data-sync-step="downloading">Baixar</li><li data-sync-step="importing">Importar</li><li data-sync-step="completed">Concluído</li>
+  </ol>
+  <div class="download-progress" data-sync-bar-wrap role="progressbar" aria-label="Progresso da sincronização" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<?= (int)($syncState['percent'] ?? 0) ?>">
+    <div class="progress-meta"><span data-sync-detail>Preparando…</span><strong data-sync-percent><?= $syncState['percent'] === null ? '—' : (int)$syncState['percent'] . '%' ?></strong></div>
+    <div class="progress-track"><span data-sync-bar style="width:<?= (int)($syncState['percent'] ?? 0) ?>%"></span></div>
+  </div>
+  <p class="muted sync-note">Pode sair desta página: a sincronização continua em segundo plano. Importar o catálogo completo leva alguns minutos.</p>
+</div>
 <div class="status-feedback" data-updates-feedback role="status" aria-live="polite" hidden></div>
-<div class="table-scroll"><table><thead><tr><th>Conjunto de dados</th><th>Atualização no Scryfall</th><th>Importação local</th><th>Registros</th></tr></thead><tbody>
+<div class="sync-force" data-sync-force-wrap hidden><button class="text-button" type="button" data-sync-force>Reimportar mesmo assim</button></div>
+<div class="table-scroll"><table><thead><tr><th>Conjunto de dados</th><th>Atualização no Scryfall</th><th>Importação local</th><th>Registros</th></tr></thead><tbody data-sync-rows>
 <?php foreach ($sync as $row): ?><tr><td><?= h($row['bulk_type']) ?></td><td><?= h(displayDate($row['scryfall_updated_at'])) ?></td><td><?= h(displayDate($row['imported_at'])) ?></td><td><?= number_format((int)$row['card_count'],0,',','.') ?></td></tr><?php endforeach; ?>
 <?php if (!$sync): ?><tr><td colspan="4">Nenhuma sincronização registrada.</td></tr><?php endif; ?>
 </tbody></table></div></section>

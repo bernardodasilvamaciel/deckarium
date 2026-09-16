@@ -6,13 +6,15 @@ require __DIR__ . '/partials.php';
 require __DIR__ . '/catalog_cache.php';
 require __DIR__ . '/card_filters.php';
 $f=cardFilters();
+$isHome = !array_filter($f) && !isset($_GET['catalog']) && !isset($_GET['view']) && !isset($_GET['page']);
+$GLOBALS['isHome'] = $isHome;
 
 $q = trim((string)($_GET['q'] ?? ''));
 $set = trim((string)($_GET['set'] ?? ''));
 $view = (string)($_GET['view'] ?? 'unique');
 $view = $view === 'printings' ? 'printings' : 'unique';
 $page = max(1, min(1000000, (int)($_GET['page'] ?? 1)));
-$perPage = 36;
+$perPage = $isHome ? 6 : 36;
 $offset = ($page - 1) * $perPage;
 
 
@@ -73,8 +75,9 @@ SQL;
 
 }
 
-pageHeader('Cartas - Deckarium');
+pageHeader($isHome ? 'Início' : 'Cartas');
 ?>
+<?php if ($isHome): require __DIR__ . '/home.php'; else: ?>
 <section class="hero">
   <div>
     <h1>Encontre sua próxima carta.</h1>
@@ -82,6 +85,7 @@ pageHeader('Cartas - Deckarium');
   </div>
   <a class="primary-link" href="/editions.php">Explorar por edição →</a>
 </section>
+<?php endif; ?>
 
 <section id="catalogo" class="catalog-section">
   <div class="section-heading">
@@ -103,8 +107,9 @@ pageHeader('Cartas - Deckarium');
     <?php cardTile($card); ?>
   <?php endforeach; ?>
   </div>
-  <?php numberedPager($page,$pages,array_merge($f,['view'=>$view]),'#catalogo'); ?>
+  <?php if ($isHome): ?><p class="home-catalog-more"><a class="primary-link" href="/?catalog=1#catalogo">Abrir catálogo completo →</a></p><?php else: numberedPager($page,$pages,array_merge($f,['view'=>$view]),'#catalogo'); endif; ?>
 </section>
+<?php if (!$isHome): ?>
 <section class="section-block">
   <div class="section-heading inline-heading">
     <div>
@@ -124,7 +129,7 @@ pageHeader('Cartas - Deckarium');
   </div>
 </section>
 
-<?php pageFooter(); ?>
+<?php endif; pageFooter(); ?>
 
 
 

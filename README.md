@@ -170,6 +170,20 @@ Corrige a consulta da home que usava o operador JSONB `?`. O PDO PostgreSQL pode
 
 Novo módulo em http://localhost:8080/decks.php. Importação de coleção, busca Oracle e seleção manual de cartas. Consulte [o guia do módulo](docs/deck-builder.md).
 
+## Contas e acesso
+
+O Deckarium tem contas de usuário. Qualquer visitante consulta o **catálogo** e as **edições**; **Minha coleção**, **Meus decks** e **Upgrades** exigem login, e cada conta enxerga apenas os próprios dados. **Status** e **Usuários** são exclusivos de administradores (inclusive os endpoints de download e sincronização).
+
+- **Criar conta:** `/register.php` — nome completo, nome de usuário, email e senha (mínimo de 10 caracteres).
+- **Entrar:** `/login.php` — aceita usuário ou email; "Manter conectado" guarda a sessão por 30 dias (sem ele, 12 horas de inatividade).
+- **Minha conta:** `/account.php` — altera nome, usuário, email e senha. Trocar a senha encerra as outras sessões.
+- **Usuários (admin):** `/users.php` — promove/rebaixa administradores, desativa contas e gera senhas temporárias (não há envio de email para recuperar senha).
+- **Proteções:** senhas com `password_hash`, sessão regenerada no login, CSRF em todos os formulários, bloqueio de 15 minutos após 8 tentativas erradas e cookies `HttpOnly`/`SameSite=Lax`.
+
+Na primeira requisição após atualizar, o app cria as tabelas `users`, `auth_attempts` e `app_migrations`, cria o administrador definido em `app/auth_bootstrap.php` (arquivo ignorado pelo Git; pode ser apagado depois do primeiro acesso) e transfere a coleção e os decks já existentes para ele. `builder_decks` e `builder_collection` passam a ter `user_id`.
+
+Para rodar os testes de fluxo, informe uma conta: `$env:DECKARIUM_USER='...'; $env:DECKARIUM_PASSWORD='...'; node tests/deck-workflow.mjs`.
+
 ## Guia rápido para rodar localmente
 
 Pré-requisitos: Docker Desktop com Compose habilitado e Git. No PowerShell:
@@ -183,7 +197,7 @@ docker compose up -d --build
 
 Abra http://localhost:8080. O PostgreSQL fica disponível em localhost:5435 para ferramentas externas; dentro do Compose, o host do banco é db.
 
-Para importar ou atualizar o catálogo Scryfall:
+Para importar ou atualizar o catálogo Scryfall, abra **Status → Catálogo do Scryfall** e clique em **Baixar atualização**. O download e a importação rodam em segundo plano, com progresso na própria página (log em `storage/sync.log`). Pelo terminal, o comando continua disponível e aparece no mesmo painel:
 
 ~~~powershell
 docker compose exec app php bin/sync_scryfall.php default_cards

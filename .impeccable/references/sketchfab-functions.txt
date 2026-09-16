@@ -1,0 +1,2353 @@
+ 
+ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+ 
+ 
+
+ 
+ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ /**/ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+ /**/ 
+
+
+
+ 
+
+ Viewer API - Functions - Sketchfab 
+
+ 
+ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+
+ 
+ 
+ 
+
+ 
+
+ 
+ 
+ 
+
+ 
+ 
+ 
+ 
+
+ 
+ 
+
+
+ 
+
+ 
+ 
+ 
+
+ 
+ 
+ 
+
+ 
+ 
+ 
+ 
+
+ 
+ 
+ 
+
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+
+ 
+
+
+
+ 
+
+ 
+
+ 
+ 
+ 
+
+ 
+ 
+ 
+
+
+ 
+
+ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+ 
+
+
+ 
+
+ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+
+
+ 
+ 
+ 
+ 
+ 
+ {
+ "@context": "http://schema.org",
+ "@type": "WebSite",
+ "url": "https://sketchfab.com",
+ "name": "Sketchfab",
+ "mainEntityOfPage": {
+ "@type": "3Dmodel"
+ },
+ "creator": {"@context": "http://schema.org", "@type": "Organization", "location": {"@type": "Place", "name": "Paris / New York"}, "name": "Sketchfab", "sameAs": ["https://www.facebook.com/Sketchfab", "https://twitter.com/Sketchfab", "https://www.linkedin.com/company/sketchfab", "https://www.youtube.com/channel/UCX0J-m95VqCQIIiQ23fP5tg", "https://vimeo.com/sketchfab", "https://www.instagram.com/sketchfab", "https://pinterest.com/sketchfab"], "url": "https://sketchfab.com"},
+ "description": "<p>The Viewer API lets you build web apps on top of Sketchfab&rsquo;s 3D viewer. It provides functions for controlling the viewer, editing materials, and more.</p>",
+ "potentialAction": {
+ "@type": "SearchAction",
+ "target": "https://sketchfab.com/search?q={search_term_string}",
+ "query-input": "required name=search_term_string"
+ }
+ }
+ 
+ 
+ {"@context": "http://schema.org", "@type": "Organization", "location": {"@type": "Place", "name": "Paris / New York"}, "name": "Sketchfab", "sameAs": ["https://www.facebook.com/Sketchfab", "https://twitter.com/Sketchfab", "https://www.linkedin.com/company/sketchfab", "https://www.youtube.com/channel/UCX0J-m95VqCQIIiQ23fP5tg", "https://vimeo.com/sketchfab", "https://www.instagram.com/sketchfab", "https://pinterest.com/sketchfab"], "url": "https://sketchfab.com"}
+ 
+
+ 
+ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+
+ 
+ 
+ 
+
+ 
+ 
+ 
+ 
+
+
+
+ 
+ 
+ 
+ 
+ 
+
+
+
+ 
+ 
+ 
+
+ 
+ Explore Highlights Popular Staff picks Downloadable Collections Human Created AI Generated Blog Community members Sketchfab Masters Browse by category Animals & Pets Architecture Art & Abstract Cars & Vehicles Characters & Creatures Cultural Heritage & History Electronics & Gadgets Fashion & Style Food & Drink Furniture & Home Music Nature & Plants News & Politics People Places & Travel Science & Technology Sports & Fitness Weapons & Military For business Sketchfab for Teams Augmented Reality 3D Viewer 3D eCommerce 3D Configurators Find a Partner Pricing Customer Stories / Cancel login Sign Up Upload 
+ 
+
+ 
+
+ 
+
+ 
+ 
+
+ 
+
+ 
+
+ 
+ 
+ Sketchfab for Developers 
+ 
+ 
+
+
+ 
+ 
+
+ 
+ 
+
+ 
+
+ 
+
+ 
+ 
+ 
+ 
+ 
+ Navigation 
+ 
+ 
+ 
+ 
+ Overview
+ 
+ 
+ 
+ Sketchfab Login (OAuth2)
+ 
+ 
+ 
+ Data API
+ 
+ 
+ 
+ Download API
+ 
+ 
+ 
+ Viewer API
+ 
+ 
+ 
+ oEmbed
+ 
+ 
+ 
+ Developer Guidelines
+ 
+ 
+ 
+ Terms of Use
+ 
+ 
+ 
+ 
+ 
+
+ 
+ 
+ 
+ 
+ Overview
+ 
+ 
+ 
+ 
+ 
+ 
+ Sketchfab Login (OAuth2)
+ 
+ 
+ 
+ 
+ 
+ 
+ Data API
+ 
+ 
+ 
+ 
+ 
+ 
+ Download API
+ 
+ 
+ 
+ 
+ 
+ 
+ Viewer API
+ 
+ 
+ 
+ 
+ 
+ 
+ oEmbed
+ 
+ 
+ 
+ 
+ 
+ 
+ Developer Guidelines
+ 
+ 
+ 
+ 
+ 
+ 
+ Terms of Use
+ 
+ 
+ 
+ 
+ 
+ 
+
+
+ 
+ 
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+
+
+ 
+
+ 
+
+ 
+ 
+
+ 
+ Initialization and options 
+
+ 
+ 
+
+ 
+ Examples 
+
+ 
+ 
+
+
+
+ 
+
+
+ Viewer API 
+ 
+ General 
+ Camera 
+ Objects 
+ Materials & Textures 
+ Post Processing Filters 
+ Annotations 
+ Events 
+ Animation 
+ Inspector 
+ Lights 
+ 
+ General 
+ 
+ addEventListener 
+ load 
+ start 
+ stop 
+ getScreenShot 
+ pickColor 
+ getWorldToScreenCoordinates 
+ Easing functions 
+ Background 
+ Environment 
+ Selection 
+ AR 
+ 
+ addEventListener( event, callback ) 
+ Adds a listener function to an event. 
+ The callback parameters depend on the event. See Events . 
+ ( Interactive Sample ) 
+ api.addEventListener('viewerready', function() {
+ window.console.log('Viewer ready');
+});
+ 
+ load( [callback] ) 
+ Pre-loads the model before starting the viewer. 
+ The callback has no parameters. 
+ api.load(function() {
+ window.console.log('Viewer loaded');
+});
+ 
+ start( [callback] ) 
+ Starts the model viewer. 
+ The callback has no parameters. 
+ ( Interactive Sample ) 
+ api.start(function() {
+ window.console.log('Viewer started');
+});
+ 
+ stop( [callback] ) 
+ Stops the model viewer. 
+ The callback has no parameters. 
+ ( Interactive Sample ) 
+ api.stop(function() {
+ window.console.log('Viewer stopped');
+});
+ 
+ getScreenShot( [w, h], [mimetype], [callback] ) 
+ Takes a screenshot of the viewer. 
+ 
+ w is the width of the screenshot (a number, in pixels). 
+ h is the height of the screenshot (a number, in pixels). 
+ mimetype is the extension of the image file (a MIME type string, 'image/jpeg' by default). 
+ 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is a base64 encoded image. 
+ 
+ Valid function signatures are: 
+ 
+ getScreenShot([callback]) 
+ getScreenShot(w, h, [callback]) 
+ getScreenShot(w, h, mimetype, [callback]) 
+ getScreenShot(mimetype, [callback]) 
+ 
+ ( Interactive Sample ) 
+ api.getScreenShot('image/png', function(err, result) {
+ if (!err) {
+ window.console.log(result); // 'data:image/png;base64,iVBORw0KG...'
+ }
+});
+ 
+ pickColor( position2D, [callback] ) 
+ Returns the color of the pixel in the 3D viewer for the given screen coordinates. 
+ position2D is an array of x and y coordinates. 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is a normalized RGBA array. 
+ 
+ api.pickColor([x, y], function(err, color) {
+ if (!err) {
+ window.console.log(result); // [1, 1, 1, 0]
+ }
+});
+ 
+ getWorldToScreenCoordinates( worldCoord, [callback] ) 
+ Returns the screen coordinates for the given world coordinates. 
+ worldCoord is an array of x, y, z coordinates. 
+ The callback has one parameter, a JSON object with the following attributes: 
+ 
+ glCoord : coordinates in the gl viewport (y origin at bottom) with pixel ratio taken into account 
+ canvasCoord : coordinates in the canvas html element (y origin at top) 
+ 
+ ( Interactive Sample ) 
+ api.getWorldToScreenCoordinates(worldCoord, function(coord) {
+ window.console.log(coord.glCoord, coord.canvasCoord); // [x, y] [x, y]
+});
+ 
+ Easing functions 
+ Easing functions specify the rate of change of a parameter over time.
+This is an optional parameter in various functions, such as those that move the camera or translate objects. 
+ Easing can be one of these keywords: 
+ 
+ easeLinear 
+ easeOutQuad 
+ easeInQuad 
+ easeInOutQuad 
+ easeOutCubic 
+ easeInCubic 
+ easeInOutCubic 
+ easeOutQuart 
+ easeInQuart 
+ easeInOutQuart 
+ easeOutQuintic 
+ easeInQuintic 
+ easeInOutQuintic 
+ easeOutSextic 
+ easeInSextic 
+ easeInOutSextic 
+ easeOutSeptic 
+ easeInSeptic 
+ easeInOutSeptic 
+ easeOutOctic 
+ easeInOctic 
+ easeInOutOctic 
+ easeOutBack 
+ easeInBack 
+ easeInOutBack 
+ easeOutCircle 
+ easeInCircle 
+ easeInOutCircle 
+ easeOutElastic 
+ easeInElastic 
+ easeInOutElastic 
+ easeOutBounce 
+ easeInBounce 
+ easeInOutBounce 
+ 
+ The default easing function is easeOutQuad . 
+ Check out easings.net 
+to see interactive examples of easing functions. 
+ ( Interactive Sample ) 
+ Background 
+ setBackground( options, [callback] ) 
+ Sets a background image or color in the viewer. 
+ The image must exist as a background on the account of the owner of the model. 
+ options is an object that defines one of the following parameters of the background: 
+ 
+ uid : the UID of the background, a string 
+ color : a normalized RGB array, [R, G, B] 
+ transparent : a boolean ( true makes the background transparent) 
+ 
+ In order to use a transparent background, you must set transparent: 1 in the client.init options.
+Otherwise, the background will appear black.
+A Pro account or above is required to use this option. 
+ A background image must already be uploaded to your account and available in 3D Settings. 
+ You can find the correct options in the Sketchfab model’s “3D Settings”.
+ If you add ?api_log=1 to the URL (e.g. https://sketchfab.com/models/442c548d94744641ba279ae94b5f45ec/edit?api_log=1 ),
+ various data will be printed to your browser’s developer tool console. 
+ The callback has no parameters. 
+ ( Interactive Sample ) 
+ // Sets a color background
+api.setBackground({color: [0, 0, 0]}, function() {
+ window.console.log('Background changed');
+});
+
+// Sets an image background
+api.setBackground({uid: '51af6a870cce449eb75b0345feebaebb'}, function() {
+ window.console.log('Background changed');
+});
+
+// Sets transparent background (assuming client.init options include transparent: 1)
+api.setBackground({transparent: true}, function() {
+ window.console.log('Background changed');
+});
+ 
+ Environment 
+ getEnvironment( [callback] ) 
+ Returns infomation about the HDR environment in the viewer. 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is a environment JSON object with the following attributes: 
+ enabled : a boolean that indicates whether or not environmental lighting is enabled 
+ exposure : the overall brightness of the environment, which affects the lighting and the background if enabled (a number) 
+ lightIntensity : the intensity of the environmental light when casting shadows (a number) 
+ rotation : the rotation of the environment (a number, in radians) 
+ shadowEnabled : a boolean that indicates whether or not the environment is casting shadows 
+ 
+ 
+ 
+ ( Interactive Sample ) 
+ api.getEnvironment(function(err, envInfo) {
+ if (!err) {
+ window.console.log('Current environment:', envInfo);
+ }
+});
+ 
+ setEnvironment( options, [callback] ) 
+ Sets the HDR environment of the viewer. 
+ The environment must exist on the account of the owner of the model.
+ options is an object that defines the environment and its settings. 
+ You can find the correct options in the Sketchfab model’s “3D Settings”.
+ If you add ?api_log=1 to the URL (e.g. https://sketchfab.com/models/442c548d94744641ba279ae94b5f45ec/edit?api_log=1 ),
+ various data will be printed to your browser’s developer tool console. 
+ The callback has no parameters. 
+ ( Interactive Sample ) 
+ api.setEnvironment({
+ uid: '3a68a92a99d849b19829e315b93e6d55',
+ exposure: 0.2,
+ lightIntensity: 1.0,
+ rotation: 0.75,
+ blur: 0.1,
+ shadowEnabled: true
+}, function() {
+ window.console.log('Environment changed');
+});
+ 
+ Selection 
+ setHighlightOptions( options, [callback] ) 
+ Sets the material highlight options used by highlightMaterial . 
+ options is a JSON object with the following attributes: 
+ 
+ outlineWidth : the width of the outline (a number, in pixels) 
+ outlineColor : the color of the outline (a normalized RGBA array, [R, G, B, A] ) 
+ outlineDuration : the duration the outline should be displayed (a number, in seconds; 0 for no outline) 
+ highlightColor : the color of the highlight (a normalized RGB array, [R, G, B, A] ) 
+ highlightDuration : the duration the highlight should be displayed (a number, in seconds; 0 for no highlight) 
+ 
+ The callback has no parameters. 
+ ( Interactive Sample ) 
+ api.setHighlightOptions({
+ outlineWidth: 5,
+ outlineColor: [1.0, 0.0, 0.0],
+ outlineDuration: 200,
+ highlightColor: [0.0, 1.0, 0.0],
+ highlightDuration: 300
+}, function() {
+ window.console.log('Set highlight options');
+});
+ 
+ highlightMaterial( material ) 
+ Highlights the given material providing the options set with setHighlightOptions . 
+ material is a material object which can be fetched with getMaterialList , or returned by a click event. 
+ api.highlightMaterial(material);
+ 
+ AR 
+ startAR( [callback] ) 
+ Displays the AR popup if available.
+See App-free AR for Enterprise 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.startAR(function(err) {
+ if (!err) {
+ window.console.log('Starting AR');
+ }
+});
+ 
+ Camera 
+ ( Interactive Sample ) 
+ 
+ getCameraLookAt 
+ setCameraLookAt 
+ recenterCamera 
+ focusOnVisibleGeometries 
+ setCameraEasing 
+ setCameraConstraints 
+ setEnableCameraConstraints 
+ setUserInteraction 
+ setCameraLookAtEndAnimationCallback 
+ setFov 
+ getFov 
+ 
+ getCameraLookAt( [callback] ) 
+ Returns the current camera position and target. 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is a camera JSON object with the following attributes: 
+ position : an array of the x, y, and z coordinates of the camera position 
+ target : an array of the x, y, and z coordinates of the camera target 
+ 
+ 
+ 
+ api.getCameraLookAt(function(err, camera) {
+ window.console.log(camera.position); // [x, y, z]
+ window.console.log(camera.target); // [x, y, z]
+});
+ 
+ setCameraLookAt( position, target, [duration], [callback] ) 
+ Sets the camera position and target. 
+ 
+ postion is the position of the camera (an array of x, y, and z coordinates) 
+ target is the target of the camera (an array of x, y, and z coordinates) 
+ duration is the duration of the move from the current camera to the new camera (a number, in seconds; 2 by default) 
+ 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ The callback is invoked at the start of the camera move.
+Use setCameraLookAtEndAnimationCallback to set a callback at the end of the camera move. 
+ ( Interactive Sample ) 
+ api.setCameraLookAt([0, 13, 10], [0, 10, 0], 4.3, function(err) {
+ if (!err) {
+ window.console.log('Camera moved');
+ }
+});
+ 
+ recenterCamera( [callback] ) 
+ Centers the camera around the model’s bounding box, taking portrait/landscape mode into account. 
+ Camera constraints should be disabled before recentering the camera. 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.recenterCamera(function(err) {
+ if (!err) {
+ window.console.log('Camera recentered');
+ }
+});
+ 
+ focusOnVisibleGeometries( [callback] ) 
+ Centers the camera around the model’s visible geometries, taking portrait/landscape mode into account. 
+ Camera constraints should be disabled before recentering the camera. 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.focusOnVisibleGeometries(function(err) {
+ if (!err) {
+ window.console.log('Camera recentered');
+ }
+});
+ 
+ setCameraEasing( easing ) 
+ Sets camera animation easing. 
+ easing can be one of the keywords in the easing list . 
+ api.setCameraEasing('easeLinear');
+ 
+ setCameraConstraints( options ) 
+ Defines camera constraint settings. 
+ options is a JSON object of camera constraint settings. 
+ You can find the correct options in the Sketchfab model’s “3D Settings”.
+ If you add ?api_log=1 to the URL (e.g. https://sketchfab.com/models/442c548d94744641ba279ae94b5f45ec/edit?api_log=1 ),
+ various data will be printed to your browser’s developer tool console. 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.setCameraConstraints(options, function(err) {
+ if (!err) {
+ window.console.log('Set camera constraints');
+ }
+});
+ 
+ setEnableCameraConstraints( enable, options ) 
+ Enables or disables camera constraints defined by setCameraConstraints . 
+ 
+ enable is a boolean ( true to enable constraints, false to disable constraints) 
+ options is a JSON object with a single attribute: preventCameraConstraintsFocus .
+If true , the camera will not move when constraints are enabled (for example, if the current camera position is outside the given constraints). 
+ 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.setEnableCameraConstraints(true, {preventCameraConstraintsFocus: true}, function(err) {
+ if (!err) {
+ window.console.log('Camera constraints enabled');
+ }
+});
+ 
+ setUserInteraction ( enable ) 
+ Enables or disables user interaction with the viewer. 
+ This is useful if you need to move the camera somewhere without the end user moving the camera during the animation.
+For example, you might need to take a screenshot from a very specfic position. 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.setUserInteraction(false, function(err) {
+ if (!err) {
+ window.console.log('User interaction disabled');
+ }
+});
+ 
+ setCameraLookAtEndAnimationCallback( callback ) 
+ Creates an event listener for a camera animation.
+The callback is invoked when the camera stops moving, and the event is consumed. 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.setCameraLookAtEndAnimationCallback(function(err) {
+ if (!err) {
+ window.console.log('Camera animation ended.');
+ }
+});
+ 
+ setFov( angle, [callback] ) 
+ Defines the camera field of view (FoV). 
+ angle is the angle to set as the FoV (a number, in degrees, between 1 and 179). 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is the angle set by the operation. 
+ 
+ api.setFov(60, function(err, angle) {
+ if (!err) {
+ window.console.log('FOV set to', angle); // 45
+ }
+});
+ 
+ getFov( [callback] ) 
+ Returns the camera’s current field of view (FoV). 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is the camera’s FoV angle, in degrees. 
+ 
+ api.getFov(function(err, fov) {
+ if (!err) {
+ window.console.log('FOV is', fov); // 45
+ }
+});
+ 
+ Objects 
+ 
+ getNodeMap 
+ getSceneGraph 
+ show 
+ hide 
+ translate 
+ rotate 
+ getMatrix 
+ setMatrix 
+ pickFromScene 
+ pickFromScreen 
+ 
+ Objects in the scene are represented as nodes in a scene graph. 
+ getNodeMap( [callback] ) 
+ Returns the list of nodes in the scene. 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is a flattened array of node objects. 
+ 
+ ( Interactive Sample ) 
+ api.getNodeMap(function(err, nodes) {
+ if (!err) {
+ window.console.log(nodes); // [ ... ]
+ }
+});
+ 
+ getSceneGraph( [callback] ) 
+ Returns the scene graph. 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is the scene graph. 
+ 
+ api.getSceneGraph(function(err, graph) {
+ if (!err) {
+ window.console.log(graph); // { ... }
+ }
+});
+ 
+ show( instanceID, [callback] ) 
+ Shows a node. 
+ instanceID is the ID of the node, which can be found via getNodeMap or getSceneGraph . 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ ( Interactive Sample ) 
+ api.show(myNode, function(err) {
+ if (!err) {
+ window.console.log('Showed node', myNode); // 114
+ }
+});
+ 
+ hide( instanceID, [callback] ) 
+ Hides a node. 
+ instanceID is the ID of the node, which can be found via getNodeMap or getSceneGraph . 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ ( Interactive Sample ) 
+ api.hide(myNode, function(err) {
+ if (!err) {
+ window.console.log('Hid node', myNode); // 114
+ }
+});
+ 
+ translate( instanceID, translateTo, options, [callback] ) 
+ Translates a node. 
+ 
+ instanceID is the ID of the node, which can be found via getNodeMap or getSceneGraph . 
+ translateTo is an array containing 3D coordinates to translate to, [x, y, z] . 
+ options is a JSON object with the following attributes: 
+ duration : the duration of the translation animation (a number, in seconds; 0 by default) 
+ easing : one of the keywords in the easing list 
+ 
+ 
+ 
+ Only MatrixTransform nodes can be translated. 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is translateTo . 
+ 
+ api.translate(myNode, [1, 1, 1], {
+ duration: 1.0,
+ easing: 'easeOutQuad'
+}, function(err, translateTo) {
+ if (!err) {
+ window.console.log('Object has been translated to', translateTo);
+ }
+});
+ 
+ rotate( instanceID, rotateTo, options, [callback] ) 
+ Rotates a node. 
+ 
+ instanceID is the ID of the node, which can be found via getNodeMap or getSceneGraph . 
+ rotateTo an array containing [ radAngle, axisX, axisY, axisZ ] . 
+ options is a JSON object with the following attributes: 
+ duration : the duration of the translation animation (a number, in seconds; 0 by default) 
+ easing : one of the keywords in the easing list 
+ 
+ 
+ 
+ Only MatrixTransform nodes can be rotated. 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is rotateTo . 
+ 
+ api.rotate(myNode, [Math.PI, 1, 0, 0], {
+ duration: 1.0,
+ easing: 'easeOutQuad'
+}, function(err, rotateTo) {
+ if (!err) {
+ window.console.log('Object has been rotated according to', rotateTo);
+ }
+});
+ 
+ getMatrix( instanceID, [callback] ) 
+ Returns the transform matrix for a given node. 
+ instanceID is the ID of the node, which can be found via getNodeMap or getSceneGraph . 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is the returned matrix. 
+ 
+ We recommend the use of glMatrix for matrix operations.
+ The transform matrix is column-major .
+ This means that indices 12 , 13 , and 14 (assuming a starting index of 0 ) in the transform matrix are responsible for translation. 
+ api.getMatrix(myNode, function(err, matrix) {
+ if (!err) {
+ window.console.log('Matrix:', matrix);
+ }
+});
+ 
+ setMatrix( instanceID, matrix, [callback] ) 
+ Sets the transform matrix for a given node. 
+ 
+ instanceID is the ID of the node, which can be found via getNodeMap or getSceneGraph . 
+ matrix is the transform matrix to set on the node. 
+ 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ * setMatrix * is performed in local space (relative to parent). 
+ We recommend the use of glMatrix for matrix operations.
+ The transform matrix is column-major .
+ This means that indices 12 , 13 , and 14 (assuming a starting index of 0 ) in the transform matrix are responsible for translation. 
+ api.setMatrix(myNode, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], function() {
+ if (!err) {
+ window.console.log('Matrix set');
+ }
+});
+ 
+ pickFromScene( position3DStart, position3DEnd, [callback] ) 
+ Casts a ray between two 3D positions and returns information about the world position of the first hit (intersection). 
+ 
+ position3DStart is an array of 3D coordinates [x, y, z] of the first position. 
+ position3DEnd is an array of 3D coordinates [x, y, z] of the second position. 
+ 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is a world position JSON object with the following attributes: 
+ position3D : the 3D coordinates in the scene (an array, [x, y, z] ) 
+ position2D : the coordinates in the 2D gl viewport with pixel ratio taken into account (an array [z, y] , y origin at bottom) 
+ normal : normal vector of triangle intersected (an array, [x, y, z] ) 
+ instanceID : picked node ID (a number) 
+ material : picked material (JSON object) 
+ 
+ 
+ 
+ ( Interactive Sample ) 
+ api.pickFromScene(position2D, function(err, coord) {
+ if (!err) {
+ window.console.log(coord.position3D, coord.position2D, coord.normal, coord.instanceID, coord.material);
+ }
+});
+ 
+ pickFromScreen( position2D, [callback] ) 
+ Returns information about the world position of the first hit (intersection) at a given screen coordinate. 
+ position2D is the coordinates in the 2D gl viewport with pixel ratio taken into account (an array [z, y] , y origin at bottom) 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is a world position JSON object with the following attributes: 
+ position3D : the 3D coordinates in the scene (an array, [x, y, z] ) 
+ normal : normal vector of triangle intersected (an array, [x, y, z] ) 
+ instanceID : picked node ID (a number) 
+ material : picked material (JSON object) 
+ 
+ 
+ 
+ ( Interactive Sample ) 
+ api.pickFromScreen(position2D, function(err, coord) {
+ if (!err) {
+ window.console.log(coord.position3D, coord.normal, coord.instanceID, coord.material);
+ }
+});
+ 
+ Materials & Textures 
+ 
+ getMaterialList 
+ setMaterial 
+ createMaterial 
+ assignMaterial 
+ createDecal 
+ destroyDecal 
+ Material channels 
+ Textures 
+ getTextureList 
+ addTexture 
+ addVideoTexture 
+ updateTexture 
+ setTextureQuality 
+ setUVOffset 
+ setUVRotation 
+ setUVScale 
+ 
+ 
+ 
+ getMaterialList( [callback] ) 
+ Returns the list of materials. 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is an array of material JSON objects. 
+ 
+ ( Interactive Sample ) 
+ api.getMaterialList(function(err, materials) {
+ if (!err) {
+ window.console.log(materials);
+ }
+});
+ 
+ setMaterial( material, [callback] ) 
+ Updates a material identified by its stateSetID . 
+ material is a material JSON object, identified by its stateSetID attribute and includes any desired changes to material channels. 
+ The callback has no parameters. 
+ ( Interactive Sample ) 
+ api.getMaterialList(function(err, materials) {
+ // Turn off the diffuse on the first material
+ var materialToUpdate = materials[0];
+ materialToUpdate.channels.DiffuseColor.enable = false;
+ window.console.log(materialToUpdate);
+
+ // Apply the change
+ api.setMaterial(materialToUpdate, function() {
+ window.console.log('Material updated');
+ });
+});
+ 
+ createMaterial( materialData, [callback] ) 
+ Creates a new material from given material data. 
+ materialData is a material JSON object. Use the getMaterialList function to retrieve the existing materials. 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is the new material object. 
+ 
+ api.createMaterial({
+ channels: {
+ AlbedoPBR: {
+ color: [1.0, 0.0, 0.0]
+ }
+ }
+}, function(err, material) {
+ if (!err) {
+ window.console.log(material);
+ }
+});
+ 
+ assignMaterial( node, materialID, [callback] ) 
+ Assigns a material to a node. 
+ 
+ node is a node object (NOT the instanceID of a node), which can be found via getNodeMap or getSceneGraph . 
+ materialID is the ID of a material, which can be identified by its id key via getMaterialList or createMaterial . 
+ 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.assignMaterial(myNode, myMaterialID, function(err) {
+ if (!err) {
+ window.console.log('Material assigned');
+ }
+});
+ 
+ createDecal( decalData, [callback] ) 
+ Creates a decal. This works by projecting a new geometry with its own material onto the surface of an existing geometry. 
+ decalData is a decal JSON object. 
+ The minimal data to create a decal are: 
+ 
+ position the 3D coordinates of the center of the decal (an array, [x, y, z] ) 
+ normal : normal vector of the surface to project the decal onto (an array, [x, y, z] ) 
+ scale : the size of the projection box used to create the decal. x and y define the width and height of the decal, respectively. z defines the depth of the projection and can be used to limit the area of the decal. (an array, [x, y, z] ) 
+ 
+ Optional data when creating a decal are: 
+ 
+ materialID : the ID of a material to use on the decal. Without this, the decal will be created with a new material. 
+ useBaseNormalMap : if set to true , the decal’s material will use the normal map of the underlying base mesh’s material. 
+ 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is the new decal object. 
+ 
+ api.createDecal(decalData, function(err, decal) {
+ if (!err) {
+ window.console.log(decal);
+ }
+});
+ 
+ destroyDecal( decalID, options, [callback] ) 
+ Destroys a previously created decal. 
+ 
+ decalID : the ID of the decal to destroy. It is retrieved as decal.id via createDecal . 
+ options is a JSON object with the following attribute: 
+ deleteMaterial : a boolean; true will delete the material associated with the destroyed decal 
+ 
+ 
+ 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.destroyDecal(decalID, options, function(err) {
+ if (!err) {
+ window.console.log('Decal destroyed');
+ }
+});
+ 
+ Material channels 
+ The following material channels are available: 
+ 
+ AOPBR 
+ AlbedoPBR (“Base Color” in the Metalness PBR workflow) 
+ Anisotropy 
+ BumpMap 
+ CavityPBR 
+ ClearCoat 
+ ClearCoatNormalMap 
+ ClearCoatRoughness 
+ DiffuseColor 
+ DiffuseIntensity 
+ DiffusePBR (“Albedo” in the Specular PBR workflow) 
+ Displacement 
+ EmitColor 
+ GlossinessPBR 
+ Matcap 
+ MetalnessPBR 
+ NormalMap 
+ Opacity 
+ RoughnessPBR 
+ SpecularColor 
+ SpecularF0 
+ SpecularHardness 
+ SpecularPBR 
+ SubsurfaceScattering 
+ SubsurfaceTranslucency 
+ 
+ They can be edited as JSON objects using the setMaterial function.
+Their exact attributes depend on the specific channel and texture options. 
+ getTextureList( [callback] ) 
+ Returns the list of registered textures. 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is an array of texture JSON objects. 
+ 
+ ( Interactive Sample ) 
+ api.getTextureList(function(err, textures) {
+ if (!err) {
+ window.console.log(textures);
+ }
+});
+ 
+ addTexture( textureURL, [callback] ) 
+ Registers a new texture to the texture list. 
+ textureURL is a URL of a CORS-enabled image file or a HTMLCanvasElement Data URI DOMString.
+The file format must be natively supported by the web browser. 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is the UID string of the new texture, which can now be used in setMaterial . 
+ 
+ For information on CORS, visit the
+ MDN Web Docs .
+ For details on implementing CORS on your own server, visit
+ enable-cors.org . 
+ For information on the HTMLCanvasElement interface, visit the
+ MDN Web Docs . 
+ ( Interactive Sample ) 
+ api.addTexture('https://example.org/texture.png', function(err, textureUid) {
+ if (!err) {
+ window.console.log('New texture registered with UID', textureUid);
+ }
+});
+ 
+ addVideoTexture( textureURL, options, [callback] ) 
+ ( Interactive Sample ) 
+ Registers a new video texture. 
+ 
+ textureURL is a URL of a CORS-enabled video file. The file format must be natively supported by the web browser. 
+ options is a JSON object with the following attributes: 
+ loop : a boolean; true will make the video loop 
+ mute : a boolean; true will play the video with audio muted. This is useful to avoid blocking autoplay in browsers. 
+ 
+ 
+ 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is the UID string of the new texture, which can now be used in setMaterial . 
+ 
+ For information on CORS, visit the
+ MDN Web Docs .
+ For details on implementing CORS on your own server, visit
+ enable-cors.org . 
+ ( Interactive Sample ) 
+ api.addTexture('https://example.org/video.mp4', {
+ loop: false,
+ mute: true
+}, function(err, textureUid) {
+ if (!err) {
+ window.console.log('Added video texture with UID', textureUid);
+ }
+});
+ 
+ updateTexture( textureURL, textureUid, [callback] ) 
+ Replaces a previously registered texture. 
+ 
+ textureURL is is a URL to a CORS-enabled image file or a HTMLCanvasElement Data URI DOMString. See addTexture for more details. 
+ textureUid is the UID of the texture to replace. 
+ 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is the UID string of the new texture, which can now be used in setMaterial . 
+ 
+ The new UID will be the same as the previously registered texture’s UID.
+This replaces the texture everywhere it is used in the model. 
+ api.updateTexture('https://example.org/texture.png', textureUid, function(err, textureUid) {
+ if (!err) {
+ window.console.log('Replaced texture with UID', textureUid);
+ }
+});
+ 
+ setTextureQuality( quality, [callback] ) 
+ Sets the texture quality used for all the textures in the viewer. 
+ quality must be one of three options: 
+ 
+ 'ld' (low definition) 
+ 'sd' (standard definition) 
+ 'hd' (high definition) 
+ 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.setTextureQuality('hd', function(err) {
+ if (!err) {
+ window.console.log('Texture quality set to high definition');
+ }
+});
+ 
+ setUVOffset( materialToUpdate, channel, offsetX, offsetY, [callback] ) 
+ Sets an offset for the texture coordinates of the given channel for the given material. 
+ 
+ materialToUpdate is a material JSON object, identified by its stateSetID attribute. 
+ channel can be one of the keywords in the channel list . 
+ offsetX is the offset for the UV’s x direction (a number; 0 is no offset, 1 is 100% offset). 
+ offsetY is the offset for the UV’s y direction (a number; 0 is no offset, 1 is 100% offset). 
+ 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ ( Interactive Sample ) 
+ api.setUVOffset(materialToUpdate, 'AlbedoPBR', 0, 0.5);
+ 
+ setUVRotation( materialToUpdate, channel, rotation, [callback] ) 
+ Sets a rotation for the texture coordinates of the given channel for the given material. 
+ 
+ materialToUpdate is a material JSON object, identified by its stateSetID attribute. 
+ channel can be one of the keywords in the channel list . 
+ rotation is the rotation angle (a number, in radians). 
+ 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ ( Interactive Sample ) 
+ api.setUVRotation(materialToUpdate, 'AlbedoPBR', Math.PI/2);
+ 
+ setUVScale( materialToUpdate, channel, scaleX, scaleY, [callback] ) 
+ Sets a scale factor for the texture coordinates of the given channel for the given material. 
+ 
+ materialToUpdate is a material JSON object, identified by its stateSetID attribute. 
+ channel can be one of the keywords in the channel list . 
+ offsetX is the scale factor for the UV’s x direction (a number). 
+ offsetY is the scale factor for the UV’s y direction (a number). 
+ 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ ( Interactive Sample ) 
+ api.setUVScale(materialToUpdate, 'AlbedoPBR', 0.5, 2);
+ 
+ Post Processing Filters 
+ Post-processing filters are visual filters that are applied at the end of rendering.
+They work like Instagram or Photoshop filters, and let you adjust the look of the final image.
+* getPostProcessing 
+* setPostProcessing 
+ getPostProcessing( [callback] ) 
+ Gets the current post-processing filter settings. 
+ The callback has one parameter: a JSON object of post-processing settings. 
+ api.getPostProcessing(function(settings) {
+ window.console.log(settings);
+});
+ 
+ setPostProcessing( settings, [callback] ) 
+ Sets post-processing filters with new settings. 
+ settings is a JSON object of post-processing filter settings.
+You can find the format of this object with getPostProcessing . 
+ The callback has no parameters. 
+ // Enable post-processing filters and sharpen filter
+api.setPostProcessing({
+ enable: true,
+ sharpenEnable: true
+}, function() {
+ window.console.log('Post-processing filters set');
+});
+ 
+ Annotations 
+ Annotations 
+are notes positioned in 3D space.
+They allow authors to provide information on a specific part of the model and tell a story. 
+ 
+ getAnnotationList 
+ gotoAnnotation 
+ showAnnotation 
+ showAnnotationTooltip 
+ showAnnotationTooltips 
+ hideAnnotation 
+ hideAnnotationTooltip 
+ hideAnnotationTooltips 
+ createAnnotation 
+ createAnnotationFromScenePosition 
+ createAnnotationFromWorldPosition 
+ getAnnotation 
+ updateAnnotation 
+ unselectAnnotation 
+ removeAnnotation 
+ removeAllAnnotations 
+ setAnnotationsTexture 
+ setAnnotationCameraTransition 
+ Events 
+ annotationBlur 
+ annotationFocus 
+ annotationMouseEnter 
+ annotationMouseLeave 
+ annotationSelect 
+ annotationUnselect 
+ 
+ 
+ 
+ getAnnotationList( [callback] ) 
+ Gets the current list of annotations in the viewer. 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is an array of annotation objects. 
+ 
+ api.getAnnotationList(function(err, annotations) {
+ if (!err) {
+ window.console.log(annotations);
+ }
+});
+ 
+ gotoAnnotation( index, options, [callback] ) 
+ Selects the annotation for the given index.
+By default, the camera will move and this move will be animated.
+Annotation indices are zero-based. 
+ 
+ index is the annotation index (a number; a negative or non-existent index will select no annotation). 
+ options is a JSON object with the following attributes: 
+ preventCameraAnimation : a boolean; true will select the annotation and move the camera position immediately into place 
+ preventCameraMove : a boolean; true will select the annotation without moving the camera at all 
+ 
+ 
+ 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is the index of the selected annotation. 
+ 
+ api.gotoAnnotation(0, {preventCameraAnimation: true, preventCameraMove: false}, function(err, index) {
+ if (!err) {
+ window.console.log('Going to annotation', index + 1);
+ }
+});
+ 
+ unselectAnnotation( [callback] ) 
+ Unselects the current selected annotation if one is selected. 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.unselectAnnotation(function(err) {
+ if (!err) {
+ window.console.log('Unselected annotations');
+ }
+});
+ 
+ showAnnotation( index, [callback] ) 
+ Shows the annotation for the given index.
+Annotation indices are zero-based. 
+ index is the annotation index (a number). 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is the index of the selected annotation. 
+ 
+ api.showAnnotation(0, function(err, index) {
+ if (!err) {
+ window.console.log('Showing annotation', index + 1);
+ }
+});
+ 
+ hideAnnotation( index, [callback] ) 
+ Hides the annotation for the given index.
+Annotation indices are zero-based. 
+ index is the annotation index (a number). 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is the index of the selected annotation. 
+ 
+ api.hideAnnotation(0, function(err, index) {
+ if (!err) {
+ window.console.log('Hiding annotation', index + 1);
+ }
+});
+ 
+ showAnnotationTooltip( index, [callback] ) 
+ Makes the annotation tooltip visible for the given index. When the annotation is selected, the tooltip will appear.
+Annotation indices are zero-based. 
+ index is the annotation index (a number). 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.showAnnotationTooltip(0, function(err) {
+ if (!err) {
+ window.console.log('Showing annotation tooltip');
+ }
+});
+ 
+ showAnnotationTooltips( [callback] ) 
+ Makes the annotation tooltip visible for all annotations. When an annotation is selected, the tooltip will appear. 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.showAnnotationTooltips(function(err) {
+ if (!err) {
+ window.console.log('Showing annotation tooltip');
+ }
+});
+ 
+ hideAnnotationTooltip( index, [callback] ) 
+ Hides the annotation tooltip for the given index. When the annotation is selected, the tooltip will not appear.
+Annotation indices are zero-based. 
+ index is the annotation index (a number). 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.hideAnnotationTooltip(0, function(err) {
+ if (!err) {
+ window.console.log('Hiding annotation tooltip');
+ }
+});
+ 
+ hideAnnotationTooltips( [callback] ) 
+ Hides the annotation tooltip for all annotations. When an annotation is selected, the tooltip will not appear. 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.hideAnnotationTooltips(function(err) {
+ if (!err) {
+ window.console.log('Hiding annotation tooltip');
+ }
+});
+ 
+ createAnnotation( positionStart, positionEnd, eye, target, title, text, [callback] ) 
+ Creates an annotation.
+A ray is cast from positionStart to positionEnd , and the annotation is created at the first intersection with a mesh, if any. 
+ 
+ positionStart is the starting position of the cast ray (an array of 3D coordinates, [x, y, z] ). 
+ positionEnd is the end position of the cast ray (an array of 3D coordinates, [x, y, z] ). 
+ eye is the position of the camera when the annotation is selected (an array of 3D coordinates, [x, y, z] ). 
+ target is the target of the camera when the annotation is selected (an array of 3D coordinates, [x, y, z] ). 
+ title is the title of the annotation (a string). 
+ text is the description of the annotation (a string, Markdown is supported). 
+ 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is the index of the created annotation. 
+ 
+ api.createAnnotation(
+ [-0.16, -3.86, 0.82],
+ [0.12, -3.57, -0.51],
+ camera.position,
+ camera.target,
+ 'mytitle2',
+ 'mytext2',
+ function(err, index) {
+ if (!err) {
+ window.console.log('Created new annotatation', index + 1);
+ }
+ }
+);
+ 
+ createAnnotationFromScenePosition( position, eye, target, title, text, [callback] ) 
+ Creates an annotation at an arbitrary position in “mesh space”. 
+ 
+ position is the position of the annotation (an array of 3D coordinates, [x, y, z] ). 
+ eye is the position of the camera when the annotation is selected (an array of 3D coordinates, [x, y, z] ). 
+ target is the target of the camera when the annotation is selected (an array of 3D coordinates, [x, y, z] ). 
+ title is the title of the annotation (a string). 
+ text is the description of the annotation (a string, Markdown is supported). 
+ 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is the index of the created annotation. 
+ 
+ api.createAnnotationFromScenePosition(
+ [0.12, -3.57, -0.51],
+ camera.position,
+ camera.target,
+ 'mytitle2',
+ 'mytext2',
+ function(err, index) {
+ if (!err) {
+ window.console.log('Created new annotatation', index + 1);
+ }
+ }
+);
+ 
+ createAnnotationFromWorldPosition( position, eye, target, title, text, [callback] ) 
+ Creates an annotation at an arbitrary position in “world space”. 
+ 
+ position is the position of the annotation (an array of 3D coordinates, [x, y, z] ). 
+ eye is the position of the camera when the annotation is selected (an array of 3D coordinates, [x, y, z] ). 
+ target is the target of the camera when the annotation is selected (an array of 3D coordinates, [x, y, z] ). 
+ title is the title of the annotation (a string). 
+ text is the description of the annotation (a string, Markdown is supported). 
+ 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is the index of the created annotation. 
+ 
+ api.createAnnotationFromWorldPosition(
+ [0.12, -3.57, -0.51],
+ camera.position,
+ camera.target,
+ 'mytitle2',
+ 'mytext2',
+ function(err, index) {
+ if (!err) {
+ window.console.log('Created new annotatation', index + 1);
+ }
+ }
+);
+ 
+ getAnnotation( index, [callback] ) 
+ Gets the annotation information for the given index.
+Annotation indices are zero-based. 
+ index is the annotation index (a number). 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is an annotation JSON object. 
+ 
+ api.getAnnotation(0, function(err, information) {
+ if (!err) {
+ window.console.log(information);
+ }
+});
+ 
+ updateAnnotation( index, options, [callback] ) 
+ Updates the annotation information for the given index.
+Annotation indices are zero-based. 
+ 
+ index is the annotation index (a number). 
+ options is * options is a JSON object with the following attributes: 
+ title : a string 
+ content : a string, Markdown is supported 
+ eye is the position of the camera when the annotation is selected (an array of 3D coordinates, [x, y, z] ). 
+ target is the target of the camera when the annotation is selected (an array of 3D coordinates, [x, y, z] ). 
+ 
+ 
+ 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is an annotation JSON object. 
+ 
+ ( Interactive Sample ) 
+ api.updateAnnotation(1, {
+ title: 'updatedTitle',
+ content: 'updatedContent'
+}, function(err, information) {
+ if (!err) {
+ window.console.log(information);
+ }
+});
+ 
+ removeAnnotation( index, [callback] ) 
+ Removes the annotation for the given index.
+Annotation indices are zero-based. 
+ index is the annotation index (a number). 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.removeAnnotation(0, function(err) {
+ if (!err) {
+ window.console.log('Removed annotation');
+ }
+});
+ 
+ removeAllAnnotations( [callback] ) 
+ Removes all annotations from the scene. 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.removeAllAnnotations(function(err) {
+ if (!err) {
+ window.console.log('Removed all annotations');
+ }
+});
+ 
+ setAnnotationsTexture( options, [callback] ) 
+ ( Interactive Sample ) 
+ Changes the image used to draw annototation icons.
+The image should be a grid of icons matching annotation indices from left to right, top to bottom. 
+ options is a JSON object with the following attributes: 
+ 
+ url : a URL of a CORS-enabled image file or a HTMLCanvasElement Data URI DOMString 
+ colNumber : the number of columns in the icon image 
+ padding : the padding between icons (a number, in pixels) 
+ iconSize : the size of each icon (a number, in pixels) 
+ 
+ For information on CORS, visit the
+ MDN Web Docs .
+ For details on implementing CORS on your own server, visit
+ enable-cors.org . 
+ For information on the HTMLCanvasElement interface, visit the
+ MDN Web Docs . 
+ Callback will be passed (err) . 
+ api.setAnnotationsTexture({}, function(err) {
+ if (!err) {
+ window.console.log('Updated annotation texture.');
+ }
+});
+ 
+ setAnnotationCameraTransition( doPreventAnimation, doPreventMove, [callback] ) 
+ Changes the way the camera transitions to an annotation. 
+ 
+ doPreventAnimation defines if the camera movement is animated (a boolean; true will make the camera move immediately into position when an annotation is selected). 
+ doPreventMove defines if the camera moves at all (a boolean; true will make the camera not move when an annotation is selected). 
+ 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.setAnnotationCameraTransition(doPreventAnimation, doPreventMove, function(err) {
+ if (err) {
+ window.console.log(err);
+ }
+});
+ 
+ Events 
+ Various actions in the viewer can have event handlers attached to them.
+This is useful for reacting to user interactions and managing states of the viewer. 
+ 
+ Viewer 
+ viewerready 
+ viewerstart 
+ viewerstop 
+ 
+ 
+ Mouse 
+ click 
+ nodeMouseEnter 
+ nodeMouseLeave 
+ 
+ 
+ Annotations 
+ annotationBlur 
+ annotationFocus 
+ annotationMouseEnter 
+ annotationMouseLeave 
+ annotationSelect 
+ 
+ 
+ Camera 
+ camerastart 
+ camerastop 
+ 
+ 
+ Animation 
+ animationChange 
+ animationEnded 
+ animationPlay 
+ animationStop 
+ 
+ 
+ Load and Progress 
+ backgroundLoaded 
+ modelLoadProgress 
+ textureLoadProgress 
+ 
+ 
+ 
+ viewerready 
+ This event is triggered when the viewer is ready.
+This means the minimum resources have loaded to display the model, the user can interact with it, and scene data can be accessed. 
+ api.addEventListener('viewerready', function() {
+ window.console.log('Viewer is ready');
+});
+ 
+ viewerstart 
+ This event is triggered when the viewer is started. 
+ api.addEventListener('viewerstart', function() {
+ window.console.log('Viewer is started');
+});
+ 
+ viewerstop 
+ This event is triggered when the viewer is stopped. 
+ api.addEventListener('viewerstop', function() {
+ window.console.log('Viewer is stopped');
+});
+ 
+ click 
+ This event is triggered when the user clicks or taps in the viewer. 
+ A pick parameter can be one of two options: 
+ 
+ 'fast' is sufficient for most models, and will fire the event listener as soon as possible. 
+ 'slow' is useful for animated models with high polygon counts. It ensures more precise picking at the expense of a slower event listener. 
+ 
+ The event listener callback receives a JSON object with the following attributes: 
+ 
+ position2D : the coordinates in the 2D gl viewport with pixel ratio taken into account (an array [z, y] , y origin at bottom) 
+ If the click intersects the model: 
+ position3D : the 3D coordinates in the scene (an array, [x, y, z] ) 
+ normal : normal vector of triangle intersected (an array, [x, y, z] ) 
+ instanceID : picked node ID (a number) 
+ material : picked material (JSON object) 
+ 
+ 
+ 
+ api.addEventListener(
+ 'click',
+ function(info) {
+ window.console.log('click at', info.position2D);
+ if (info.instanceID) {
+ // Hit
+ window.console.log('clicked node', info.instanceID);
+ }
+ },
+ { pick: 'slow' }
+);
+ 
+ nodeMouseEnter 
+ This event is triggered when the mouse hovers over a node. 
+ A pick parameter can be one of two options: 
+ 
+ 'fast' is sufficient for most models, and will fire the event listener as soon as possible. 
+ 'slow' is useful for animated models with high polygon counts. It ensures more precise picking at the expense of a slower event listener. 
+ 
+ The event listener callback receives a node JSON object. 
+ api.addEventListener(
+ 'nodeMouseEnter',
+ function(node) {
+ window.console.log('Entering node', node.instanceID);
+ },
+ { pick: 'fast' }
+);
+ 
+ nodeMouseLeave 
+ This event is triggered when the mouse no longer hovers over a node. 
+ A pick parameter can be one of two options: 
+ 
+ 'fast' is sufficient for most models, and will fire the event listener as soon as possible. 
+ 'slow' is useful for animated models with high polygon counts. It ensures more precise picking at the expense of a slower event listener. 
+ 
+ The event listener callback receives a node JSON object. 
+ api.addEventListener(
+ 'nodeMouseLeave',
+ function(node) {
+ window.console.log('Leaving node', node.instanceID);
+ },
+ { pick: 'fast' }
+);
+ 
+ annotationBlur 
+ This event is triggered when the camera leaves an annotation (for example, when a user selects another annotation). 
+ The event listener callback receives the index of the annotation that has been left (a number).
+Annotation indices are zero-based. 
+ api.addEventListener('annotationBlur', function(index) {
+ window.console.log('Leaving annotation', index);
+});
+ 
+ annotationFocus 
+ This event is triggered when the camera reaches a selected annotation. 
+ The event listener callback receives the index of the annotation that has been reached (a number).
+Annotation indices are zero-based. 
+ api.addEventListener('annotationFocus', function(index) {
+ window.console.log('Reached annotation', index);
+});
+ 
+ annotationMouseEnter 
+ This event is triggered when the mouse hovers over an annotation. 
+ The event listener callback receives the index of the annotation being hovered over (a number).
+Annotation indices are zero-based. 
+ api.addEventListener('annotationMouseEnter', function(index) {
+ window.console.log('Hovering on annotation', index);
+});
+ 
+ annotationMouseLeave 
+ This event is triggered when the mouse stops hovering over annotation. 
+ The event listener callback receives the index of the annotation no longer being hovered over (a number).
+Annotation indices are zero-based. 
+ api.addEventListener('annotationMouseLeave', function(index) {
+ window.console.log('Stopped hovering on annotation', index);
+});
+ 
+ annotationSelect 
+ This event is triggered when an annotation is selected. 
+ The event listener callback receives the index of the selected annotation (a number).
+Annotation indices are zero-based. 
+ api.addEventListener('annotationSelect', function(index) {
+ window.console.log('Selected annotation', index);
+});
+ 
+ camerastart 
+ This event is triggered when the camera begins to move. 
+ The event listener callback receives no argument. 
+ api.addEventListener('camerastart', function() {
+ window.console.log('Camera is moving');
+});
+ 
+ camerastop 
+ This event is triggered when the camera stops moving. 
+ The event listener callback receives no argument. 
+ api.addEventListener('camerastop', function() {
+ window.console.log('Camera stopped');
+});
+ 
+ animationChange 
+ This event is triggered when the animation track changes. 
+ The event listener callback receives no argument. 
+ api.addEventListener('animationChange', function() {
+ window.console.log('Animation changed');
+});
+ 
+ animationEnded 
+ This event is triggered when the animation track ends. 
+ The event listener callback receives no argument. 
+ api.addEventListener('animationEnded', function() {
+ window.console.log('Animation ended');
+});
+ 
+ animationPlay 
+ This event is triggered when the animation track starts playing. 
+ The event listener callback receives no argument. 
+ api.addEventListener('animationPlay', function() {
+ window.console.log('Animation is now playing');
+});
+ 
+ animationStop 
+ This event is triggered when the animation track ends. 
+ The event listener callback receives no argument. 
+ api.addEventListener('animationStop', function() {
+ window.console.log('Animation stopped');
+});
+ 
+ backgroundLoaded 
+ This event is triggered when the background or environment finished loading 
+ The event listener callback receives no argument. 
+ api.addEventListener('backgroundLoaded', function() {
+ window.console.log('Background or environment loaded');
+});
+ 
+ modelLoadProgress 
+ This event is triggered while the model mesh is loading. 
+ The event listener callback receives the load factor. When the factor is 1.0 , the mesh is loaded. 
+ api.addEventListener('modelLoadProgress', function(factor) {
+ window.console.log('modelLoadProgress: ' + factor);
+});
+ 
+ textureLoadProgress 
+ This event is triggered while the model textures are loading. 
+ The event listener callback receives the load factor. When the factor is 1.0 , the textures are loaded. 
+ api.addEventListener('textureLoadProgress', function(factor) {
+ window.console.log('textureLoadProgress: ' + factor);
+});
+ 
+ Animation 
+ 
+ play 
+ pause 
+ seekTo 
+ setCurrentAnimationByUID 
+ getCurrentTime 
+ setCycleMode 
+ setSpeed 
+ getAnimations 
+ Events 
+ animationChange 
+ animationEnded 
+ animationPlay 
+ animationStop 
+ 
+ 
+ 
+ play( [callback] ) 
+ Plays the current animation. 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ ( Interactive Sample ) 
+ api.play(function(err) {
+ if (!err) {
+ window.console.log('Animation playing');
+ }
+});
+ 
+ pause( [callback] ) 
+ Pauses the current animation. 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ ( Interactive Sample ) 
+ api.pause(function(err) {
+ if (!err) {
+ window.console.log('Animation paused');
+ }
+});
+ 
+ seekTo( seconds, [callback] ) 
+ Seeks to a specific time of the current animation. 
+ seconds is the time to seek to (a number, in seconds). 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ ( Interactive Sample ) 
+ api.seekTo(1.0, function(err) {
+ if (!err) {
+ window.console.log('Animation seeking');
+ }
+});
+ 
+ getAnimations( [callback] ) 
+ Returns the list of animations in the scene. 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is an array of animation arrays, [uid, name, duration] . 
+ 
+ api.getAnimations(function(err, animations) {
+ if (!err) {
+ window.console.log(animations);
+ }
+});
+ 
+ setCurrentAnimationByUID( uid, [callback] ) 
+ Sets the current animation. 
+ uid is the UID of the animation, which can be found via getAnimations() . 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.getAnimations(function(err, animations) {
+ if (!err) {
+ var firstAnimationUID = animations[0][0];
+ api.setCurrentAnimationByUID(firstAnimationUID, function(err) {
+ if (!err) {
+ window.console.log('Set animation track to', firstAnimationUID);
+ }
+ });
+ }
+});
+ 
+ getCurrentTime( [callback] ) 
+ Returns the current animation time in seconds. 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is the current animation time (a number, in seconds). 
+ 
+ api.getCurrentTime(function(err, time) {
+ if (!err) {
+ window.console.log('Current animation time:', time);
+ }
+});
+ 
+ setCycleMode( cycleMode, [callback] ) 
+ Sets the animation cycle mode. 
+ cycleMode is one of the following values: 
+ 
+ 'loopOne' : loops the current animation 
+ 'loopAll' : loops all animations 
+ 'one' : plays the current animation and stops 
+ 'all' : plays all animations and stops 
+ 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.setCycleMode('one', function(err) {
+ if (!err) {
+ window.console.log('Set animation cycle mode');
+ }
+});
+ 
+ setSpeed( speed, [callback] ) 
+ Sets the current animation speed. 
+ speed is a speed factor (a number). A negative value will play the animation in reverse. 
+ // Set animation at half speed
+var speed = 0.5;
+api.setSpeed(speed, function(err) {
+ if (!err) {
+ window.console.log('Animation speed set to', speed);
+ }
+});
+ 
+ Inspector 
+ 
+ setShadingStyle 
+ getShadingStyle 
+ setWireframe 
+ getWireframe 
+ 
+ setShadingStyle( shadingStyle, options, [callback] ) 
+ Sets the shading style. 
+ 
+ shadingStyle is one of the following values: 
+ 'pbr' 
+ 'classic' 
+ 'matcap' 
+ 
+ 
+ options is a JSON object with the following attributes: 
+ type : 'lit' or 'shadeless' 
+ 
+ 
+ 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.setShadingStyle('pbr', {type: 'lit'}, function(err) {
+ if (!err) {
+ window.console.log('Shading style set');
+ }
+});
+ 
+ getShadingStyle( [callback] ) 
+ Returns the current shading style. 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is a JSON object with the following attributes: 
+ shadingStyle : 'pbr' , 'classic' , or 'matcap' 
+ type : 'lit' or 'shadeless' 
+ 
+ 
+ 
+ api.getShadingStyle(function(err, shadingStyle) {
+ window.console.log(shadingStyle);
+});
+ 
+ setWireframe( enable, options, [callback] ) 
+ Sets the wireframe state.
+The wireframe cannot be enabled if ui_inspector: 0 is set in the client.init options. 
+ 
+ enable is a boolean ( true to show the wireframe, false to hide the wireframe) 
+ options is a JSON object with the following attribute: 
+ color : a hexidecimal color code string (do not include the # ) 
+ 
+ 
+ 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.setWireframe(true, {color: 'FF0000FF'}, function(err) {
+ if (!err) {
+ window.console.log('Set wireframe');
+ }
+});
+ 
+ getWireframe( [callback] ) 
+ Gets the current wireframe state. 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is a JSON object with the following attributes: 
+ enabled : a boolean 
+ color : a hexidecimal color code string 
+ 
+ 
+ 
+ api.getWireframe(function(err, state) {
+ if (!err) {
+ window.console.log('Wireframe state:', state);
+ }
+});
+ 
+ Lights 
+ Sketchfab supports up to three “analytical” real-time lights (Direction, Point, and Spot).
+For information on environmental lights, see Environment . 
+ 
+ setLight 
+ getLight 
+ setLightFeatureEnabled 
+ isLightFeatureEnabled 
+ 
+ setLight( lightId, options, [callback] ) 
+ Sets the state of a light at a given index.
+Light indices are zero-based. 
+ 
+ lightId is the light index (a number) 
+ options is a JSON object with the following attributes: 
+ matrix : the transform matrix of the light 
+ enabled : a boolean ( true turns the light on, false turns the light off) 
+ shadowEnabled : a boolean ( true makes the light cast shadows, false disables shadows) 
+ color : the color of the light (a normalized RGB array, [R, G, B] ) 
+ intensity : the intesity of the light (a number between 0 and 1) 
+ 
+ 
+ 
+ We recommend the use of glMatrix for matrix operations.
+ The transform matrix is column-major .
+ This means that indices 12 , 13 , and 14 (assuming a starting index of 0 ) in the transform matrix are responsible for translation. 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.setLight(2, {color: [1, 0, 0]}, function(err) {
+ if (!err) {
+ window.console.log('Set light');
+ }
+});
+ 
+ getLight( lightId, [callback] ) 
+ Gets the state of a light at a given index.
+Light indices are zero-based. 
+ 
+ lightId is the light index (a number) 
+ 
+ The callback has two parameters: 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is a JSON object with the following attributes: 
+ matrix : the transform matrix of the light 
+ enabled : a boolean ( true turns the light on, false turns the light off) 
+ shadowEnabled : a boolean ( true makes the light cast shadows, false disables shadows) 
+ color : the color of the light (a normalized RGB array, [R, G, B] ) 
+ intensity : the intesity of the light (a number between 0 and 1) 
+ 
+ 
+ 
+ We recommend the use of glMatrix for matrix operations.
+ The transform matrix is column-major .
+ This means that indices 12 , 13 , and 14 (assuming a starting index of 0 ) in the transform matrix are responsible for translation. 
+ api.getLight(0, function(err, state) {
+ window.console.log(state);
+});
+ 
+ setLightFeatureEnabled( enable, [callback] ) 
+ Enables or disabled the analytical lights feature. 
+ enable is a boolean ( true to enable lights, false to disable lights). 
+ The callback has one parameter: an error or null if the operation succeeded. 
+ api.setLightFeatureEnabled(true, function(err) {
+ if (!err) {
+ window.console.log("Lights ready to be used");
+ }
+});
+ 
+ isLightFeatureEnabled( [callback] ) 
+ Gets the current state of the analytical lights feature. 
+ 
+ The first is an error or null if the operation succeeded. 
+ The second is a boolean ( true if lights are enabled, false if lights are disabled). 
+ 
+ api.isLightFeatureEnabled(function(err, state) {
+ if (!state) {
+ window.console.log("Lights cannot be used");
+ }
+});
+ 
+
+
+
+ 
+
+ 
+ 
+
+ 
+ Initialization and options 
+
+ 
+ 
+
+ 
+ Examples 
+
+ 
+ 
+
+
+
+
+
+ 
+ 
+
+ 
+ 
+
+ 
+
+
+
+ enterprise Enterprise Solutions 3D Configurators 3D eCommerce 3D Viewer 3D Advertising Sketchfab for Teams Customer Stories Pricing ecosystem Exporters Importers Developers & API Augmented Reality Virtual Reality Free 3D Models community Explore Help Center Education Museums Blog Sketchfab Masters about Company Careers Press Kit Features Contact us © 2026 , KitBash SF Operations LLC. All rights reserved. Terms of use Privacy policy Sitemap 
+ 
+
+
+ 
+ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+ 
+ 
+
+
+
+
+ 
+ 
+ 
+ var displayMessage = function (s) {
+ s = s || 'regular';
+ var notSeenSince = Date.now() - parseInt(window.localStorage.getItem('browser_support_last_seen'), 10);
+ if ( s === 'modern' || s === 'regular') return;
+ if ( notSeenSince ' + title + ' ' + message + ' Please update your browser for the best and most secure experience on our site. Ignore Update '}
+ if (s === 'pre_deprecation') {
+ title = 'Impending deprecation';
+ message = 'Your browser is out of date. We will stop supporting this browser shortly.';
+ } else if (s === 'deprecated') {
+ title = 'Unsupported browser';
+ message = 'Your browser is out of date, so some Sketchfab features may not work as intended.';
+ }
+ popup.className = 'popup-container browser-support-popup';
+ popup.innerHTML = popupTemplate(title, message);
+ popup.addEventListener('click', function() { popup.parentElement.removeChild(popup); })
+ document.body.appendChild(popup);
+ }
+ var checkSupport = function (done) {
+ var v = window.localStorage.getItem('browser_support');
+ if ( !v ) {
+ var r = new XMLHttpRequest();
+ r.addEventListener('load', function () {
+ v = JSON.parse(this.responseText).support;
+ try {
+ window.localStorage.setItem('browser_support', v);
+ } catch (e) {}
+ done(v);
+ });
+ r.open('GET', '/i/browser-support');
+ r.send();
+ } else { done(v) }
+ }
+ checkSupport(displayMessage);
+ 
+
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+
+ 
+
+ 
+

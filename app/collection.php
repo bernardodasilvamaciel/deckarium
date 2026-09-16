@@ -3,7 +3,8 @@ declare(strict_types=1);
 require __DIR__ . '/functions.php';
 require __DIR__ . '/partials.php';
 require __DIR__ . '/deck_library.php';
-session_start();
+$authUser=authRequireLogin();
+$userId=(int)$authUser['id'];
 $_SESSION['collection_csrf'] ??= bin2hex(random_bytes(24));
 $csrf=$_SESSION['collection_csrf'];
 $message=$_SESSION['collection_message']??''; unset($_SESSION['collection_message']);
@@ -27,7 +28,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
             $cardId=(string)($_POST['card']??'');
             if(!preg_match('/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i',$cardId)) throw new RuntimeException('Impressão inválida.');
             $foil=($_POST['foil']??'0')==='1';
-            $deleted=deckQuery('DELETE FROM builder_collection WHERE scryfall_id=? AND foil=? RETURNING name,quantity,foil',[$cardId,$foil?'true':'false'])->fetch();
+            $deleted=deckQuery('DELETE FROM builder_collection WHERE user_id=? AND scryfall_id=? AND foil=? RETURNING name,quantity,foil',[$userId,$cardId,$foil?'true':'false'])->fetch();
             if(!$deleted) throw new RuntimeException('Essa impressão já não está na coleção.');
             $message=(int)$deleted['quantity'].' cópia(s) '.(deckIsFoil($deleted['foil'])?'foil ':'').'de '.$deleted['name'].' removida(s) da coleção.';
         }else throw new RuntimeException('Ação inválida.');
@@ -59,6 +60,7 @@ $page = max(1, (int)($_GET['page'] ?? 1));
 [$whereSql,$params]=cardFilterSql($f);
 $finish=in_array(($_GET['finish']??''),['foil','normal'],true)?(string)$_GET['finish']:'';
 if($finish!==''){$whereSql.=($whereSql?' AND ':'WHERE ').'o.foil=?';$params[]=$finish==='foil'?'true':'false';}
+$whereSql.=($whereSql?' AND ':'WHERE ').'o.user_id=?';$params[]=$userId;
 $from = ' FROM builder_collection o JOIN cards c ON c.id=o.scryfall_id ' . $whereSql;
 $count = (int)deckQuery('SELECT COUNT(*)'.$from, $params)->fetchColumn();
 $pages = max(1, (int)ceil($count / 36)); $page = min($page, $pages); $offset = ($page-1)*36;
@@ -77,7 +79,7 @@ $summary = deckQuery("SELECT COALESCE(SUM(o.quantity),0) total,COUNT(*) finishes
     COALESCE(SUM(o.quantity) FILTER(WHERE c.type_line ILIKE '%Enchantment%'),0) enchantments,
     COALESCE(SUM(o.quantity) FILTER(WHERE c.type_line ILIKE '%Planeswalker%'),0) planeswalkers,
     COALESCE(SUM(o.quantity) FILTER(WHERE ({$finishPrice}) IS NULL),0) unpriced
-    FROM builder_collection o LEFT JOIN cards c ON c.id=o.scryfall_id")->fetch();
+    FROM builder_collection o LEFT JOIN cards c ON c.id=o.scryfall_id WHERE o.user_id=?",[$userId])->fetch();
 pageHeader('Minha coleção');
 ?>
 <section class="hero"><div><h1>Minha coleção</h1><p><?= number_format((int)$summary['total'],0,',','.') ?> cartas em <?= number_format((int)$summary['finishes'],0,',','.') ?> versões de impressão e acabamento. Gerencie as cópias físicas usadas nos seus decks.</p></div><a href="/decks.php">Criar ou planejar decks</a></section>

@@ -4,7 +4,8 @@ require __DIR__ . '/db.php';
 require __DIR__ . '/functions.php';
 require __DIR__ . '/partials.php';
 require __DIR__ . '/deck_library.php';
-session_start();
+$authUser=authUser();
+$userId=(int)($authUser['id']??0);
 $_SESSION['builder_csrf'] ??= bin2hex(random_bytes(24));
 $builderCsrf=$_SESSION['builder_csrf']; $cardActionError=''; $cardActionMessage='';
 
@@ -28,10 +29,11 @@ if (!$card) {
 }
 if($_SERVER['REQUEST_METHOD']==='POST'){
     try{
+        if($userId<1){header('Location: /login.php?next='.rawurlencode('/card.php?id='.$card['id']),true,303);exit;}
         if(!hash_equals($builderCsrf,(string)($_POST['csrf']??''))) throw new RuntimeException('Sessão expirada. Recarregue a página e tente novamente.');
         $action=(string)($_POST['action']??'');
         if($action==='add_to_deck'){
-            $deckId=max(0,(int)($_POST['deck']??0)); $deck=deckQuery('SELECT * FROM builder_decks WHERE id=?',[$deckId])->fetch();
+            $deckId=max(0,(int)($_POST['deck']??0)); $deck=deckQuery('SELECT * FROM builder_decks WHERE id=? AND user_id=?',[$deckId,$userId])->fetch();
             if(!$deck) throw new RuntimeException('Escolha um deck válido.');
             $logical=$card['oracle_id']?:$card['id']; $exists=deckQuery('SELECT 1 FROM builder_items i JOIN cards c ON c.id=i.card_id WHERE i.deck_id=? AND COALESCE(c.oracle_id,c.id)=?::uuid',[$deckId,$logical])->fetchColumn();
             $commanderLogical=$deck['commander_id']?deckQuery('SELECT COALESCE(oracle_id,id) FROM cards WHERE id=?',[$deck['commander_id']])->fetchColumn():null;
@@ -42,13 +44,14 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
         if($action==='create_commander_deck'){
             if(!deckQuery('SELECT 1 FROM cards c WHERE c.id=? AND '.deckCommanderSql(),[$card['id']])->fetchColumn()) throw new RuntimeException('Esta carta não pode ser comandante.');
             $name=trim((string)($_POST['name']??'')); if($name==='') $name=$card['name'].' — planejamento';
-            $deckId=(int)deckQuery("INSERT INTO builder_decks(name,commander_id) VALUES (?,?) RETURNING id",[substr($name,0,160),$card['id']])->fetchColumn();
+            $deckId=(int)deckQuery("INSERT INTO builder_decks(user_id,name,commander_id) VALUES (?,?,?) RETURNING id",[$userId,substr($name,0,160),$card['id']])->fetchColumn();
+            deckSchema(); deckRefreshInsightsIfStale($card);
             header('Location: /decks.php?deck='.$deckId.'&view=discover#explore',true,303); exit;
         }
         throw new RuntimeException('Ação inválida.');
     }catch(Throwable $e){$cardActionError=$e instanceof RuntimeException?$e->getMessage():'Não foi possível salvar a ação.';}
 }
-$deckChoices=deckQuery('SELECT id,name,status FROM builder_decks ORDER BY name')->fetchAll();
+$deckChoices=$userId?deckQuery('SELECT id,name,status FROM builder_decks WHERE user_id=? ORDER BY name',[$userId])->fetchAll():[];
 $isCommander=(bool)deckQuery('SELECT 1 FROM cards c WHERE c.id=? AND '.deckCommanderSql(),[$card['id']])->fetchColumn();
 
 $printings = [];
@@ -69,7 +72,7 @@ $back = cardImageUrl($card, 'back', 'normal');
 ?>
 <a class="back-link" href="/edition.php?set=<?= h($card['set_code']) ?>">← <?= h($card['set_name']) ?></a>
 <?php if($cardActionError): ?><p class="notice error" role="alert"><?= h($cardActionError) ?></p><?php endif; ?>
-<section class="card-actions panel" data-card-actions><div><h2>Usar esta carta</h2><p>Adicione esta impressão como candidata a um deck existente.</p></div><?php if($deckChoices): ?><form method="post" class="card-action-form"><input type="hidden" name="csrf" value="<?= h($builderCsrf) ?>"><input type="hidden" name="action" value="add_to_deck"><label>Deck<select name="deck"><?php foreach($deckChoices as $choice): ?><option value="<?= (int)$choice['id'] ?>"><?= h($choice['name']) ?> · <?= $choice['status']==='ready'?'finalizado':'em planejamento' ?></option><?php endforeach; ?></select></label><button class="primary-link">Adicionar às candidatas</button></form><?php else: ?><a class="primary-link" href="/decks.php">Criar um deck primeiro</a><?php endif; ?><?php if($isCommander): ?><form method="post" class="card-action-form commander-action"><input type="hidden" name="csrf" value="<?= h($builderCsrf) ?>"><input type="hidden" name="action" value="create_commander_deck"><label>Nome do novo deck<input name="name" value="<?= h($card['name'].' — planejamento') ?>" maxlength="160"></label><button class="secondary-link">Abrir deck com esta comandante</button></form><?php endif; ?></section>
+<?php if(!$userId): ?><section class="card-actions panel" data-card-actions><div><h2>Usar esta carta</h2><p>Entre na sua conta para adicioná-la a um deck ou abrir um planejamento com ela.</p></div><a class="primary-link" href="/login.php?next=<?= h(rawurlencode('/card.php?id='.$card['id'])) ?>">Entrar</a></section><?php else: ?><section class="card-actions panel" data-card-actions><div><h2>Usar esta carta</h2><p>Adicione esta impressão como candidata a um deck existente.</p></div><?php if($deckChoices): ?><form method="post" class="card-action-form"><input type="hidden" name="csrf" value="<?= h($builderCsrf) ?>"><input type="hidden" name="action" value="add_to_deck"><label>Deck<select name="deck"><?php foreach($deckChoices as $choice): ?><option value="<?= (int)$choice['id'] ?>"><?= h($choice['name']) ?> · <?= $choice['status']==='ready'?'finalizado':'em planejamento' ?></option><?php endforeach; ?></select></label><button class="primary-link">Adicionar às candidatas</button></form><?php else: ?><a class="primary-link" href="/decks.php">Criar um deck primeiro</a><?php endif; ?><?php if($isCommander): ?><form method="post" class="card-action-form commander-action"><input type="hidden" name="csrf" value="<?= h($builderCsrf) ?>"><input type="hidden" name="action" value="create_commander_deck"><label>Nome do novo deck<input name="name" value="<?= h($card['name'].' — planejamento') ?>" maxlength="160"></label><button class="secondary-link">Abrir deck com esta comandante</button></form><?php endif; ?></section><?php endif; ?>
 <div class="detail">
   <div class="detail-images">
     <?php if ($front): ?><img src="<?= h($front) ?>" alt="<?= h($card['name']) ?>"><?php endif; ?>

@@ -1,5 +1,6 @@
+import { login } from './auth-helper.mjs';
 import assert from 'node:assert/strict';
-const base='http://localhost:8080'; let cookie='',csrf='',deck=0;
+const base=process.env.DECKARIUM_BASE||'http://localhost:8080'; let cookie=await login(base),csrf='',deck=0;
 async function get(path){const r=await fetch(base+path,{headers:{cookie}});cookie=r.headers.get('set-cookie')?.split(';')[0]||cookie;const h=await r.text();assert.equal(r.status,200);assert(!/Fatal error|Parse error|Warning:/.test(h));csrf=h.match(/name="csrf" value="([^"]+)"/)?.[1]||csrf;return h;}
 async function post(fields){const r=await fetch(base+'/decks.php',{method:'POST',headers:{cookie},body:new URLSearchParams({csrf,deck:String(deck),...fields}),redirect:'manual'});assert.equal(r.status,303,await r.text());return r.headers.get('location');}
 const cards=h=>[...h.matchAll(/<article class="builder-result"[^>]*>([\s\S]*?)<\/article>/g)].map(m=>m[1]);
@@ -20,6 +21,6 @@ try {
   const card=external.match(/name="card" value="([^"]+)"/)[1];
   const redirect=await post({action:'add',card,sort:'synergy',availability:'all'});assert(redirect.includes('sort=synergy'));assert(redirect.includes('#result-'));
   h=await get(redirect);assert(/Já (?:está em|adicionada ·) candidatas/.test(cards(h).find(c=>c.includes(card))));
-  h=await get(`/decks.php?deck=${deck}&view=selection`);assert(h.includes('data-card-preview'));assert(h.includes(card));
+  h=await get(`/decks.php?deck=${deck}&view=selection`);assert(h.includes('data-selection-open'));assert(h.includes(card));
   console.log('PASS: escolha imediata de comandante, filtros unificados, sinergia como ordenação, paginação e candidatas.');
 } finally {if(deck)await post({action:'delete_deck'});}

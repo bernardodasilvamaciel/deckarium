@@ -1,20 +1,20 @@
 <?php
 declare(strict_types=1);
-$advancedOpen=$match==='any' || $rarity!=='' || $setFilter!=='' || $cmcMin!==null || $cmcMax!==null || $commanderColors || $colorsOnly;
+$advancedOpen=$match==='any' || $rarity!=='' || $setFilter!=='' || $cmcMin!==null || $cmcMax!==null || $commanderColors;
 $clearUrl='?'.http_build_query(['deck'=>$id]+($choosingCommander?['choose'=>1]:[])).'#explore';
 $sortOptions=$choosingCommander
     ? ['popular'=>'Mais populares','relevance'=>'Disponibilidade e relevância','name'=>'Nome','newest'=>'Mais recentes','owned'=>'Mais cópias na coleção']
     : ['synergy'=>'Maior sinergia','relevance'=>'Disponibilidade e relevância','name'=>'Nome','newest'=>'Mais recentes','owned'=>'Mais cópias na coleção'];
 ?>
+<?php if(!$choosingCommander && $commander) require __DIR__.'/deck_guide_view.php'; ?>
+<?php if(!$choosingCommander && $commander): ?><p class="strategy-color-note">As opções são priorizadas pela identidade de cores <strong><?= h(implode(' · ',$identity?:['C'])) ?></strong> e pelos sinais do texto Oracle da comandante.</p><?php endif; ?>
 <section id="explore" class="section-block discovery-section <?= $choosingCommander?'commander-discovery':'' ?>">
 <div class="discovery-heading">
     <div><h2><?= $choosingCommander?'Escolha sua comandante':'Explorar possibilidades' ?></h2><p><?= $choosingCommander?'As cartas elegíveis já estão prontas para escolha. Refine a lista somente se precisar.':'Pesquise todo o catálogo e combine os filtros. A sinergia é apenas uma forma de ordenar os mesmos resultados.' ?></p></div>
-    <?php if(!$choosingCommander): ?><form method="post" class="discovery-sync"><?php $tokenFields('sync_edhrec'); ?><button class="secondary-link">Atualizar dados do EDHREC</button></form><?php endif; ?>
 </div>
 <?php if(!$choosingCommander): ?><details class="info-note synergy-definition"><summary>Como a sinergia é calculada?</summary><p><strong>Sinergia</strong> = (% da carta nos decks deste comandante) − (% da carta em todos os decks da mesma identidade de cor). Ela altera a ordem, sem desativar os outros filtros.</p><p>Quando a fonte retorna <em>lift</em>, ele é mostrado separadamente porque usa outra escala. Associação não é uma nota de força.</p></details><?php endif; ?>
-
 <form class="builder-search builder-form unified-card-filters" method="get" action="/decks.php#explore">
-    <input type="hidden" name="deck" value="<?= $id ?>"><?php if($choosingCommander): ?><input type="hidden" name="choose" value="1"><?php endif; ?>
+    <input type="hidden" name="deck" value="<?= $id ?>"><?php if(!$choosingCommander): ?><input type="hidden" name="colors_set" value="1"><?php endif; ?><?php if($choosingCommander): ?><input type="hidden" name="choose" value="1"><?php endif; ?>
     <div class="filter-primary-row">
         <label>Nome<input type="search" name="q" value="<?= h($q) ?>" placeholder="Nome da carta"></label>
         <label>Texto Oracle<input name="oracle" value="<?= h($oracle) ?>" placeholder="draw a card; sacrifice"></label>

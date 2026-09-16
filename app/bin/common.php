@@ -34,7 +34,7 @@ function httpGet(string $url): string
     return $body;
 }
 
-function downloadFile(string $url, string $target): void
+function downloadFile(string $url, string $target, ?callable $onProgress = null): void
 {
     $c = cfg();
     $fp = fopen($target . '.part', 'wb');
@@ -48,6 +48,11 @@ function downloadFile(string $url, string $target): void
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_CONNECTTIMEOUT => 20,
         CURLOPT_TIMEOUT => 0,
+        CURLOPT_NOPROGRESS => $onProgress === null,
+        CURLOPT_XFERINFOFUNCTION => static function ($ch, int $downloadTotal, int $downloaded) use ($onProgress): int {
+            if ($onProgress) $onProgress($downloaded, $downloadTotal);
+            return 0;
+        },
         CURLOPT_HTTPHEADER => [
             'User-Agent: ' . $c['scryfall']['user_agent'],
             'Accept: ' . $c['scryfall']['accept'],

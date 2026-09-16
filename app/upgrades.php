@@ -3,7 +3,8 @@ declare(strict_types=1);
 require __DIR__ . '/functions.php';
 require __DIR__ . '/partials.php';
 require __DIR__ . '/deck_library.php';
-session_start();
+$authUser=authRequireLogin();
+$userId=(int)$authUser['id'];
 $_SESSION['upgrade_csrf'] ??= bin2hex(random_bytes(24));
 $csrf=$_SESSION['upgrade_csrf']; $message=$_SESSION['upgrade_message']??''; unset($_SESSION['upgrade_message']);
 $error=''; deckSchema();
@@ -12,7 +13,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     try{
         if(!hash_equals($csrf,(string)($_POST['csrf']??''))) throw new RuntimeException('Sessão expirada. Recarregue a página e tente novamente.');
         $action=(string)($_POST['action']??'');
-        $deck=deckQuery("SELECT * FROM builder_decks WHERE id=? AND status='ready'",[$deckId])->fetch();
+        $deck=deckQuery("SELECT * FROM builder_decks WHERE id=? AND user_id=? AND status='ready'",[$deckId,$userId])->fetch();
         if(!$deck) throw new RuntimeException('Escolha um deck finalizado.');
         if($action==='create'){
             $remove=(string)($_POST['remove_card']??''); $add=(string)($_POST['add_card']??'');
@@ -35,8 +36,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     }catch(Throwable $e){$error=$e instanceof RuntimeException&&!($e instanceof PDOException)?$e->getMessage():'Não foi possível salvar o plano. Tente novamente.';}
 }
 session_write_close();
-$decks=deckQuery("SELECT d.*,c.name commander,(SELECT COUNT(*) FROM deck_upgrades u WHERE u.deck_id=d.id AND u.status='planned') pending FROM builder_decks d LEFT JOIN cards c ON c.id=d.commander_id WHERE d.status='ready' ORDER BY d.name")->fetchAll();
-$deck=$deckId?deckQuery("SELECT d.*,c.name commander,c.color_identity FROM builder_decks d LEFT JOIN cards c ON c.id=d.commander_id WHERE d.id=? AND d.status='ready'",[$deckId])->fetch():null;
+$decks=deckQuery("SELECT d.*,c.name commander,(SELECT COUNT(*) FROM deck_upgrades u WHERE u.deck_id=d.id AND u.status='planned') pending FROM builder_decks d LEFT JOIN cards c ON c.id=d.commander_id WHERE d.status='ready' AND d.user_id=? ORDER BY d.name",[$userId])->fetchAll();
+$deck=$deckId?deckQuery("SELECT d.*,c.name commander,c.color_identity FROM builder_decks d LEFT JOIN cards c ON c.id=d.commander_id WHERE d.id=? AND d.user_id=? AND d.status='ready'",[$deckId,$userId])->fetch():null;
 if(!$deck)$deckId=0;
 $outId=(string)($_GET['out']??''); $q=substr(trim((string)($_GET['q']??'')),0,160);
 $deckCards=$deck?deckQuery("SELECT c.*,i.quantity,COALESCE(bc.quantity,0) owned_printing FROM builder_items i JOIN cards c ON c.id=i.card_id LEFT JOIN ".deckCollectionPrintingSql()." bc ON bc.scryfall_id=c.id WHERE i.deck_id=? AND i.stage='deck' ORDER BY c.name",[$deckId])->fetchAll():[];

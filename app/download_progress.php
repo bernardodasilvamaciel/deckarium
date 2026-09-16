@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+require __DIR__ . '/auth.php';
+authRequireAdmin();
 
 $config = require __DIR__ . '/config.php';
 $storage = rtrim($config['storage_dir'], '/');

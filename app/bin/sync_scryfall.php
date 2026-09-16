@@ -10,9 +10,60 @@ if (!in_array($bulkType, $allowed, true)) {
     exit(1);
 }
 
-$storage = $config['storage_dir'];
+$storage = rtrim($config['storage_dir'], '/');
 $bulkDir = $storage . '/bulk';
 @mkdir($bulkDir, 0775, true);
+
+// Uma sincronização por vez, seja iniciada pelo terminal ou pela página de status.
+$syncLock = @fopen($storage . '/sync-catalog.lock', 'c');
+if (!$syncLock || !@flock($syncLock, LOCK_EX | LOCK_NB)) {
+    fwrite(STDERR, "Já existe uma sincronização do catálogo em andamento." . PHP_EOL);
+    exit(2);
+}
+
+$syncProgressPath = $storage . '/sync-progress.json';
+$syncProgress = [
+    'state' => 'checking',
+    'bulk_type' => $bulkType,
+    'remote_updated_at' => null,
+    'bytes_downloaded' => 0,
+    'bytes_total' => 0,
+    'imported' => 0,
+    'import_percent' => null,
+    'last_error' => '',
+    'started_at' => time(),
+    'updated_at' => time(),
+    'finished_at' => null,
+];
+function syncProgress(array $patch, bool $throttle = false): void
+{
+    global $syncProgress, $syncProgressPath;
+    static $lastWrite = 0.0;
+    $syncProgress = array_merge($syncProgress, $patch, ['updated_at' => time()]);
+    $now = microtime(true);
+    if ($throttle && $now - $lastWrite < 0.8) return;
+    $lastWrite = $now;
+    $temp = $syncProgressPath . '.' . getmypid() . '.tmp';
+    if (@file_put_contents($temp, json_encode($syncProgress, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) !== false) {
+        @chmod($temp, 0666);
+        @rename($temp, $syncProgressPath);
+    }
+}
+syncProgress([]);
+set_exception_handler(static function (Throwable $e): void {
+    syncProgress(['state' => 'error', 'last_error' => $e->getMessage(), 'finished_at' => time()]);
+    fwrite(STDERR, PHP_EOL . 'Erro: ' . $e->getMessage() . PHP_EOL);
+    exit(1);
+});
+foreach (['SIGTERM' => 15, 'SIGINT' => 2] as $signalName => $signalNumber) {
+    if (function_exists('pcntl_async_signals') && function_exists('pcntl_signal')) {
+        pcntl_async_signals(true);
+        pcntl_signal(defined($signalName) ? constant($signalName) : $signalNumber, static function (): void {
+            syncProgress(['state' => 'interrupted', 'last_error' => 'Sincronização interrompida antes do fim. Cartas já importadas foram mantidas.', 'finished_at' => time()]);
+            exit(1);
+        });
+    }
+}
 
 echo "Consultando manifesto de Bulk Data do Scryfall...\n";
 $manifest = json_decode(httpGet('https://api.scryfall.com/bulk-data'), true, flags: JSON_THROW_ON_ERROR);
@@ -37,7 +88,11 @@ $ext = $isGzipJsonl ? '.jsonl.gz' : '.json';
 $target = $bulkDir . '/' . $bulkType . $ext;
 
 echo "Baixando {$bulkType}...\n";
-downloadFile($url, $target);
+syncProgress(['state' => 'downloading', 'remote_updated_at' => $entry['updated_at'] ?? null, 'bytes_total' => (int)($entry['size'] ?? 0)]);
+downloadFile($url, $target, static function (int $downloaded, int $total): void {
+    syncProgress(['bytes_downloaded' => $downloaded, 'bytes_total' => $total > 0 ? $total : $GLOBALS['syncProgress']['bytes_total']], true);
+});
+syncProgress(['bytes_downloaded' => (int)filesize($target), 'bytes_total' => (int)filesize($target)]);
 echo "Arquivo salvo em {$target}\n";
 
 $pdo = db();
@@ -113,37 +168,59 @@ function importCard(PDOStatement $upsert, array $card): void
 }
 
 $count = 0;
+syncProgress(['state' => 'importing', 'imported' => 0, 'import_percent' => 0]);
+$importedOne = static function (array $card, float|int|null $percent) use ($upsert, $pdo, &$count): void {
+    importCard($upsert, $card);
+    $count++;
+    if ($count % 1000 === 0) {
+        $pdo->commit();
+        echo "Importadas {$count} cartas...\r";
+        syncProgress(['imported' => $count, 'import_percent' => $percent === null ? null : (int)floor($percent)]);
+        $pdo->beginTransaction();
+    }
+};
 $pdo->beginTransaction();
 try {
     if ($isGzipJsonl) {
-        $fh = gzopen($target, 'rb');
-        if (!$fh) throw new RuntimeException('Falha ao abrir JSONL gzipado.');
-        while (!gzeof($fh)) {
-            $line = trim((string)gzgets($fh));
-            if ($line === '') continue;
-            $card = json_decode($line, true, flags: JSON_THROW_ON_ERROR);
-            importCard($upsert, $card);
-            $count++;
-            if ($count % 1000 === 0) {
-                $pdo->commit();
-                echo "Importadas {$count} cartas...\r";
-                $pdo->beginTransaction();
+        // Descompacta em blocos para saber quanto do arquivo já foi lido e mostrar o percentual real.
+        $fh = fopen($target, 'rb');
+        $inflate = inflate_init(ZLIB_ENCODING_GZIP);
+        if (!$fh || !$inflate) throw new RuntimeException('Falha ao abrir JSONL gzipado.');
+        $compressedSize = max(1, (int)filesize($target));
+        $buffer = '';
+        $consumeLines = static function (string &$buffer, bool $final, float $percent) use ($importedOne): void {
+            $offset = 0;
+            while (($newline = strpos($buffer, "\n", $offset)) !== false) {
+                $line = trim(substr($buffer, $offset, $newline - $offset));
+                $offset = $newline + 1;
+                if ($line !== '') $importedOne(json_decode($line, true, flags: JSON_THROW_ON_ERROR), $percent);
             }
+            $buffer = substr($buffer, $offset);
+            if ($final && trim($buffer) !== '') {
+                $importedOne(json_decode(trim($buffer), true, flags: JSON_THROW_ON_ERROR), 100);
+                $buffer = '';
+            }
+        };
+        while (!feof($fh)) {
+            $chunk = fread($fh, 1 << 20);
+            if ($chunk === false) throw new RuntimeException('Falha ao ler o arquivo baixado.');
+            if ($chunk === '') continue;
+            $inflated = inflate_add($inflate, $chunk, ZLIB_SYNC_FLUSH);
+            if ($inflated === false) throw new RuntimeException('O arquivo baixado está corrompido. Tente sincronizar novamente.');
+            $buffer .= $inflated;
+            $consumeLines($buffer, false, min(99.9, ftell($fh) / $compressedSize * 100));
         }
-        gzclose($fh);
+        $buffer .= (string)inflate_add($inflate, '', ZLIB_FINISH);
+        $consumeLines($buffer, true, 100);
+        fclose($fh);
     } else {
         // Compatibilidade com o formato JSON-array antigo.
         $raw = file_get_contents($target);
         if ($raw === false) throw new RuntimeException('Falha ao ler bulk JSON.');
         $cards = json_decode($raw, true, flags: JSON_THROW_ON_ERROR);
+        $totalCards = max(1, count($cards));
         foreach ($cards as $card) {
-            importCard($upsert, $card);
-            $count++;
-            if ($count % 1000 === 0) {
-                $pdo->commit();
-                echo "Importadas {$count} cartas...\r";
-                $pdo->beginTransaction();
-            }
+            $importedOne($card, ($count + 1) / $totalCards * 100);
         }
     }
     $pdo->commit();
@@ -168,3 +245,5 @@ $status->execute([
     ':source_url' => $url,
     ':card_count' => $count,
 ]);
+syncProgress(['state' => 'completed', 'imported' => $count, 'import_percent' => 100, 'finished_at' => time()]);
+flock($syncLock, LOCK_UN);

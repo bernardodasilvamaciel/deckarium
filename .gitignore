@@ -3,3 +3,7 @@ storage/bulk/*
 storage/images/*
 !storage/bulk/.gitkeep
 !storage/images/.gitkeep
+storage/sync-progress.json
+storage/sync-catalog.lock
+storage/sync.log
+app/auth_bootstrap.php

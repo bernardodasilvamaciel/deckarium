@@ -1,0 +1,661 @@
+ 
+ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+ 
+ 
+
+ 
+ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ /**/ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+ /**/ 
+
+
+
+ 
+
+ Viewer API - Initialization - Sketchfab 
+
+ 
+ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+
+ 
+ 
+ 
+
+ 
+
+ 
+ 
+ 
+
+ 
+ 
+ 
+ 
+
+ 
+ 
+
+
+ 
+
+ 
+ 
+ 
+
+ 
+ 
+ 
+
+ 
+ 
+ 
+ 
+
+ 
+ 
+ 
+
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+
+ 
+
+
+
+ 
+
+ 
+
+ 
+ 
+ 
+
+ 
+ 
+ 
+
+
+ 
+
+ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+ 
+
+
+ 
+
+ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+
+
+ 
+ 
+ 
+ 
+ 
+ {
+ "@context": "http://schema.org",
+ "@type": "WebSite",
+ "url": "https://sketchfab.com",
+ "name": "Sketchfab",
+ "mainEntityOfPage": {
+ "@type": "3Dmodel"
+ },
+ "creator": {"@context": "http://schema.org", "@type": "Organization", "location": {"@type": "Place", "name": "Paris / New York"}, "name": "Sketchfab", "sameAs": ["https://www.facebook.com/Sketchfab", "https://twitter.com/Sketchfab", "https://www.linkedin.com/company/sketchfab", "https://www.youtube.com/channel/UCX0J-m95VqCQIIiQ23fP5tg", "https://vimeo.com/sketchfab", "https://www.instagram.com/sketchfab", "https://pinterest.com/sketchfab"], "url": "https://sketchfab.com"},
+ "description": "<p>Learn how to initialize a Sketchfab 3D model embed with URL options using the Viewer API.</p>",
+ "potentialAction": {
+ "@type": "SearchAction",
+ "target": "https://sketchfab.com/search?q={search_term_string}",
+ "query-input": "required name=search_term_string"
+ }
+ }
+ 
+ 
+ {"@context": "http://schema.org", "@type": "Organization", "location": {"@type": "Place", "name": "Paris / New York"}, "name": "Sketchfab", "sameAs": ["https://www.facebook.com/Sketchfab", "https://twitter.com/Sketchfab", "https://www.linkedin.com/company/sketchfab", "https://www.youtube.com/channel/UCX0J-m95VqCQIIiQ23fP5tg", "https://vimeo.com/sketchfab", "https://www.instagram.com/sketchfab", "https://pinterest.com/sketchfab"], "url": "https://sketchfab.com"}
+ 
+
+ 
+ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+
+ 
+ 
+ 
+
+ 
+ 
+ 
+ 
+
+
+
+ 
+ 
+ 
+ 
+ 
+
+
+
+ 
+ 
+ 
+
+ 
+ Explore Highlights Popular Staff picks Downloadable Collections Human Created AI Generated Blog Community members Sketchfab Masters Browse by category Animals & Pets Architecture Art & Abstract Cars & Vehicles Characters & Creatures Cultural Heritage & History Electronics & Gadgets Fashion & Style Food & Drink Furniture & Home Music Nature & Plants News & Politics People Places & Travel Science & Technology Sports & Fitness Weapons & Military For business Sketchfab for Teams Augmented Reality 3D Viewer 3D eCommerce 3D Configurators Find a Partner Pricing Customer Stories / Cancel login Sign Up Upload 
+ 
+
+ 
+
+ 
+
+ 
+ 
+
+ 
+
+ 
+
+ 
+ 
+ Sketchfab for Developers 
+ 
+ 
+
+
+ 
+ 
+
+ 
+ 
+
+ 
+
+ 
+
+ 
+ 
+ 
+ 
+ 
+ Navigation 
+ 
+ 
+ 
+ 
+ Overview
+ 
+ 
+ 
+ Sketchfab Login (OAuth2)
+ 
+ 
+ 
+ Data API
+ 
+ 
+ 
+ Download API
+ 
+ 
+ 
+ Viewer API
+ 
+ 
+ 
+ oEmbed
+ 
+ 
+ 
+ Developer Guidelines
+ 
+ 
+ 
+ Terms of Use
+ 
+ 
+ 
+ 
+ 
+
+ 
+ 
+ 
+ 
+ Overview
+ 
+ 
+ 
+ 
+ 
+ 
+ Sketchfab Login (OAuth2)
+ 
+ 
+ 
+ 
+ 
+ 
+ Data API
+ 
+ 
+ 
+ 
+ 
+ 
+ Download API
+ 
+ 
+ 
+ 
+ 
+ 
+ Viewer API
+ 
+ 
+ 
+ 
+ 
+ 
+ oEmbed
+ 
+ 
+ 
+ 
+ 
+ 
+ Developer Guidelines
+ 
+ 
+ 
+ 
+ 
+ 
+ Terms of Use
+ 
+ 
+ 
+ 
+ 
+ 
+
+
+ 
+ 
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+
+
+ 
+
+ 
+
+ 
+ 
+
+ 
+ Getting started 
+
+ 
+ 
+
+ 
+ API 
+
+ 
+ 
+
+
+
+ 
+
+ Initialization and options 
+
+ Sketchfab( version, iframe ) 
+ 
+ This constructor returns a new Sketchfab viewer instance bound to the given iframe element.
+ 
+ var iframe = document.getElementById( 'api-frame' );
+var version = '1.12.1';
+var client = new Sketchfab( version, iframe );
+ 
+
+ init( url, options ) 
+ 
+ This function initializes a viewer for the model with the given uid .
+ The uid is the identifier part in a model URL. 
+ You can also pass an options object to this function. See below for available options.
+ 
+ var uid = '7w7pAfrCfjovwykkEeRFLGw5SXS';
+
+client.init( uid, {
+ success: function onSuccess( api ){
+ api.start();
+ api.addEventListener( 'viewerready', function() {
+ //API is ready to use
+ console.log( 'Viewer is ready' );
+ } );
+ },
+ error: function onError() {
+ console.log( 'Viewer error' );
+ }
+} );
+ 
+
+ Initialization options 
+
+ 
+ You can pass callbacks and customization options when you initialize a viewer.
+ 
+
+ var uid = '7w7pAfrCfjovwykkEeRFLGw5SXS';
+
+client.init( uid, {
+ success: function onSuccess( api ){ },
+ error: function onError() { },
+ camera: 0,
+ blending: 1,
+ autospin: 4,
+ annotation_cycle: 4,
+ transparent: 0
+} );
+ 
+
+ 
+ 
+ success: function( api ) 
+ 
+ Required.
+ This callback will be invoked when the viewer has been successfully initialized.
+ It will be passed an api object so that you can interact
+ with the viewer.
+ 
+ 
+
+ 
+ error: function() 
+ 
+ This callback will be invoked when the viewer can not be initialized.
+ 
+ 
+ 
+
+ 
+ 
+ 
+
+
+ 
+
+ 
+ 
+
+ 
+ Getting started 
+
+ 
+ 
+
+ 
+ API 
+
+ 
+ 
+
+
+
+
+
+ 
+ 
+
+ 
+ 
+
+ 
+
+
+
+ enterprise Enterprise Solutions 3D Configurators 3D eCommerce 3D Viewer 3D Advertising Sketchfab for Teams Customer Stories Pricing ecosystem Exporters Importers Developers & API Augmented Reality Virtual Reality Free 3D Models community Explore Help Center Education Museums Blog Sketchfab Masters about Company Careers Press Kit Features Contact us © 2026 , KitBash SF Operations LLC. All rights reserved. Terms of use Privacy policy Sitemap 
+ 
+
+
+ 
+ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+ 
+ 
+
+
+
+
+ 
+ 
+ 
+ var displayMessage = function (s) {
+ s = s || 'regular';
+ var notSeenSince = Date.now() - parseInt(window.localStorage.getItem('browser_support_last_seen'), 10);
+ if ( s === 'modern' || s === 'regular') return;
+ if ( notSeenSince ' + title + ' ' + message + ' Please update your browser for the best and most secure experience on our site. Ignore Update '}
+ if (s === 'pre_deprecation') {
+ title = 'Impending deprecation';
+ message = 'Your browser is out of date. We will stop supporting this browser shortly.';
+ } else if (s === 'deprecated') {
+ title = 'Unsupported browser';
+ message = 'Your browser is out of date, so some Sketchfab features may not work as intended.';
+ }
+ popup.className = 'popup-container browser-support-popup';
+ popup.innerHTML = popupTemplate(title, message);
+ popup.addEventListener('click', function() { popup.parentElement.removeChild(popup); })
+ document.body.appendChild(popup);
+ }
+ var checkSupport = function (done) {
+ var v = window.localStorage.getItem('browser_support');
+ if ( !v ) {
+ var r = new XMLHttpRequest();
+ r.addEventListener('load', function () {
+ v = JSON.parse(this.responseText).support;
+ try {
+ window.localStorage.setItem('browser_support', v);
+ } catch (e) {}
+ done(v);
+ });
+ r.open('GET', '/i/browser-support');
+ r.send();
+ } else { done(v) }
+ }
+ checkSupport(displayMessage);
+ 
+
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+
+ 
+
+ 
+

@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+require __DIR__ . '/auth.php';
+authRequireAdmin();
 
 function downloadJson(array $payload, int $status = 200): never
 {

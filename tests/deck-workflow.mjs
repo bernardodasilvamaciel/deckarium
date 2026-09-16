@@ -1,6 +1,7 @@
+import { login } from './auth-helper.mjs';
 import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
-const base='http://localhost:8080'; let cookie='',csrf='',deck=0;
+const base=process.env.DECKARIUM_BASE||'http://localhost:8080'; let cookie=await login(base),csrf='',deck=0;
 async function get(path){const r=await fetch(base+path,{headers:{cookie}});cookie=r.headers.get('set-cookie')?.split(';')[0]||cookie;const html=await r.text();assert.equal(r.status,200);assert(!/Fatal error|Parse error|Warning:/.test(html),html.slice(-2000));csrf=html.match(/name="csrf" value="([^"]+)"/)?.[1]||csrf;return html;}
 async function post(fields,form){const body=form||new URLSearchParams({...fields,csrf,deck:String(deck)});const r=await fetch(base+'/decks.php',{method:'POST',headers:{cookie},body,redirect:'manual'});assert.equal(r.status,303,await r.text());return r.headers.get('location');}
 await get('/decks.php');

@@ -5,7 +5,8 @@ require __DIR__ . '/partials.php';
 require __DIR__ . '/deck_library.php';
 require __DIR__ . '/catalog_cache.php';
 require __DIR__ . '/card_filters.php';
-session_start();
+$authUser = authRequireLogin();
+$userId = (int)$authUser['id'];
 $_SESSION['builder_csrf'] ??= bin2hex(random_bytes(24));
 $csrf = $_SESSION['builder_csrf'];
 deckSchema();
@@ -16,6 +17,7 @@ $view = ($_GET['view'] ?? $_POST['view'] ?? '') === 'selection' ? 'selection' : 
 $selectionStage = (string)($_GET['stage'] ?? $_POST['selection_stage'] ?? 'candidate');
 if (!in_array($selectionStage,['candidate','review','deck'],true)) $selectionStage='candidate';
 $stages = ['candidate'=>'Candidatas','review'=>'Em avaliação','deck'=>'No deck'];
+$wantsJson = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'fetch';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         if (!hash_equals($csrf,(string)($_POST['csrf'] ?? ''))) throw new RuntimeException('Sessão expirada. Recarregue a página e tente novamente.');
@@ -23,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'create') {
             $name = trim((string)($_POST['name'] ?? ''));
             if ($name === '' || strlen($name)>160) throw new RuntimeException('Informe um nome de até 160 caracteres.');
-            $id = (int)deckQuery('INSERT INTO builder_decks(name) VALUES (?) RETURNING id',[$name])->fetchColumn();
+            $id = (int)deckQuery('INSERT INTO builder_decks(user_id,name) VALUES (?,?) RETURNING id',[$userId,$name])->fetchColumn();
             $message = 'Deck criado. Escolha o comandante ou comece explorando cartas.';
         } elseif ($action === 'import_deck') {
             $result=deckImportList((string)($_POST['name']??''),(string)($_POST['decklist']??''));
@@ -34,17 +36,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $result = deckImport($_FILES['collection']['tmp_name']);
             $message = number_format($result['quantity'],0,',','.') . ' cartas importadas. As quantidades da coleção foram substituídas pelo CSV.';
         } else {
-            $deck = deckQuery('SELECT * FROM builder_decks WHERE id=?',[$id])->fetch();
+            $deck = deckQuery('SELECT * FROM builder_decks WHERE id=? AND user_id=?',[$id,$userId])->fetch();
             if (!$deck) throw new RuntimeException('Deck não encontrado.');
             if ($action === 'delete_deck') {
-                deckQuery('DELETE FROM builder_decks WHERE id=?',[$id]); $id=0; $message='Deck excluído. Sua coleção foi preservada.';
+                deckQuery('DELETE FROM builder_decks WHERE id=? AND user_id=?',[$id,$userId]); $id=0; $message='Deck excluído. Sua coleção foi preservada.';
             } elseif ($action === 'strategy') {
-                deckQuery('UPDATE builder_decks SET strategy=?,terms=? WHERE id=?',[substr(trim((string)$_POST['strategy']),0,5000),substr(trim((string)$_POST['terms']),0,1000),$id]);
+                deckQuery('UPDATE builder_decks SET strategy=?,terms=? WHERE id=? AND user_id=?',[substr(trim((string)$_POST['strategy']),0,5000),substr(trim((string)$_POST['terms']),0,1000),$id,$userId]);
                 $message = 'Estratégia e termos salvos.';
+            } elseif (in_array($action, ['scoring_config','scoring_reset','score_preview','apply_suggestions'], true)) {
+                $scoreCommander = $deck['commander_id'] ? deckQuery('SELECT * FROM cards WHERE id=?',[$deck['commander_id']])->fetch() : null;
+                if (!$scoreCommander) throw new RuntimeException('Escolha uma comandante para calcular o Índice de Encaixe.');
+                if ($action === 'scoring_reset') {
+                    deckQuery('UPDATE builder_decks SET scoring_config=NULL WHERE id=? AND user_id=?',[$id,$userId]);
+                    $message = 'Fórmula restaurada para o padrão Equilibrado.';
+                } elseif ($action === 'scoring_config') {
+                    $scoreConfig = deckScoreConfigFromPost($_POST);
+                    deckQuery('UPDATE builder_decks SET scoring_config=?::jsonb WHERE id=? AND user_id=?',[json_encode($scoreConfig),$id,$userId]);
+                    $message = 'Fórmula do Índice de Encaixe salva para este deck.';
+                } else {
+                    $scoreConfig = $action === 'score_preview' ? deckScoreConfigFromPost($_POST) : deckScoreConfig($deck['scoring_config'] ?? null);
+                    $scoreItems = deckScoreLoadItems($id, $userId);
+                    $scores = deckScoreSelection($deck, $scoreCommander, $scoreItems, $scoreConfig);
+                    $scoreStage = in_array($selectionStage, ['candidate','review'], true) ? $selectionStage : 'candidate';
+                    $suggested = deckScoreSuggestions($scores, $scoreStage, $scoreConfig);
+                    if ($action === 'score_preview') {
+                        header('Content-Type: application/json; charset=utf-8');
+                        echo json_encode(['ok'=>true,'summary'=>$scores['summary'],'suggestions'=>count($suggested),
+                            'cards'=>array_map(fn($card)=>['score'=>$card['score'],'band'=>$card['band'],'stage'=>$card['stage'],'label'=>deckScoreBandLabel($card['band'])], $scores['cards'])], JSON_UNESCAPED_UNICODE);
+                        exit;
+                    }
+                    $chosen = array_values(array_intersect(array_map('strval', (array)($_POST['cards'] ?? [])), array_map('strval', array_keys($suggested))));
+                    if (!$chosen) throw new RuntimeException('Nenhuma sugestão selecionada para aplicar.');
+                    $destination = $scoreStage === 'candidate' ? 'review' : 'deck';
+                    db()->beginTransaction();
+                    try {
+                        foreach ($chosen as $chosenId) {
+                            if ($destination === 'deck') {
+                                $currentCount=(int)deckQuery("SELECT COALESCE(SUM(quantity),0) FROM builder_items WHERE deck_id=? AND stage='deck'",[$id])->fetchColumn()+1;
+                                if ($currentCount >= 100) break;
+                            }
+                            deckQuery('UPDATE builder_items SET stage=? WHERE deck_id=? AND card_id=? AND stage=?',[$destination,$id,$chosenId,$scoreStage]);
+                        }
+                        db()->commit();
+                    } catch (Throwable $e) { db()->rollBack(); throw $e; }
+                    $message = count($chosen).(count($chosen)===1?' carta avançou':' cartas avançaram').($destination==='deck'?' para o deck':' para avaliação').' pelo Índice de Encaixe.';
+                }
             } elseif ($action === 'sync_edhrec') {
                 if(!$deck['commander_id']) throw new RuntimeException('Escolha um comandante antes de buscar recomendações.');
                 $commanderCard=deckQuery('SELECT * FROM cards WHERE id=?',[$deck['commander_id']])->fetch();
-                $saved=deckSyncEdhrec($commanderCard); $message=$saved.' recomendações do EDHREC atualizadas.';
+                $saved=deckSyncEdhrec($commanderCard); deckWarmGuide($commanderCard); $message=$saved.' recomendações do EDHREC atualizadas.';
             } elseif ($action === 'prepare_upgrade') {
                 if (!$deck['commander_id']) throw new RuntimeException('Escolha um comandante antes de preparar um upgrade.');
                 $currentCount=(int)deckQuery("SELECT COALESCE(SUM(quantity),0) FROM builder_items WHERE deck_id=? AND stage='deck'",[$id])->fetchColumn()+1;
@@ -83,9 +123,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$card) throw new RuntimeException('Carta não encontrada no acervo.');
                 if ($action === 'commander') {
                     if (!deckQuery('SELECT 1 FROM cards c WHERE c.id=? AND '.deckCommanderSql(),[$cardId])->fetchColumn()) throw new RuntimeException('Escolha uma carta elegível como comandante.');
-                    deckQuery('UPDATE builder_decks SET commander_id=? WHERE id=?',[$cardId,$id]);
+                    deckQuery('UPDATE builder_decks SET commander_id=? WHERE id=? AND user_id=?',[$cardId,$id,$userId]);
                     deckQuery('DELETE FROM builder_items i USING cards c WHERE i.card_id=c.id AND i.deck_id=? AND COALESCE(c.oracle_id,c.id)=?::uuid',[$id,$card['oracle_id'] ?: $cardId]);
                     $message = 'Comandante definido. Confira a identidade de cor das cartas já selecionadas.';
+                    if ($insightsMessage = deckRefreshInsightsIfStale($card)) $message .= ' '.$insightsMessage;
                 } elseif ($action === 'move') {
                     $stage=(string)($_POST['stage']??'');
                     if(!isset($stages[$stage])) throw new RuntimeException('Etapa inválida.');
@@ -127,6 +168,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             } else throw new RuntimeException('Ação inválida.');
         }
+        if ($wantsJson && $action === 'add') {
+            // Adição rápida pela busca/guia: responde sem recarregar a página inteira.
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['ok'=>true,'message'=>$message,'card'=>$cardId,'stage'=>'candidate','label'=>deckStageLabel('candidate'),
+                'candidates'=>(int)deckQuery("SELECT COUNT(*) FROM builder_items WHERE deck_id=? AND stage='candidate'",[$id])->fetchColumn()], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
         $_SESSION['builder_message'] = $message;
         $return = '/decks.php' . ($id ? '?deck='.$id : '');
         if ($id && in_array($action,['add','item','remove'],true)) {
@@ -139,32 +187,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if($id && $action==='sync_edhrec') $return='/decks.php?deck='.$id.'&sort=synergy#explore';
         header('Location: '.$return, true,303); exit;
-    } catch (Throwable $e) { $error = $e instanceof RuntimeException && !($e instanceof PDOException) ? $e->getMessage() : 'Não foi possível salvar. Nenhuma seleção foi descartada; tente novamente.'; }
+    } catch (Throwable $e) {
+        $error = $e instanceof RuntimeException && !($e instanceof PDOException) ? $e->getMessage() : 'Não foi possível salvar. Nenhuma seleção foi descartada; tente novamente.';
+        if ($wantsJson) { http_response_code(422); header('Content-Type: application/json; charset=utf-8'); echo json_encode(['ok'=>false,'message'=>$error], JSON_UNESCAPED_UNICODE); exit; }
+    }
 }
 session_write_close();
-$decks = deckQuery("SELECT d.*,c.name commander,c.id commander_card_id,(SELECT COALESCE(SUM(quantity),0) FROM builder_items WHERE deck_id=d.id AND stage='deck') + CASE WHEN d.commander_id IS NULL THEN 0 ELSE 1 END card_count FROM builder_decks d LEFT JOIN cards c ON c.id=d.commander_id ORDER BY d.id DESC")->fetchAll();
+$decks = deckQuery("SELECT d.*,c.name commander,c.id commander_card_id,(SELECT COALESCE(SUM(quantity),0) FROM builder_items WHERE deck_id=d.id AND stage='deck') + CASE WHEN d.commander_id IS NULL THEN 0 ELSE 1 END card_count FROM builder_decks d LEFT JOIN cards c ON c.id=d.commander_id WHERE d.user_id=? ORDER BY d.id DESC",[$userId])->fetchAll();
 $deckValues=[];
 $deckValueRows=deckQuery("SELECT chosen.deck_id,chosen.quantity,c.prices,c.raw,COALESCE(bc.normal_quantity,0) normal_quantity,COALESCE(bc.foil_quantity,0) foil_quantity
     FROM (
-        SELECT i.deck_id,i.card_id,SUM(i.quantity)::int quantity FROM builder_items i WHERE i.stage='deck' GROUP BY i.deck_id,i.card_id
-        UNION ALL SELECT d.id,d.commander_id,1 FROM builder_decks d WHERE d.commander_id IS NOT NULL
+        SELECT i.deck_id,i.card_id,SUM(i.quantity)::int quantity FROM builder_items i JOIN builder_decks ud ON ud.id=i.deck_id AND ud.user_id=? WHERE i.stage='deck' GROUP BY i.deck_id,i.card_id
+        UNION ALL SELECT d.id,d.commander_id,1 FROM builder_decks d WHERE d.commander_id IS NOT NULL AND d.user_id=?
     ) chosen JOIN cards c ON c.id=chosen.card_id
-    LEFT JOIN ".deckCollectionPrintingSql()." bc ON bc.scryfall_id=c.id")->fetchAll();
+    LEFT JOIN ".deckCollectionPrintingSql()." bc ON bc.scryfall_id=c.id",[$userId,$userId])->fetchAll();
 foreach($deckValueRows as $pricedCard){
     $deckId=(int)$pricedCard['deck_id'];$quantity=(int)$pricedCard['quantity'];$price=deckSelectedPriceBrl($pricedCard);
     $deckValues[$deckId]??=['total'=>0.0,'unpriced'=>0];
     if($price===null)$deckValues[$deckId]['unpriced']+=$quantity;else $deckValues[$deckId]['total']+=$price*$quantity;
 }
-$deck = $id ? deckQuery('SELECT * FROM builder_decks WHERE id=?',[$id])->fetch() : null;
+$deck = $id ? deckQuery('SELECT * FROM builder_decks WHERE id=? AND user_id=?',[$id,$userId])->fetch() : null;
+if ($id && !$deck) { http_response_code(404); $id = 0; $error = $error ?: 'Deck não encontrado na sua conta.'; }
 $commander = $deck && $deck['commander_id'] ? deckQuery("SELECT c.*,COALESCE(bc.quantity,0) owned_printing,COALESCE(bc.normal_quantity,0) normal_quantity,COALESCE(bc.foil_quantity,0) foil_quantity FROM cards chosen JOIN cards c ON COALESCE(c.oracle_id,c.id)=COALESCE(chosen.oracle_id,chosen.id) LEFT JOIN ".deckCollectionPrintingSql()." bc ON bc.scryfall_id=c.id WHERE chosen.id=? ORDER BY (COALESCE(bc.quantity,0)>0) DESC,(c.lang='en') DESC,(c.local_image IS NOT NULL) DESC,c.released_at DESC NULLS LAST,c.id LIMIT 1",[$deck['commander_id']])->fetch() : null;
 $identity = $commander ? (json_decode($commander['color_identity'],true) ?: []) : [];
 $identityMana = implode('', array_map(fn($color)=>'{'.$color.'}', $identity));
-$collection = deckQuery('SELECT COALESCE(SUM(quantity),0) total,COUNT(*) printings,COUNT(*) FILTER(WHERE c.id IS NULL) unmatched FROM builder_collection o LEFT JOIN cards c ON c.id=o.scryfall_id')->fetch();
+$collection = deckQuery('SELECT COALESCE(SUM(quantity),0) total,COUNT(*) printings,COUNT(*) FILTER(WHERE c.id IS NULL) unmatched FROM builder_collection o LEFT JOIN cards c ON c.id=o.scryfall_id WHERE o.user_id=?',[$userId])->fetch();
 $q = substr(trim((string)($_GET['q']??'')),0,200);
 $choosingCommander = (bool)$deck && (!$commander || isset($_GET['choose']));
+$guideInsights=null;$guidePlans=[];$guideCombos=[];$guideMechanics=['own'=>[],'new'=>[]];$guideNewCards=[];$guideSimilar=[];
+if($commander && !$choosingCommander && $view==='discover'){
+    $guideInsights=deckCommanderInsights($commander);
+    $guidePlans=deckGuidePlans($commander,$guideInsights);
+    $guideCombos=deckGuideCombos($commander,$guideInsights);
+    try { $guideMechanics=deckGuideMechanics($commander); } catch (PDOException) { $guideMechanics=['own'=>[],'new'=>[]]; }
+    $guideNewCards=deckGuideNewCards($commander,$guideInsights);
+    $guideSimilar=deckGuideSimilar($guideInsights);
+}
 $oracle = substr(trim((string)($_GET['oracle']??($choosingCommander?'':($deck['terms']??'')))),0,1000);
 $type = substr(trim((string)($_GET['type']??'')),0,120);
-$match = ($_GET['match']??'all')==='any' ? 'any' : 'all';
+$match = ($_GET['match']??(str_contains((string)($_GET['oracle']??''),';')?'any':'all'))==='any' ? 'any' : 'all';
 $defaultSort=$choosingCommander?'popular':($commander?'synergy':'relevance');
 $sort = (string)($_GET['sort'] ?? ((($_GET['synergy']??'')==='1')?'synergy':$defaultSort));
 if (!in_array($sort,['relevance','name','newest','owned','synergy','popular'],true)) $sort=$defaultSort;
@@ -180,7 +241,8 @@ if($availability==='' && ($_GET['exclude_owned']??'')==='1') $availability='miss
 if(!in_array($availability,['all','owned','missing'],true)) $availability=$choosingCommander?'owned':'all';
 $ownedOnly = $availability==='owned';
 $excludeOwned = $availability==='missing';
-$colorsOnly = ($_GET['colors']??'')==='1';
+// Com comandante escolhida, a busca começa limitada à identidade dela; o formulário envia colors_set para respeitar a escolha do usuário.
+$colorsOnly = array_key_exists('colors',$_GET) ? ($_GET['colors']==='1') : (isset($_GET['colors_set']) ? false : (bool)$commander);
 $commanderColors=array_values(array_intersect((array)($_GET['commander_colors']??[]),['W','U','B','R','G','C']));
 $catalogVisible = $deck && $view==='discover';
 $setOptions = $catalogVisible ? catalogCached('deck-filter-sets-v1',fn()=>deckQuery("SELECT set_code,MAX(set_name) set_name FROM cards WHERE set_code IS NOT NULL AND set_code<>'' GROUP BY set_code ORDER BY MAX(set_name),set_code")->fetchAll()) : [];
@@ -198,12 +260,12 @@ $tokenFields = function(string $action, ?string $card = null) use($csrf,$id,$vie
 };
 $items = $deck ? deckQuery(deckOwnedSql()."SELECT c.*,i.stage,i.quantity,i.role,i.notes,COALESCE(o.owned,0) owned,COALESCE(bc.quantity,0) owned_printing,COALESCE(bc.normal_quantity,0) normal_quantity,COALESCE(bc.foil_quantity,0) foil_quantity,
     COALESCE((SELECT SUM(x.quantity)::int FROM (
-        SELECT SUM(oi.quantity)::int quantity FROM builder_items oi JOIN cards oc ON oc.id=oi.card_id WHERE oi.stage='deck' AND oi.deck_id<>i.deck_id AND COALESCE(oc.oracle_id,oc.id)=COALESCE(c.oracle_id,c.id)
-        UNION ALL SELECT COUNT(*)::int quantity FROM builder_decks od JOIN cards oc ON oc.id=od.commander_id WHERE od.id<>i.deck_id AND COALESCE(oc.oracle_id,oc.id)=COALESCE(c.oracle_id,c.id)
+        SELECT SUM(oi.quantity)::int quantity FROM builder_items oi JOIN builder_decks oid ON oid.id=oi.deck_id AND oid.user_id={$userId} JOIN cards oc ON oc.id=oi.card_id WHERE oi.stage='deck' AND oi.deck_id<>i.deck_id AND COALESCE(oc.oracle_id,oc.id)=COALESCE(c.oracle_id,c.id)
+        UNION ALL SELECT COUNT(*)::int quantity FROM builder_decks od JOIN cards oc ON oc.id=od.commander_id WHERE od.user_id={$userId} AND od.id<>i.deck_id AND COALESCE(oc.oracle_id,oc.id)=COALESCE(c.oracle_id,c.id)
     ) x),0) other_used,
     COALESCE((SELECT COUNT(DISTINCT x.deck_id)::int FROM (
-        SELECT oi.deck_id FROM builder_items oi JOIN cards oc ON oc.id=oi.card_id WHERE oi.stage='deck' AND oi.deck_id<>i.deck_id AND COALESCE(oc.oracle_id,oc.id)=COALESCE(c.oracle_id,c.id)
-        UNION SELECT od.id FROM builder_decks od JOIN cards oc ON oc.id=od.commander_id WHERE od.id<>i.deck_id AND COALESCE(oc.oracle_id,oc.id)=COALESCE(c.oracle_id,c.id)
+        SELECT oi.deck_id FROM builder_items oi JOIN builder_decks oid ON oid.id=oi.deck_id AND oid.user_id={$userId} JOIN cards oc ON oc.id=oi.card_id WHERE oi.stage='deck' AND oi.deck_id<>i.deck_id AND COALESCE(oc.oracle_id,oc.id)=COALESCE(c.oracle_id,c.id)
+        UNION SELECT od.id FROM builder_decks od JOIN cards oc ON oc.id=od.commander_id WHERE od.user_id={$userId} AND od.id<>i.deck_id AND COALESCE(oc.oracle_id,oc.id)=COALESCE(c.oracle_id,c.id)
     ) x),0) other_decks
     FROM builder_items i JOIN cards c ON c.id=i.card_id LEFT JOIN owned o ON o.logical_id=COALESCE(c.oracle_id,c.id) LEFT JOIN ".deckCollectionPrintingSql()." bc ON bc.scryfall_id=c.id WHERE i.deck_id=? ORDER BY c.name",[$id])->fetchAll() : [];
 $leader=$commander ? ($commander['oracle_id']?:$commander['id']) : null;
@@ -232,14 +294,14 @@ foreach ($items as $item) {
 }
 if ($commander) {
     $commanderOwned=(int)deckQuery(deckOwnedSql().'SELECT COALESCE((SELECT owned FROM owned WHERE logical_id=?::uuid),0)',[$commander['oracle_id']?:$commander['id']])->fetchColumn();
-    $commanderOtherUsed=(int)deckQuery("SELECT COALESCE(SUM(quantity),0) FROM (SELECT COALESCE(SUM(i.quantity),0)::int quantity FROM builder_items i JOIN cards c ON c.id=i.card_id WHERE i.stage='deck' AND i.deck_id<>? AND COALESCE(c.oracle_id,c.id)=?::uuid UNION ALL SELECT COUNT(*)::int FROM builder_decks d JOIN cards c ON c.id=d.commander_id WHERE d.id<>? AND COALESCE(c.oracle_id,c.id)=?::uuid) reservations",[$id,$commander['oracle_id']?:$commander['id'],$id,$commander['oracle_id']?:$commander['id']])->fetchColumn();
+    $commanderOtherUsed=(int)deckQuery("SELECT COALESCE(SUM(quantity),0) FROM (SELECT COALESCE(SUM(i.quantity),0)::int quantity FROM builder_items i JOIN builder_decks ud ON ud.id=i.deck_id AND ud.user_id=? JOIN cards c ON c.id=i.card_id WHERE i.stage='deck' AND i.deck_id<>? AND COALESCE(c.oracle_id,c.id)=?::uuid UNION ALL SELECT COUNT(*)::int FROM builder_decks d JOIN cards c ON c.id=d.commander_id WHERE d.user_id=? AND d.id<>? AND COALESCE(c.oracle_id,c.id)=?::uuid) reservations",[$userId,$id,$commander['oracle_id']?:$commander['id'],$userId,$id,$commander['oracle_id']?:$commander['id']])->fetchColumn();
     $commanderAvailable=max(0,$commanderOwned-$commanderOtherUsed);if (!$commanderAvailable) $shopping[]=['name'=>$commander['name'],'quantity'=>1];
     $commanderPrice=deckSelectedPriceBrl($commander);if($commanderPrice===null)$deckUnpriced++;else $deckPriceTotal+=$commanderPrice;
     foreach ($pipCounts as $color=>$_) $pipCounts[$color]+=substr_count((string)$commander['mana_cost'],$color);
     $cmc=min(10,max(0,(int)floor((float)($commander['cmc']??0)))); $curveCounts[$cmc]=($curveCounts[$cmc]??0)+1; $curveCards[$cmc][]=$commander;
 }
 $isComplete = $finalCount === 100;
-if ($deck && (($deck['status']==='ready') !== $isComplete)) { deckQuery('UPDATE builder_decks SET status=? WHERE id=?',[$isComplete?'ready':'planning',$id]); $deck['status']=$isComplete?'ready':'planning'; }
+if ($deck && (($deck['status']==='ready') !== $isComplete)) { deckQuery('UPDATE builder_decks SET status=? WHERE id=? AND user_id=?',[$isComplete?'ready':'planning',$id,$userId]); $deck['status']=$isComplete?'ready':'planning'; }
 $manaTotal=array_sum($pipCounts); $maxCurve=$curveCounts?max($curveCounts):0; ksort($curveCounts);
 $recommendedLandTotal=$isComplete?36:null; $landRecommendation=[]; $colorNames=['W'=>'Brancos','U'=>'Azuis','B'=>'Pretos','R'=>'Vermelhos','G'=>'Verdes'];
 if($recommendedLandTotal!==null){

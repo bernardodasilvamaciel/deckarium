@@ -2,14 +2,14 @@
     "state": "completed",
     "mode": "all",
     "size": "normal",
-    "downloaded": 66784,
+    "downloaded": 25,
     "failed": 0,
-    "existing": 55076,
-    "selected": 117778,
-    "processed": 121860,
-    "total": 121860,
-    "bytes": 7634805551,
+    "existing": 121860,
+    "selected": 117802,
+    "processed": 121885,
+    "total": 121885,
+    "bytes": 2369545,
     "resumed": true,
-    "started_at": 1789431003,
-    "updated_at": 1789440409
+    "started_at": 1789504260,
+    "updated_at": 1789504370
 }
