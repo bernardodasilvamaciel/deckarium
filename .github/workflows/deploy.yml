@@ -1,0 +1,114 @@
+name: Deploy
+
+on:
+  push:
+    tags: ['v*']
+  # Execução manual: escolha a tag em "Use workflow from" (branches são ignoradas).
+  workflow_dispatch:
+
+# Nunca roda dois deploys ao mesmo tempo; o mais novo espera o anterior terminar.
+concurrency:
+  group: deploy-producao
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: self-hosted
+    timeout-minutes: 30
+    env:
+      # Pasta no servidor com .env (e opcionalmente auth_bootstrap.php).
+      # Pode ser trocada criando a variável DEPLOY_DIR em Settings > Secrets and variables > Actions > Variables.
+      DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '/opt/apps/deckarium' }}
+      COMPOSE_PROJECT_NAME: deckarium
+      APP_URL: http://127.0.0.1:8000/
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Versão
+        run: echo "Deploy da versão ${GITHUB_REF_NAME} (${GITHUB_SHA::7})"
+
+      - name: Verificar pré-requisitos
+        shell: bash
+        run: |
+          docker version --format 'Docker {{.Server.Version}}'
+          docker compose version
+          if [ ! -f "$DEPLOY_DIR/.env" ]; then
+            echo "::error::Arquivo $DEPLOY_DIR/.env não encontrado no servidor. Veja docs/deploy.md."
+            exit 1
+          fi
+
+      - name: Preparar arquivos locais do servidor
+        shell: bash
+        run: |
+          # auth_bootstrap.php não vai para o Git; só é usado quando o banco não tem usuários.
+          if [ -f "$DEPLOY_DIR/auth_bootstrap.php" ]; then
+            cp "$DEPLOY_DIR/auth_bootstrap.php" app/auth_bootstrap.php
+            echo "auth_bootstrap.php incluído na imagem."
+          else
+            echo "::notice::Sem $DEPLOY_DIR/auth_bootstrap.php (ok se o banco de produção já tem usuários)."
+          fi
+
+      - name: Build das imagens
+        shell: bash
+        run: docker compose --env-file "$DEPLOY_DIR/.env" -f docker-compose.prod.yml build --pull
+
+      - name: Preparar pastas de dados em /opt
+        shell: bash
+        run: |
+          DATA_DIR=$(grep -E '^DECKARIUM_DATA_DIR=' "$DEPLOY_DIR/.env" | tail -n1 | cut -d= -f2- | tr -d '"'"'" || true)
+          DATA_DIR=${DATA_DIR:-/opt/apps/deckarium/data}
+          echo "Dados em $DATA_DIR"
+          # Roda como root num container descartável: cria as pastas e dá ao www-data (uid 33)
+          # só as pastas de topo, sem varrer os ~10 GB de imagens a cada deploy.
+          docker run --rm --user root -v "$DATA_DIR:/data" --entrypoint sh deckarium-app:latest -c '
+            mkdir -p /data/storage/bulk /data/storage/images
+            chown www-data:www-data /data/storage /data/storage/bulk /data/storage/images'
+
+      - name: Lint PHP na imagem nova
+        shell: bash
+        run: |
+          docker run --rm --entrypoint sh deckarium-app:latest -c '
+            find /var/www/html -name "*.php" -print0 \
+              | xargs -0 -n1 -P4 php -l > /tmp/lint.log 2>&1 \
+              || { grep -v "^No syntax errors" /tmp/lint.log; exit 1; }'
+
+      - name: Aplicar schema no PostgreSQL do host
+        shell: bash
+        run: docker compose --env-file "$DEPLOY_DIR/.env" -f docker-compose.prod.yml run --rm migrate
+
+      - name: Subir containers
+        shell: bash
+        run: |
+          docker compose --env-file "$DEPLOY_DIR/.env" -f docker-compose.prod.yml \
+            up -d --remove-orphans --wait --wait-timeout 180
+
+      - name: Health check em localhost:8000
+        shell: bash
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$APP_URL" || true)
+            if [[ "$code" =~ ^(2|3) ]]; then
+              echo "App respondendo em $APP_URL (HTTP $code)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::App não respondeu em $APP_URL"
+          exit 1
+
+      - name: Logs em caso de falha
+        if: failure()
+        shell: bash
+        run: |
+          docker compose --env-file "$DEPLOY_DIR/.env" -f docker-compose.prod.yml ps || true
+          docker compose --env-file "$DEPLOY_DIR/.env" -f docker-compose.prod.yml logs --tail=200 || true
+
+      - name: Limpar imagens antigas
+        if: always()
+        shell: bash
+        run: |
+          docker image prune -f
+          docker builder prune -f --filter until=168h

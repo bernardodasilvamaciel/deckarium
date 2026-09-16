@@ -1,0 +1,54 @@
+# Stack de produção usada pelo deploy (GitHub Actions self-hosted).
+# Independente do docker-compose.yml de desenvolvimento (porta 8080).
+#
+# O PostgreSQL roda direto no host do servidor. Por isso o app usa a rede do host:
+# o banco fica acessível em 127.0.0.1 sem mudar listen_addresses/pg_hba do PostgreSQL,
+# e o Apache do container escuta em 127.0.0.1:8000 (APP_LISTEN) para o cloudflared.
+name: deckarium
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile.prod
+    image: deckarium-app:latest
+    container_name: deckarium-app
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      APACHE_LISTEN: ${APP_LISTEN:-127.0.0.1:8000}
+      DB_HOST: ${DB_HOST:-127.0.0.1}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${POSTGRES_DB:?defina POSTGRES_DB no .env de deploy}
+      DB_USER: ${POSTGRES_USER:?defina POSTGRES_USER no .env de deploy}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env de deploy}
+      SCRYFALL_BULK_TYPE: ${SCRYFALL_BULK_TYPE:-default_cards}
+      SCRYFALL_USER_AGENT: ${SCRYFALL_USER_AGENT:-Deckarium/1.0}
+      SCRYFALL_ACCEPT: application/json;q=0.9,*/*;q=0.8
+      STORAGE_DIR: /var/www/storage
+    volumes:
+      # Bulk do Scryfall e imagens das cartas (~10 GB), em /opt.
+      - ${DECKARIUM_DATA_DIR:-/opt/apps/deckarium/data}/storage:/var/www/storage
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://${APP_LISTEN:-127.0.0.1:8000}/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  # Aplica database/init.sql e performance.sql no PostgreSQL do host (scripts idempotentes).
+  # Não sobe com "up"; o deploy roda: docker compose run --rm migrate
+  migrate:
+    image: postgres:16-alpine
+    profiles: ["tools"]
+    network_mode: host
+    environment:
+      PGHOST: ${DB_HOST:-127.0.0.1}
+      PGPORT: ${DB_PORT:-5432}
+      PGDATABASE: ${POSTGRES_DB:?defina POSTGRES_DB no .env de deploy}
+      PGUSER: ${POSTGRES_USER:?defina POSTGRES_USER no .env de deploy}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env de deploy}
+      PGAPPNAME: deckarium-migrate
+    volumes:
+      - ./database:/sql:ro
+    command: ["sh", "-c", "psql -X -q -v ON_ERROR_STOP=1 -f /sql/init.sql && psql -X -q -v ON_ERROR_STOP=1 -f /sql/performance.sql && echo 'Schema aplicado.'"]

@@ -1,0 +1,11 @@
+.git
+.github
+.agents
+.impeccable
+.env
+.env.*
+storage
+tests
+docs
+node_modules
+*.md
