@@ -31,9 +31,9 @@ function pageHeader(string $title): void
     if ($section==='decks') echo '<link rel="stylesheet" href="/assets/decks.css?v=' . filemtime(__DIR__ . '/assets/decks.css') . '">';
     echo '<script src="/assets/app.js?v=' . h((string)filemtime(__DIR__ . '/assets/app.js')) . '" defer></script></head><body>';
     echo '<a class="skip-link" href="#main">Pular para o conteúdo</a>';
-    echo '<header class="sidebar"><a class="brand" href="/"><img class="brand-mark" src="/assets/deckarium-mark-v2.png" alt="" width="34" height="34"><span>Deckarium</span></a>';
+    echo '<header class="sidebar"><a class="brand" href="/commanders.php"><img class="brand-mark" src="/assets/deckarium-mark-v2.png" alt="" width="34" height="34"><span>Deckarium</span></a>';
     echo '<nav aria-label="Navegação principal">';
-    $links = [['home','/','Início'],['cards','/?catalog=1#catalogo','Catálogo'],['commanders','/commanders.php','Comandantes'],['sets','/editions.php','Edições'],['collection','/collection.php','Minha coleção'],['decks','/decks.php','Meus decks']];
+    $links = [['commanders','/commanders.php','Comandantes'],['cards','/?catalog=1#catalogo','Catálogo'],['sets','/editions.php','Edições'],['collection','/collection.php','Minha coleção'],['decks','/decks.php','Meus decks']];
     if (($user['role'] ?? '') === 'admin') {
         $links[] = ['status','/status.php','Status'];
         $links[] = ['users','/users.php','Usuários'];

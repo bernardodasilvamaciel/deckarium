@@ -118,7 +118,7 @@ $bulkMoves = ['candidate' => [['deck', 'Aprovar para o deck →', 'primary-link'
             <?php if($fit): ?>
             <details class="fit-breakdown relationship-breakdown" <?= $selectionStage==='candidate'?'open':'' ?>>
                 <?php $relationshipCount=array_sum(array_map('count',$fit['relationships'])); ?>
-                <summary><span><strong><?= $entry['stage']==='candidate' ? 'Relações com candidatas' : 'Relações da carta' ?></strong><small><?= $relationshipCount ? $relationshipCount.' conexão(ões) direta(s)' : 'Nenhuma relação direta nesta etapa' ?></small></span></summary>
+                <summary><span><span class="relationship-title"><strong><?= $entry['stage']==='candidate' ? 'Relações com candidatas' : 'Relações da carta' ?></strong><span class="relationship-question" tabindex="0" role="note" aria-label="Como as relações funcionam" data-help="Uma relação aparece quando esta carta produz algo que outra procura, ou recebe algo que a outra produz — como fichas, Tesouros, marcadores, sacrifícios ou efeitos de entrada. Isso descreve interação, não força.">?</span></span><small><?= $relationshipCount ? $relationshipCount.' conexão(ões) direta(s)' : 'Nenhuma relação direta nesta etapa' ?></small></span></summary>
                 <?php if($fit['blocked']): ?><p class="fit-alert is-blocked"><?= h($fit['blocked']) ?></p><?php endif; ?>
                 <?php foreach($fit['notes'] as $fitNote): ?><p class="fit-alert"><?= h($fitNote) ?></p><?php endforeach; ?>
                 <?php if($entry['stage']==='candidate'): ?>

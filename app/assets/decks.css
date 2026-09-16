@@ -379,6 +379,7 @@ body:has(.selection-dialog[open]){overflow:hidden}
 .fit-breakdown>summary::-webkit-details-marker{display:none}
 .fit-breakdown>summary .fit-badge{box-shadow:none;border-color:transparent}
 .fit-breakdown>summary span{display:grid}
+.fit-breakdown>summary .relationship-title{display:flex;align-items:center;gap:7px}
 .fit-breakdown>summary strong{font-size:.9rem}
 .fit-breakdown>summary small{font-size:.74rem;color:var(--accent);font-weight:600}
 .fit-breakdown[open]>summary small::after{content:" ▴"}
@@ -402,6 +403,9 @@ body:has(.selection-dialog[open]){overflow:hidden}
 .relationship-list li:last-child{border-bottom:0}
 .relationship-list strong{font-size:.82rem;color:var(--accent)}
 .relationship-list span{color:var(--muted)}
+.relationship-question{position:relative;display:inline-grid!important;place-items:center;width:20px;height:20px;border:1px solid var(--accent);border-radius:50%;color:var(--accent);font:800 .72rem/1 'Segoe UI',sans-serif;cursor:help}
+.relationship-question::after{content:attr(data-help);position:absolute;z-index:8;left:calc(100% + 9px);top:-8px;width:min(360px,65vw);padding:10px 11px;border:1px solid var(--line);border-radius:9px;background:var(--surface);box-shadow:0 10px 28px #17241c2e;color:var(--ink);font:400 .76rem/1.45 'Segoe UI',sans-serif;opacity:0;visibility:hidden;pointer-events:none;transform:translateY(4px);transition:opacity .14s ease-out,transform .14s ease-out,visibility .14s}
+.relationship-question:hover::after,.relationship-question:focus::after{opacity:1;visibility:visible;transform:none}
 .relationship-group{margin:0;padding:10px 0;border-top:1px dashed var(--line)}
 .relationship-group h4{margin:0 12px 4px;font:700 .84rem 'Segoe UI',sans-serif;color:var(--ink)}
 .relationship-help{position:relative;display:inline-block;margin:8px 0 0}

@@ -7,6 +7,10 @@ require __DIR__ . '/catalog_cache.php';
 require __DIR__ . '/card_filters.php';
 $f=cardFilters();
 $isHome = !array_filter($f) && !isset($_GET['catalog']) && !isset($_GET['view']) && !isset($_GET['page']);
+if ($isHome) {
+    header('Location: /commanders.php', true, 302);
+    exit;
+}
 $GLOBALS['isHome'] = $isHome;
 
 $q = trim((string)($_GET['q'] ?? ''));
