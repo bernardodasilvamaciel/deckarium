@@ -49,6 +49,8 @@ function deckSchema(): void {
         CREATE INDEX IF NOT EXISTS deck_synergy_commander_score_idx ON deck_synergy(commander_id,score DESC);
         CREATE INDEX IF NOT EXISTS cards_commander_picker_idx ON cards(edhrec_rank_cached,lower(name),id) WHERE commander_eligible;
         CREATE INDEX IF NOT EXISTS cards_color_identity_gin_idx ON cards USING gin(color_identity);");
+    // "Em avaliação" foi unificada com as candidatas.
+    db()->exec("UPDATE builder_items SET stage='candidate' WHERE stage='review'");
 }
 
 function deckCheapestPriceSql(string $alias='c'): string {
@@ -301,7 +303,7 @@ function deckHighlight(?string $text, array $terms): string {
     return $html;
 }
 function deckStageLabel(?string $stage): string {
-    return ['candidate'=>'Candidatas','review'=>'Em avaliação','deck'=>'No deck'][$stage ?? ''] ?? 'Já selecionada';
+    return ['candidate'=>'Candidatas','review'=>'Candidatas','deck'=>'No deck'][$stage ?? ''] ?? 'Já selecionada';
 }
 function deckCommanderSql(): string {
     return 'c.commander_eligible';

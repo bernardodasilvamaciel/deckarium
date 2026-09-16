@@ -147,6 +147,7 @@ function deckWarmGuide(array $commander): void
     try {
         deckGuidePlans($commander, deckCommanderInsights($commander));
         deckGuideMechanics($commander);
+        if (function_exists('deckNeedRoleIndex')) deckNeedRoleIndex();
     } catch (Throwable) {
         // O cache é só uma otimização.
     }

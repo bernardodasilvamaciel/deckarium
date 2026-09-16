@@ -169,12 +169,28 @@ const DECK_SCORE_STOPWORDS = ['this', 'that', 'with', 'your', 'from', 'into', 'o
     'less', 'than', 'equal', 'number', 'only', 'time', 'times', 'library', 'hand', 'graveyard', 'permanent', 'permanents', 'counter', 'counters', 'cost', 'costs'];
 
 /** Extrai o perfil de uma carta: texto normalizado, características, funções, tipos, cores. */
+/**
+ * Padrões (texto Oracle em minúsculas, sem lembretes) que identificam cada função.
+ * Escritos de forma compatível com PCRE e com regex do PostgreSQL (\b vira \y no SQL).
+ */
+function deckScoreRolePatterns(): array
+{
+    return [
+        'ramp' => ["\\badd (\\{[wubrgc]\\}|one mana|two mana|three mana|mana of any|x mana|\\{c\\}\\{c\\})|search your library for[^.]*\\blands? cards?\\b[^.]*(onto the battlefield|into your hand)|create[^.]*\\btreasure tokens?|play (an|two) additional lands?"],
+        'draw' => ["\\bdraws? (two|three|four|x|that many|cards equal|a card for each)\\b|\\bdraw a card\\b[^.]*(whenever|at the beginning)|whenever[^.]*,? (you )?draw a card|\\binvestigate\\b|connives?\\b", "(^|\\n)draw (a|two) cards?"],
+        'removal' => ["(destroy|exile) (up to one )?target (creature|artifact|enchantment|planeswalker|nonland permanent|permanent|creature or planeswalker|artifact or enchantment)|deals? (\\d+|x) damage to (target|any target|up to one target)|return target (creature|nonland permanent|permanent|artifact|enchantment)[^.]*to (its|their) owner's hand|target (player|opponent) sacrifices|counter target (spell|noncreature spell|creature spell)|fights? (target|up to one target)"],
+        'wipe' => ["(destroy|exile) (all|each) (other )?(creatures|nonland permanents|artifacts|enchantments|permanents)|(all|each) creatures? gets? -\\d|deals? (\\d+|x) damage to each creature|return all (creatures|nonland permanents)|each player sacrifices (all|each)|\\boverload\\b"],
+        'protection' => ["(creatures|permanents|commander)[^.]*you control (gain|have|get)[^.]*(hexproof|indestructible|protection|shroud|ward)|target (creature|permanent|artifact)[^.]*you control (gains?|gets?|has)[^.]*(hexproof|indestructible|protection from|shroud)|(equipped|enchanted) (creature|permanent) (has|gains|gets)[^.]*(hexproof|indestructible|protection from|shroud)|phases? out|spells? you control can't be countered|you have hexproof|prevent all (combat )?damage"],
+        'recursion' => ["return (target|up to \\w+ target|all|each)[^.]*cards? from your graveyard to (your hand|the battlefield)|\\bregrowth\\b|return[^.]*from your graveyard to the battlefield"],
+        'tutor' => ["search your library for (a|an|up to one|up to two|any) (?!basic land|land|forest|island|swamp|plains|mountain)[^.]*card"],
+    ];
+}
+
 function deckScoreProfile(array $card): array
 {
     static $cache = [];
     $key = (string)($card['oracle_id'] ?: $card['id']);
     if (isset($cache[$key])) return $cache[$key];
-    $lexicon = deckScoreLexicon();
     $name = strtolower((string)$card['name']);
     $text = strtolower(deckText($card));
     $text = preg_replace('/\([^)]*\)/', '', $text) ?? $text; // remove lembretes
@@ -207,44 +223,28 @@ function deckScoreProfile(array $card): array
         'cartouche' => 1, 'curse' => 1, 'rune' => 1, 'class' => 1, 'room' => 1, 'background' => 1, 'role' => 1, 'map' => 1, 'gold' => 1, 'powerstone' => 1,
         'incubator' => 1, 'junk' => 1, 'fortification' => 1, 'contraption' => 1, 'attraction' => 1, 'spacecraft' => 1, 'planet' => 1, 'omen' => 1, 'case' => 1, 'lesson' => 1];
     $tribesProduced = [];
-    if ($isCreatureLike) foreach ($subtypeList as $subtype) if (isset($lexicon['types'][$subtype]) && !isset($notTribes[$subtype])) $tribesProduced[$subtype] = true;
+    // Relações são calculadas apenas entre as cartas da seleção. Não carregamos mais
+    // um índice de todo o catálogo para tentar inferir uma "nota" global.
+    if ($isCreatureLike) foreach ($subtypeList as $subtype) if (!isset($notTribes[$subtype])) $tribesProduced[$subtype] = true;
     $changeling = (bool)preg_match('/\bchangeling\b|is every creature type/', strtolower(deckText($card)));
     $words = array_flip(preg_split('/[^a-z0-9+\/-]+/', $text) ?: []);
     $tribesCared = [];
     $irregular = ['elf' => 'elves', 'dwarf' => 'dwarves', 'wolf' => 'wolves', 'werewolf' => 'werewolves', 'mouse' => 'mice', 'ox' => 'oxen', 'fungus' => 'fungi',
         'octopus' => 'octopuses', 'thief' => 'thieves', 'sheep' => 'sheep', 'fish' => 'fish', 'jellyfish' => 'jellyfish', 'cyclops' => 'cyclopes', 'sphinx' => 'sphinxes',
         'fox' => 'foxes', 'lich' => 'liches', 'witch' => 'witches', 'phoenix' => 'phoenixes', 'harpy' => 'harpies', 'fairy' => 'faeries'];
-    foreach ($lexicon['types'] as $type => $count) {
-        $type = (string)$type;
-        if (isset($notTribes[$type])) continue;
-        $plural = $irregular[$type] ?? (str_ends_with($type, 'y') && !preg_match('/[aeiou]y$/', $type) ? substr($type, 0, -1) . 'ies' : $type . 's');
-        if ((isset($words[$type]) || isset($words[$plural])) && preg_match('/\b(' . preg_quote($type, '/') . '|' . preg_quote($plural, '/') . ')\b[^.]{0,30}(you control|spells?|cards?|creatures?|get|have|enter|dies|deal)|\b(other|another|each|a|an|target|nontoken|attacking) (' . preg_quote($type, '/') . '|' . preg_quote($plural, '/') . ')\b/', $text)) {
-            $tribesCared[$type] = true;
-        }
-    }
 
     $roles = [];
     if (str_contains($superTypes, 'land')) $roles['lands'] = true;
     else {
-        if (preg_match('/\badd (\{[wubrgc]\}|one mana|two mana|three mana|mana of any|x mana|\{c\}\{c\})|search your library for[^.]*\blands? cards?\b[^.]*(onto the battlefield|into your hand)|create[^.]*\btreasure tokens?|play (an|two) additional lands?/', $text)) $roles['ramp'] = true;
-        if (preg_match('/\bdraws? (two|three|four|x|that many|cards equal|a card for each)\b|\bdraw a card\b[^.]*(whenever|at the beginning)|whenever[^.]*,? (you )?draw a card|\binvestigate\b|connives?\b/', $text) || preg_match('/(^|\n)draw (a|two) cards?/', $text)) $roles['draw'] = true;
-        if (preg_match('/(destroy|exile) (up to one )?target (creature|artifact|enchantment|planeswalker|nonland permanent|permanent|creature or planeswalker|artifact or enchantment)|deals? (\d+|x) damage to (target|any target|up to one target)|return target (creature|nonland permanent|permanent|artifact|enchantment)[^.]*to (its|their) owner\'s hand|target (player|opponent) sacrifices|counter target (spell|noncreature spell|creature spell)|fights? (target|up to one target)/', $text)) $roles['removal'] = true;
-        if (preg_match('/(destroy|exile) (all|each) (other )?(creatures|nonland permanents|artifacts|enchantments|permanents)|(all|each) creatures? gets? -\d|deals? (\d+|x) damage to each creature|return all (creatures|nonland permanents)|each player sacrifices (all|each)|\boverload\b/', $text)) $roles['wipe'] = true;
-        if (preg_match('/(creatures|permanents|commander)[^.]*you control (gain|have|get)[^.]*(hexproof|indestructible|protection|shroud|ward)|phases? out|can\'t be countered|\bwards? \{|you have hexproof|prevent all (combat )?damage/', $text)) $roles['protection'] = true;
-        if (preg_match('/return (target|up to \w+ target|all|each)[^.]*cards? from your graveyard to (your hand|the battlefield)|\bregrowth\b|return[^.]*from your graveyard to the battlefield/', $text)) $roles['recursion'] = true;
-        if (preg_match('/search your library for (a|an|up to one|up to two|any) (?!basic land|land|forest|island|swamp|plains|mountain)[^.]*card/', $text)) $roles['tutor'] = true;
+        foreach (deckScoreRolePatterns() as $role => $patterns) {
+            foreach ($patterns as $pattern) if (preg_match('/' . $pattern . '/', $text)) { $roles[$role] = true; break; }
+        }
         if (!$roles) $roles['plan'] = true;
     }
 
     $pips = array_fill_keys(['W', 'U', 'B', 'R', 'G'], 0);
     foreach (['W', 'U', 'B', 'R', 'G'] as $color) $pips[$color] = substr_count(strtoupper((string)$card['mana_cost']), $color);
 
-    $rareWords = [];
-    foreach (array_keys($words) as $word) {
-        $word = (string)$word;
-        if (strlen($word) < 4 || ctype_digit($word) || in_array($word, DECK_SCORE_STOPWORDS, true) || !isset($lexicon['df'][$word])) continue;
-        $rareWords[$word] = log($lexicon['n'] / max(1, (int)$lexicon['df'][$word]));
-    }
 
     return $cache[$key] = [
         'text' => $text,
@@ -259,7 +259,7 @@ function deckScoreProfile(array $card): array
         'pips' => $pips,
         'identity' => json_decode((string)($card['color_identity'] ?? '[]'), true) ?: [],
         'keywords' => array_map('strtolower', json_decode((string)($card['keywords'] ?? '[]'), true) ?: []),
-        'rare_words' => $rareWords,
+        'rare_words' => [],
         'extra_turn' => (bool)preg_match('/take an extra turn|takes an extra turn/', $text),
         'produced_mana' => deckScoreProducedMana($card),
         'enters_tapped' => (bool)preg_match('/~ enters tapped(?! unless)|enters the battlefield tapped(?! unless)/', $text) && !preg_match('/unless|you may pay/', $text),
@@ -274,7 +274,6 @@ function deckScoreProfile(array $card): array
 function deckScorePair(array $a, array $b, bool $withWords = true): array
 {
     $library = deckScoreFeatureLibrary();
-    $lexicon = deckScoreLexicon();
     $points = 0.0;
     $reasons = [];
     foreach ($library as $feature => [$label, $weight]) {
@@ -283,15 +282,6 @@ function deckScorePair(array $a, array $b, bool $withWords = true): array
         if ($aToB || $bToA) {
             $points += $weight * ($aToB && $bToA ? 1.4 : 1.0);
             $reasons[$feature] = $label;
-        }
-    }
-    foreach ([[$a, $b], [$b, $a]] as [$source, $target]) {
-        foreach ($target['tribes_cared'] as $tribe => $_) {
-            if (isset($source['tribes_produced'][$tribe]) || $source['changeling']) {
-                $rarity = 1 - log(max(2, (int)($lexicon['types'][$tribe] ?? 2))) / log(max(3, $lexicon['n']));
-                $points += 1.2 + 2.2 * max(0, $rarity);
-                $reasons['tribe:' . $tribe] = ucfirst($tribe);
-            }
         }
     }
     $sharedKeywords = array_diff(array_intersect($a['keywords'], $b['keywords']), ['flying', 'haste', 'vigilance', 'trample', 'reach', 'deathtouch', 'lifelink', 'first strike', 'menace', 'flash', 'defender', 'hexproof', 'indestructible', 'ward', 'equip', 'enchant']);
@@ -306,6 +296,19 @@ function deckScorePair(array $a, array $b, bool $withWords = true): array
         }
     }
     return [$points, $reasons];
+}
+
+/** Relação explicável: o que a primeira carta oferece à segunda (e o inverso). */
+function deckCardRelationship(array $from, array $to): array
+{
+    $offers = [];
+    foreach (deckScoreFeatureLibrary() as $feature => [$label]) {
+        if (isset($from['produces'][$feature]) && isset($to['cares'][$feature])) $offers[] = $label;
+    }
+    foreach ($to['tribes_cared'] as $tribe => $_) {
+        if (isset($from['tribes_produced'][$tribe]) || $from['changeling']) $offers[] = ucfirst($tribe);
+    }
+    return array_values(array_unique($offers));
 }
 
 function deckScoreProducedMana(array $card): array
@@ -327,32 +330,31 @@ function deckScoreSaturate(float $raw, float $scale): float
  */
 function deckScoreSelection(array $deck, ?array $commander, array $items, array $config): array
 {
-    $result = ['cards' => [], 'needs' => [], 'summary' => ['advance' => 0, 'review' => 0, 'hold' => 0, 'blocked' => 0], 'bracket' => $config['bracket'],
-        'game_changers' => 0, 'open_slots' => 0, 'deck_count' => 0, 'weakest' => []];
-    if (!$commander || !$items) return $result;
+    $result = ['cards' => [], 'needs' => [], 'bracket' => $config['bracket'],
+        'game_changers' => 0, 'open_slots' => 0, 'deck_count' => 0];
+    if (!$commander) return $result;
 
     $gameChangers = array_flip(deckScoreGameChangers());
     $commanderProfile = deckScoreProfile($commander);
     $identity = $commanderProfile['identity'];
-    $weights = $config['weights'];
     $bracket = (int)$config['bracket'];
 
-    // Estado atual do deck: cartas aprovadas contam inteiras; em avaliação contam metade.
+    // Estado atual do deck: só cartas aprovadas contam para metas e curva; candidatas são contadas à parte.
     $roleCounts = array_fill_keys(array_keys(DECK_SCORE_ROLES), 0.0);
+    $candidateRoleCounts = array_fill_keys(array_keys(DECK_SCORE_ROLES), 0);
     $curveCounts = array_fill_keys(array_keys($config['curve']), 0.0);
     $pipTotals = array_fill_keys(['W', 'U', 'B', 'R', 'G'], 0.0);
     $gcCount = 0;
-    $extraTurns = 0;
     $deckCount = 1;
     foreach ($commanderProfile['pips'] as $color => $amount) $pipTotals[$color] += $amount;
     $profiles = [];
     foreach ($items as $item) {
         $profile = deckScoreProfile($item);
         $profiles[$item['id']] = $profile;
-        $factor = $item['stage'] === 'deck' ? 1.0 : ($item['stage'] === 'review' ? 0.5 : 0.0);
+        $factor = $item['stage'] === 'deck' ? 1.0 : 0.0;
         $quantity = max(1, (int)$item['quantity']);
         if ($item['stage'] === 'deck') $deckCount += $quantity;
-        if ($factor <= 0) continue;
+        if ($factor <= 0) { foreach ($profile['roles'] as $role => $_) $candidateRoleCounts[$role]++; continue; }
         foreach ($profile['roles'] as $role => $_) $roleCounts[$role] += $factor * $quantity;
         if (!$profile['is_land']) {
             $bucket = (string)max(1, min(7, (int)round($profile['mv'])));
@@ -360,7 +362,6 @@ function deckScoreSelection(array $deck, ?array $commander, array $items, array 
         }
         foreach ($profile['pips'] as $color => $amount) $pipTotals[$color] += $factor * $amount * $quantity;
         if (isset($gameChangers[strtolower((string)$item['name'])])) $gcCount += $factor >= 1 ? 1 : 0;
-        if ($profile['extra_turn'] && $factor >= 1) $extraTurns++;
     }
     $pipSum = max(1.0, array_sum($pipTotals));
     $openSlots = max(0, 100 - $deckCount);
@@ -371,259 +372,55 @@ function deckScoreSelection(array $deck, ?array $commander, array $items, array 
     $targets = $config['targets'];
     $targets['plan'] = max(0, 99 - array_sum($targets));
     foreach (DECK_SCORE_ROLES as $role => $label) {
-        $result['needs'][$role] = ['label' => $label, 'target' => (int)$targets[$role], 'current' => $roleCounts[$role], 'missing' => max(0, (int)ceil($targets[$role] - $roleCounts[$role]))];
+        $result['needs'][$role] = ['label' => $label, 'target' => (int)$targets[$role], 'current' => $roleCounts[$role], 'candidates' => $candidateRoleCounts[$role], 'missing' => max(0, (int)ceil($targets[$role] - $roleCounts[$role]))];
     }
 
-    // Dados do EDHREC para a comandante (qualquer impressão).
-    $logicalIds = array_values(array_unique(array_map(fn($item) => (string)($item['oracle_id'] ?: $item['id']), $items)));
-    $edhrec = [];
-    if ($logicalIds) {
-        $placeholders = implode(',', array_fill(0, count($logicalIds), '?::uuid'));
-        $rows = deckQuery("SELECT COALESCE(card.oracle_id,card.id)::text AS logical_id, MAX(s.score) AS score, MAX(s.inclusion) AS inclusion, MAX(s.metric) AS metric
-            FROM deck_synergy s JOIN cards leader ON leader.id=s.commander_id JOIN cards card ON card.id=s.card_id
-            WHERE COALESCE(leader.oracle_id,leader.id)=?::uuid AND COALESCE(card.oracle_id,card.id) IN ({$placeholders})
-            GROUP BY 1", array_merge([(string)($commander['oracle_id'] ?: $commander['id'])], $logicalIds))->fetchAll();
-        foreach ($rows as $row) $edhrec[$row['logical_id']] = $row;
-    }
-    $hasEdhrec = (bool)$edhrec;
-
-    // Combos de duas cartas conhecidos (catálogo interno + EDHREC).
-    $comboPartners = [];
-    $insights = function_exists('deckCommanderInsights') ? deckCommanderInsights($commander) : null;
-    // Só combos infinitos contam como "combo de duas cartas" para as regras de bracket; os demais viram observação.
-    $comboSources = array_merge(
-        array_map(fn($c) => ['cards' => $c['cards'], 'infinite' => true], deckComboCatalog()),
-        array_map(fn($c) => ['cards' => (array)$c['cards'], 'infinite' => (bool)preg_grep('/infinite/i', (array)($c['results'] ?? []))], (array)($insights['combos'] ?? []))
-    );
-    foreach ($comboSources as $combo) {
-        $pieces = array_map('strtolower', (array)$combo['cards']);
-        if (count($pieces) !== 2) continue;
-        $comboPartners[$pieces[0]][$pieces[1]] = ($comboPartners[$pieces[0]][$pieces[1]] ?? false) || $combo['infinite'];
-        $comboPartners[$pieces[1]][$pieces[0]] = ($comboPartners[$pieces[1]][$pieces[0]] ?? false) || $combo['infinite'];
-    }
-    $namesInPlay = [strtolower((string)$commander['name']) => (string)$commander['name']];
-    foreach ($items as $item) if ($item['stage'] !== 'candidate') $namesInPlay[strtolower((string)$item['name'])] = (string)$item['name'];
-
-    $terms = array_values(array_filter(array_map(fn($t) => strtolower(trim($t)), explode(';', (string)($deck['terms'] ?? '')))));
-    $weightSum = 0;
-
+    // Não há uma nota nem uma classificação automática: cada relação é mostrada
+    // como uma afirmação que o jogador pode aceitar ou ignorar.
     foreach ($items as $item) {
         $profile = $profiles[$item['id']];
         $quantity = max(1, (int)$item['quantity']);
-        $selfFactor = $item['stage'] === 'deck' ? 1.0 : ($item['stage'] === 'review' ? 0.5 : 0.0);
-        $components = [];
-        $details = [];
         $notes = [];
-        $multiplier = 1.0;
         $blocked = null;
-        $bonus = 0;
-
-        // 1. Encaixe com a comandante (terrenos só entram quando têm ligação real, como landfall).
-        [$raw, $reasons] = deckScorePair($profile, $commanderProfile, true);
-        if (!$profile['is_land'] || $raw > 0.8) $components['commander'] = deckScoreSaturate($raw, 2.2);
-        $details['commander'] = $reasons ? 'Conecta por ' . implode(', ', array_slice(array_values($reasons), 0, 3)) . '.' : 'Nenhuma ligação direta com o texto da comandante.';
-
-        // 2. Conexões com as cartas em avaliação e no deck (as 8 melhores ligações).
-        $links = [];
-        foreach ($items as $other) {
-            if ($other['id'] === $item['id'] || $other['stage'] === 'candidate') continue;
-            [$pairPoints, $pairReasons] = deckScorePair($profile, $profiles[$other['id']], false);
-            if ($pairPoints > 0) $links[] = [$pairPoints, $other['name'], reset($pairReasons)];
-        }
-        usort($links, fn($x, $y) => $y[0] <=> $x[0]);
-        $topLinks = array_slice($links, 0, 8);
-        if (!$profile['is_land'] || array_sum(array_column($topLinks, 0)) > 1.5) $components['deck'] = deckScoreSaturate(array_sum(array_column($topLinks, 0)), 5.0);
-        $details['deck'] = $links
-            ? 'Liga-se a ' . count($links) . ' carta' . (count($links) === 1 ? '' : 's') . ': ' . implode('; ', array_map(fn($l) => $l[1] . ' (' . $l[2] . ')', array_slice($topLinks, 0, 3))) . '.'
-            : 'Ainda não conversa com as cartas em avaliação ou no deck.';
-
-        // 3. Função que falta.
-        $best = 0.0;
-        $roleNotes = [];
-        foreach ($profile['roles'] as $role => $_) {
-            $target = (float)$targets[$role];
-            $current = $roleCounts[$role] - $selfFactor * $quantity;
-            $deficit = $target > 0 ? max(0, min(1, ($target - $current) / $target)) : 0.0;
-            $best = max($best, $deficit);
-            $missing = max(0, (int)ceil($target - $current));
-            $roleNotes[] = DECK_SCORE_ROLES[$role] . ($missing > 0 ? ' (faltam ' . $missing . ')' : ' (meta atingida)');
-        }
-        $extraRoles = count(array_filter(array_keys($profile['roles']), fn($role) => ($targets[$role] ?? 0) > ($roleCounts[$role] - $selfFactor * $quantity)));
-        $components['roles'] = min(1.0, $best + 0.12 * max(0, $extraRoles - 1));
-        $details['roles'] = implode(' · ', $roleNotes) . '.';
-
-        // 4. Curva de mana (não se aplica a terrenos).
-        if (!$profile['is_land']) {
-            $bucket = (string)max(1, min(7, (int)round($profile['mv'])));
-            $target = (float)($config['curve'][$bucket] ?? 0);
-            $current = $curveCounts[$bucket] - $selfFactor * $quantity;
-            $components['curve'] = $current < $target ? 1 - 0.3 * ($current / max(1, $target)) : max(0.0, 0.7 - 0.35 * ($current - $target + 1) / max(2, $target));
-            $details['curve'] = 'Custo ' . ($bucket === '7' ? '7+' : $bucket) . ': ' . rtrim(rtrim(number_format(max(0, $current), 1, ',', ''), '0'), ',') . ' de ' . (int)$target . ' desejadas.';
-        }
-
-        // 5. Exigência de cor; para terrenos, a qualidade da base de mana (cores da identidade e se entra virado).
-        if ($profile['is_land']) {
-            $identityColors = $identity ?: ['C'];
-            $fixes = array_intersect($profile['produced_mana'], $identityColors);
-            $coverage = count($fixes) / max(1, count($identityColors));
-            $components['colors'] = max(0.0, min(1.0, (0.35 + 0.65 * $coverage) * ($profile['enters_tapped'] ? 0.75 : 1.0)));
-            $details['colors'] = ($fixes ? 'Produz ' . implode('', $fixes) . ' (' . count($fixes) . ' de ' . count($identityColors) . ' cores da identidade)' : 'Não produz cores da identidade')
-                . ($profile['enters_tapped'] ? ', entra virado.' : '.');
-        } else {
-            $strain = 0.0;
-            foreach ($profile['pips'] as $color => $amount) {
-                if ($amount <= 0) continue;
-                $share = $pipTotals[$color] / $pipSum;
-                $strain += max(0, $amount - 1) * (1 - $share) + ($share < 0.15 ? 0.5 : 0);
-            }
-            $components['colors'] = 1 / (1 + 0.55 * $strain);
-            $heavy = array_keys(array_filter($profile['pips'], fn($amount) => $amount >= 2));
-            $details['colors'] = $strain < 0.3 ? 'Custo de cor confortável para a base de mana.' : 'Exige ' . ($heavy ? implode('', $heavy) . ' repetido' : 'uma cor pouco presente') . ' em relação ao restante do deck.';
-        }
-
-        // 6. Intenção do deck (termos da "Minha intenção").
-        if ($terms) {
-            $matched = array_values(array_filter($terms, fn($term) => str_contains($profile['text'], $term) || str_contains(strtolower((string)$item['type_line']), $term)));
-            $components['terms'] = $matched ? min(1.0, 0.7 + 0.15 * count($matched)) : 0.0;
-            $details['terms'] = $matched ? 'Contém: ' . implode(', ', array_slice($matched, 0, 3)) . '.' : 'Não cita os termos da sua intenção.';
-        }
-
-        // 7. EDHREC: sinergia, inclusão e popularidade geral.
-        $logical = (string)($item['oracle_id'] ?: $item['id']);
-        $rank = (int)($item['edhrec_rank_cached'] ?? 0);
-        $popularity = $rank > 0 ? max(0.0, min(1.0, 1 - log10($rank) / log10(40000))) : 0.2;
-        if (isset($edhrec[$logical])) {
-            $row = $edhrec[$logical];
-            $synergy = $row['metric'] === 'lift' ? max(0, min(1, ((float)$row['score'] - 1) / 2 + 0.5)) : max(0, min(1, 0.5 + (float)$row['score']));
-            $inclusion = $row['inclusion'] !== null ? min(1.0, (float)$row['inclusion'] * 1.6) : 0.4;
-            $components['edhrec'] = 0.35 * $synergy + 0.45 * $inclusion + 0.2 * $popularity;
-            $details['edhrec'] = ($row['metric'] === 'lift' ? 'Lift ' . number_format((float)$row['score'], 2, ',', '.') : 'Sinergia ' . sprintf('%+.0f%%', (float)$row['score'] * 100))
-                . ($row['inclusion'] !== null ? ' · em ' . number_format((float)$row['inclusion'] * 100, 0, ',', '.') . '% dos decks' : '') . '.';
-        } else {
-            $components['edhrec'] = $hasEdhrec ? 0.1 + 0.5 * $popularity : 0.2 + 0.6 * $popularity;
-            $details['edhrec'] = $hasEdhrec ? 'Não aparece nas listas do EDHREC desta comandante.' : 'Sem dados do EDHREC para esta comandante; usando só a popularidade geral.';
-        }
-
-        // 8. Coleção.
-        $owned = (int)($item['owned'] ?? 0);
-        $components['collection'] = $owned > 0 ? 1.0 : 0.0;
-        $details['collection'] = $owned > 0 ? 'Você tem ' . $owned . ' cópia' . ($owned === 1 ? '' : 's') . '.' : 'Precisa ser comprada.';
-
-        // 9. Orçamento.
-        $price = deckSelectedPriceBrl($item);
-        if ($price !== null) {
-            $max = (float)$config['max_price'];
-            $components['price'] = $max > 0 ? ($price <= $max ? 1.0 : max(0.0, 1 - ($price - $max) / $max)) : 1 / (1 + $price / 30);
-            $details['price'] = 'R$ ' . number_format($price, 2, ',', '.') . ($max > 0 ? ($price <= $max ? ' · dentro do limite' : ' · acima do limite de R$ ' . number_format($max, 2, ',', '.')) : '') . '.';
-        }
-
-        // Regras de Commander.
+        // Regras de Commander continuam como alertas, sem converter a carta numa nota.
         if (array_diff($profile['identity'], $identity)) $blocked = 'Fora da identidade de cor da comandante.';
         $legal = json_decode((string)($item['legalities'] ?? '{}'), true)['commander'] ?? 'legal';
         if (in_array($legal, ['banned', 'not_legal'], true)) $blocked = $legal === 'banned' ? 'Banida no Commander.' : 'Não é legal no Commander.';
         if ($quantity > 1 && !str_contains((string)$item['type_line'], 'Basic') && !preg_match('/deck can have (any number|up to)/i', deckText($item))) $blocked = 'Commander permite apenas 1 cópia desta carta.';
         if (isset($gameChangers[strtolower((string)$item['name'])])) {
             $others = $gcCount - ($item['stage'] === 'deck' ? 1 : 0);
-            if ($bracket <= 2) { $multiplier *= 0.25; $notes[] = 'Game Changer: não entra em decks de bracket ' . $bracket . '.'; }
-            elseif ($bracket === 3 && $others >= 3) { $multiplier *= 0.5; $notes[] = 'Game Changer: o deck já tem 3, o limite do bracket 3.'; }
+            if ($bracket <= 2) $notes[] = 'Game Changer: fora da proposta do bracket ' . $bracket . '.';
+            elseif ($bracket === 3 && $others >= 3) $notes[] = 'Game Changer: o deck já atingiu o limite de 3.';
             elseif ($bracket === 3) $notes[] = $item['stage'] === 'deck' ? 'Game Changer: ocupa 1 dos 3 permitidos no bracket 3.' : 'Game Changer: seria o ' . ($others + 1) . 'º dos 3 permitidos no bracket 3.';
             else $notes[] = 'Game Changer.';
         }
         if ($profile['mld']) {
-            if ($bracket <= 3) { $multiplier *= 0.2; $notes[] = 'Destruição de terrenos em massa: só a partir do bracket 4.'; }
+            if ($bracket <= 3) $notes[] = 'Destruição de terrenos em massa: só a partir do bracket 4.';
             else $notes[] = 'Destruição de terrenos em massa.';
         }
-        if ($profile['extra_turn']) {
-            $others = $extraTurns - ($item['stage'] === 'deck' ? 1 : 0);
-            if ($bracket === 1) { $multiplier *= 0.2; $notes[] = 'Turnos extras não combinam com o bracket 1.'; }
-            elseif ($bracket === 2 && $others >= 1) { $multiplier *= 0.7; $notes[] = 'Turnos extras devem ser raros no bracket 2.'; }
-            elseif ($bracket === 3 && $others >= 3) { $multiplier *= 0.6; $notes[] = 'Já há 3 cartas de turno extra; o bracket 3 sugere no máximo 3.'; }
-        }
-        $partners = array_intersect_key($comboPartners[strtolower((string)$item['name'])] ?? [], $namesInPlay);
-        if ($partners) {
-            $infinite = array_keys(array_filter($partners));
-            $finite = array_keys(array_filter($partners, fn($flag) => !$flag));
-            if ($infinite) {
-                $partnerNames = implode(', ', array_map(fn($name) => $namesInPlay[$name], $infinite));
-                if ($bracket <= 3) { $multiplier *= 0.5; $notes[] = 'Combo infinito de duas cartas com ' . $partnerNames . ': indicado para bracket 4 ou mais.'; }
-                else { $bonus += 8; $notes[] = 'Combo infinito de duas cartas com ' . $partnerNames . '.'; }
-            }
-            if ($finite) {
-                $bonus += 4;
-                $notes[] = 'Combo conhecido com ' . implode(', ', array_map(fn($name) => $namesInPlay[$name], $finite)) . '.';
-            }
-        }
-
-        // Cartas de função (terreno, ramp, compra, remoção…) não precisam de sinergia para valer a vaga:
-        // o peso da sinergia diminui e o da função aumenta, voltando ao normal quanto mais sinergia a carta tiver.
-        $effective = array_map('floatval', $weights);
-        $functional = !isset($profile['roles']['plan']);
-        if ($functional) {
-            $synergy = max($components['commander'] ?? 0, $components['deck'] ?? 0);
-            $scale = 0.35 + 0.65 * $synergy;
-            $effective['commander'] *= $scale;
-            $effective['deck'] *= $scale;
-            $effective['terms'] *= $scale;
-            $effective['roles'] *= 1.6;
-            $effective['edhrec'] *= 1.8;
-            $details['roles'] .= ' Carta de função: aqui a sinergia pesa menos e a função pesa mais.';
-        }
-        $activeWeights = array_intersect_key($effective, $components);
-        $weightSum = array_sum($activeWeights) ?: 1;
-        $base = 0.0;
-        $breakdown = [];
-        foreach (DECK_SCORE_COMPONENTS as $key => $label) {
-            if (!isset($components[$key])) continue;
-            $weight = (float)($effective[$key] ?? 0);
-            $points = 100 * $weight * $components[$key] / $weightSum;
-            $base += $points;
-            $breakdown[$key] = ['label' => $label, 'points' => $points, 'max' => 100 * $weight / $weightSum, 'value' => $components[$key], 'detail' => $details[$key] ?? ''];
-        }
-        $score = $blocked ? 0 : (int)max(0, min(100, round($base * $multiplier + $bonus)));
-        $band = $blocked ? 'blocked' : ($score >= $config['thresholds']['advance'] ? 'advance' : ($score >= $config['thresholds']['review'] ? 'review' : 'hold'));
-        $result['summary'][$band]++;
         $result['cards'][$item['id']] = [
-            'score' => $score, 'band' => $band, 'blocked' => $blocked, 'multiplier' => $multiplier, 'bonus' => $bonus,
-            'breakdown' => $breakdown, 'notes' => $notes, 'stage' => $item['stage'], 'name' => (string)$item['name'],
+            'blocked' => $blocked, 'notes' => $notes, 'stage' => $item['stage'], 'name' => (string)$item['name'], 'relationships' => [],
             'game_changer' => isset($gameChangers[strtolower((string)$item['name'])]),
             'produces' => array_values(array_map(fn($f) => deckScoreFeatureLibrary()[$f][0], array_keys($profile['produces']))),
             'cares' => array_values(array_merge(array_map(fn($f) => deckScoreFeatureLibrary()[$f][0], array_keys($profile['cares'])), array_map('ucfirst', array_keys($profile['tribes_cared'])))),
             'roles' => array_values(array_map(fn($r) => DECK_SCORE_ROLES[$r], array_keys($profile['roles']))),
         ];
     }
-    $deckScores = array_filter($result['cards'], fn($card) => $card['stage'] === 'deck');
-    uasort($deckScores, fn($a, $b) => $a['score'] <=> $b['score']);
-    $result['weakest'] = array_slice($deckScores, 0, 5, true);
-    return $result;
-}
 
-function deckScoreBandLabel(string $band): string
-{
-    return ['advance' => 'Avançar', 'review' => 'Avaliar com calma', 'hold' => 'Segurar', 'blocked' => 'Bloqueada'][$band] ?? $band;
-}
-
-/**
- * Sugestões da etapa: candidatas → avaliação (até 1,5× as vagas abertas, descontando quem já está em avaliação)
- * e avaliação → deck (até as vagas abertas). Respeita o limite de Game Changers do bracket durante a escolha.
- */
-function deckScoreSuggestions(array $scores, string $stage, array $config): array
-{
-    if (!in_array($stage, ['candidate', 'review'], true)) return [];
-    $reviewCount = count(array_filter($scores['cards'], fn($card) => $card['stage'] === 'review'));
-    $capacity = $stage === 'candidate' ? max(0, (int)ceil($scores['open_slots'] * 1.5) - $reviewCount) : $scores['open_slots'];
-    $eligible = array_filter($scores['cards'], fn($card) => $card['stage'] === $stage && $card['band'] === 'advance');
-    uasort($eligible, fn($a, $b) => $b['score'] <=> $a['score']);
-    $gcBudget = $config['bracket'] <= 2 ? 0 : ($config['bracket'] === 3 ? max(0, 3 - $scores['game_changers']) : PHP_INT_MAX);
-    $picked = [];
-    foreach ($eligible as $id => $card) {
-        if (count($picked) >= $capacity) break;
-        if ($card['game_changer'] && $stage === 'review') {
-            if ($gcBudget <= 0) continue;
-            $gcBudget--;
+    $candidates = array_values(array_filter($items, fn($item) => $item['stage'] === 'candidate'));
+    foreach ($candidates as $candidate) {
+        $profile = $profiles[$candidate['id']];
+        $toCommander = deckCardRelationship($profile, $commanderProfile);
+        $fromCommander = deckCardRelationship($commanderProfile, $profile);
+        if ($toCommander || $fromCommander) $result['cards'][$candidate['id']]['relationships'][] = ['name' => (string)$commander['name'], 'kind' => 'commander', 'offers' => $toCommander, 'receives' => $fromCommander];
+        foreach ($candidates as $other) {
+            if ($candidate['id'] === $other['id']) continue;
+            $offers = deckCardRelationship($profile, $profiles[$other['id']]);
+            $receives = deckCardRelationship($profiles[$other['id']], $profile);
+            if ($offers || $receives) $result['cards'][$candidate['id']]['relationships'][] = ['name' => (string)$other['name'], 'kind' => 'candidate', 'offers' => $offers, 'receives' => $receives];
         }
-        $picked[$id] = $card;
     }
-    return $picked;
+    return $result;
 }
 
 /** Carrega os itens do deck no formato usado pelo cálculo (para ações fora da renderização). */
@@ -646,4 +443,114 @@ function deckScoreConfigFromPost(array $post): array
         'max_price' => $post['max_price'] ?? null,
         'thresholds' => (array)($post['thresholds'] ?? []),
     ]);
+}
+
+/** Máscara de bits da identidade de cor (W=1, U=2, B=4, R=8, G=16). */
+function deckIdentityMask(array $colors): int
+{
+    $mask = 0;
+    foreach ($colors as $color) $mask |= ['W' => 1, 'U' => 2, 'B' => 4, 'R' => 8, 'G' => 16][strtoupper((string)$color)] ?? 0;
+    return $mask;
+}
+
+/**
+ * Índice do catálogo por função (ramp, compra, remoção…): cartas legais em Commander que cumprem cada função,
+ * ordenadas pela popularidade no EDHREC. Varre o catálogo uma vez por sincronização (cache em arquivo).
+ * Formato: [função => [[logical_id, nome, máscara de identidade, rank EDHREC|null], ...]].
+ */
+function deckNeedRoleIndex(): array
+{
+    return catalogCached('need-role-index-v2', function (): array {
+        $patterns = deckScoreRolePatterns();
+        $columns = [];
+        $params = [];
+        foreach ($patterns as $role => $list) {
+            $columns[] = '(' . implode(' OR ', array_fill(0, count($list), 't ~ ?')) . ') AS ' . $role;
+            foreach ($list as $pattern) $params[] = str_replace('\b', '\y', $pattern);
+        }
+        $rows = deckQuery("WITH base AS (
+                SELECT DISTINCT ON (COALESCE(c.oracle_id,c.id)) COALESCE(c.oracle_id,c.id)::text AS lid, c.name, c.color_identity, c.edhrec_rank_cached AS rank,
+                    split_part(COALESCE(c.type_line,''),' // ',1) AS front_type,
+                    regexp_replace(lower(COALESCE(c.oracle_text,'') || ' ' || COALESCE((SELECT string_agg(f->>'oracle_text',' ') FROM jsonb_array_elements(c.card_faces) f),'')), '\\([^)]*\\)', '', 'g') AS t
+                FROM cards c WHERE c.legalities->>'commander'='legal'
+                ORDER BY COALESCE(c.oracle_id,c.id), (c.edhrec_rank_cached IS NULL), c.released_at DESC NULLS LAST)
+            SELECT lid, name, color_identity::text AS identity, rank, front_type ILIKE '%Land%' AS is_land, front_type ILIKE '%Basic%' AS is_basic, " . implode(', ', $columns) . " FROM base", $params)->fetchAll();
+        $index = array_fill_keys(array_merge(['lands'], array_keys($patterns)), []);
+        foreach ($rows as $row) {
+            $entry = [$row['lid'], $row['name'], deckIdentityMask(json_decode((string)$row['identity'], true) ?: []), $row['rank'] === null ? null : (int)$row['rank']];
+            $isLand = $row['is_land'] === true || $row['is_land'] === 't' || $row['is_land'] === 1;
+            if ($isLand) {
+                if (!($row['is_basic'] === true || $row['is_basic'] === 't' || $row['is_basic'] === 1)) $index['lands'][] = $entry;
+                continue;
+            }
+            foreach (array_keys($patterns) as $role) if ($row[$role] === true || $row[$role] === 't' || $row[$role] === 1) $index[$role][] = $entry;
+        }
+        foreach ($index as &$list) usort($list, fn($a, $b) => [$a[3] === null, $a[3]] <=> [$b[3] === null, $b[3]]);
+        unset($list);
+        return $index;
+    }, 30 * 86400);
+}
+
+/** IDs lógicos do catálogo que cumprem uma função e cabem na identidade (filtro "Função no deck" da busca). */
+function deckNeedRoleIds(string $role, array $identity): array
+{
+    $mask = deckIdentityMask($identity);
+    $ids = [];
+    foreach (deckNeedRoleIndex()[$role] ?? [] as [$lid, , $cardMask]) if (($cardMask & ~$mask) === 0) $ids[] = $lid;
+    return $ids;
+}
+
+/**
+ * "O que o deck precisa": para cada função, as metas do Índice de Encaixe e as melhores cartas do catálogo
+ * que ainda não estão na seleção — primeiro as com sinergia EDHREC para a comandante, depois as mais jogadas.
+ */
+function deckNeedSuggestions(array $commander, array $scores, array $items, array $config, int $limit = 6): array
+{
+    $index = deckNeedRoleIndex();
+    $mask = deckIdentityMask(json_decode((string)$commander['color_identity'], true) ?: []);
+    $taken = [(string)($commander['oracle_id'] ?: $commander['id']) => true];
+    foreach ($items as $item) $taken[(string)($item['oracle_id'] ?: $item['id'])] = true;
+    $synergy = deckQuery("SELECT COALESCE(card.oracle_id,card.id)::text, MAX(s.score) FROM deck_synergy s
+        JOIN cards leader ON leader.id=s.commander_id JOIN cards card ON card.id=s.card_id
+        WHERE COALESCE(leader.oracle_id,leader.id)=?::uuid GROUP BY 1", [(string)($commander['oracle_id'] ?: $commander['id'])])->fetchAll(PDO::FETCH_KEY_PAIR);
+    $blockedNames = (int)$config['bracket'] <= 2 ? array_flip(deckScoreGameChangers()) : [];
+    $gameChangers = array_flip(deckScoreGameChangers());
+    $result = [];
+    $wanted = [];
+    foreach ($scores['needs'] as $role => $need) {
+        if (!isset($index[$role]) || (int)$need['target'] <= 0) continue;
+        $pool = [];
+        foreach ($index[$role] as $position => [$lid, $name, $cardMask, $rank]) {
+            if (($cardMask & ~$mask) !== 0 || isset($taken[$lid]) || isset($blockedNames[strtolower($name)])) continue;
+            $pool[] = ['lid' => $lid, 'name' => $name, 'rank' => $rank, 'synergy' => isset($synergy[$lid]) ? (float)$synergy[$lid] : null, 'position' => $position];
+        }
+        $total = count($pool);
+        usort($pool, fn($a, $b) => [($b['synergy'] ?? -1) > 0, $b['synergy'] ?? -1, $a['position']] <=> [($a['synergy'] ?? -1) > 0, $a['synergy'] ?? -1, $b['position']]);
+        $picked = array_slice($pool, 0, $limit);
+        foreach ($picked as $pick) $wanted[$pick['lid']] = true;
+        $result[$role] = $need + ['role' => $role, 'total' => $total, 'picks' => $picked];
+    }
+    // Uma impressão por carta: a da coleção, senão em inglês e com imagem local.
+    $cards = [];
+    if ($wanted) {
+        $rows = deckQuery("SELECT DISTINCT ON (COALESCE(c.oracle_id,c.id)) COALESCE(c.oracle_id,c.id)::text AS logical_id, c.*, COALESCE(bc.quantity,0) AS owned_printing
+            FROM cards c LEFT JOIN " . deckCollectionPrintingSql() . " bc ON bc.scryfall_id=c.id
+            WHERE COALESCE(c.oracle_id,c.id) = ANY(?::uuid[])
+            ORDER BY COALESCE(c.oracle_id,c.id), (COALESCE(bc.quantity,0)>0) DESC, (c.lang='en') DESC, (c.local_image IS NOT NULL) DESC, c.released_at DESC NULLS LAST",
+            ['{' . implode(',', array_keys($wanted)) . '}'])->fetchAll();
+        foreach ($rows as $row) $cards[$row['logical_id']] = $row;
+    }
+    $owned = function_exists('deckOwnedLogicalMap') ? deckOwnedLogicalMap() : [];
+    foreach ($result as &$entry) {
+        $entry['cards'] = [];
+        foreach ($entry['picks'] as $pick) {
+            if (!isset($cards[$pick['lid']])) continue;
+            $entry['cards'][] = $cards[$pick['lid']] + ['need_synergy' => $pick['synergy'], 'need_owned' => (int)($owned[$pick['lid']] ?? 0), 'need_game_changer' => isset($gameChangers[strtolower($pick['name'])])];
+        }
+        unset($entry['picks']);
+    }
+    unset($entry);
+    // Funções abaixo da meta primeiro, na ordem de maior falta proporcional.
+    uasort($result, fn($a, $b) => [$b['missing'] > 0, $b['missing'] / max(1, $b['target'])] <=> [$a['missing'] > 0, $a['missing'] / max(1, $a['target'])]);
+    return $result;
 }

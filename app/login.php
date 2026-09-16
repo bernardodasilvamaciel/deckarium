@@ -40,7 +40,7 @@ pageHeader('Entrar');
     <p>Entre para continuar seus planejamentos, consultar sua coleção e registrar os próximos upgrades.</p>
     <ul class="auth-benefits">
       <li><strong>Coleção pessoal</strong><span>Cópias, acabamentos e valores só seus.</span></li>
-      <li><strong>Decks em andamento</strong><span>Candidatas, avaliação e lista final preservadas.</span></li>
+      <li><strong>Decks em andamento</strong><span>Candidatas e lista final preservadas.</span></li>
     </ul>
   </div>
   <form class="auth-card" method="post" action="/login.php">

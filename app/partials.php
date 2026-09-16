@@ -25,7 +25,7 @@ function pageHeader(string $title): void
     echo '<link rel="icon" type="image/png" href="/assets/deckarium-mark-v2.png">';
     echo '<link rel="preload" href="/assets/fonts/spectral-bold.ttf" as="font" type="font/ttf" crossorigin>';
     echo '<link rel="stylesheet" href="/assets/style.css?v=' . h($version) . '">';
-    if ($section === 'home') echo '<link rel="stylesheet" href="/assets/home.css?v=' . filemtime(__DIR__ . '/assets/home.css') . '"><script type="module" src="/assets/dragon.js?v=' . filemtime(__DIR__ . '/assets/dragon.js') . '"></script>';
+    if ($section === 'home') echo '<link rel="stylesheet" href="/assets/home.css?v=' . filemtime(__DIR__ . '/assets/home.css') . '">';
     if ($section==='decks') echo '<link rel="stylesheet" href="/assets/decks.css?v=' . filemtime(__DIR__ . '/assets/decks.css') . '">';
     echo '<script src="/assets/app.js?v=' . h((string)filemtime(__DIR__ . '/assets/app.js')) . '" defer></script></head><body>';
     echo '<a class="skip-link" href="#main">Pular para o conteúdo</a>';
@@ -54,4 +54,3 @@ function pageFooter(): void
 {
     echo '</main><footer class="wrap footer"><span>Deckarium</span><span>Dados e imagens do Scryfall. Acervo para consulta pessoal.</span>' . (authIsAdmin() ? '<a href="/status.php">Status do acervo</a>' : '') . '</footer></div></body></html>';
 }
-

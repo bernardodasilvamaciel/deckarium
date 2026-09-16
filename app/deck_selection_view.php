@@ -11,14 +11,9 @@ foreach($items as $entry){
     $groups[$category][]=$entry;
 }
 ksort($groups);
-// Índice de Encaixe: nota de cada carta e ordem dentro de cada tipo.
+// Relações e metas: sem nota, ranking ou aprovação automática.
 $scoreConfig = deckScoreConfig($deck['scoring_config'] ?? null);
 $scores = $commander ? deckScoreSelection($deck, $commander, $items, $scoreConfig) : null;
-$scoreSuggestions = $scores ? deckScoreSuggestions($scores, $selectionStage, $scoreConfig) : [];
-if ($scores) {
-    foreach ($groups as &$groupEntries) usort($groupEntries, fn($a, $b) => ($scores['cards'][$b['id']]['score'] ?? -1) <=> ($scores['cards'][$a['id']]['score'] ?? -1));
-    unset($groupEntries);
-}
 $commanderEntry = null;
 if ($selectionStage==='deck' && $commander) {
     $commanderEntry = $commander;
@@ -39,7 +34,7 @@ $moveButton=function(array $entry,string $destination,string $label) use($tokenF
 <form method="post"><?php $tokenFields('move',$entry['id']); ?><input type="hidden" name="stage" value="<?= h($destination) ?>"><button class="secondary-link"><?= h($label) ?></button></form>
 <?php };
 $upgradeIncoming = null;
-if (!empty($_GET['upgrade_card'])) foreach($items as $candidate) if($candidate['id']===(string)$_GET['upgrade_card'] && $candidate['stage']==='review') {$upgradeIncoming=$candidate;break;}
+if (!empty($_GET['upgrade_card'])) foreach($items as $candidate) if($candidate['id']===(string)$_GET['upgrade_card'] && $candidate['stage']==='candidate') {$upgradeIncoming=$candidate;break;}
 $upgradeDetail=function(array $card,string $label): void { $src=cardImageUrl($card,'front','small'); ?>
 <article class="upgrade-detail-card">
 <?php if($src): ?><img src="<?= h($src) ?>" alt="<?= h($card['name']) ?>" loading="lazy"><?php endif; ?>
@@ -52,9 +47,8 @@ $upgradeDetail=function(array $card,string $label): void { $src=cardImageUrl($ca
 ?>
 <?php
 $stageHints=[
-    'candidate'=>'Possibilidades que você guardou. Abra um tipo e clique em uma carta para registrar a avaliação ou mandá-la adiante.',
-    'review'=>'Cartas em comparação. Abra cada uma para escrever o que ela acrescenta e decidir se entra no deck.',
-    'deck'=>'A versão escolhida do seu deck, organizada por tipo. Clique em uma carta para ajustar ou devolvê-la à avaliação.',
+    'candidate'=>'Cartas que você guardou para comparar. Abra um tipo, clique numa carta para anotar o que ela acrescenta e aprove as que entram no deck.',
+    'deck'=>'A versão escolhida do seu deck, organizada por tipo. Clique em uma carta para ajustar ou devolvê-la às candidatas.',
 ];
 ?>
 <section id="selection" class="selection-workspace" data-selection-workspace="<?= (int)$id ?>-<?= h($selectionStage) ?>">
@@ -63,19 +57,26 @@ $stageHints=[
 <?php if($pendingUpgrades): foreach($pendingUpgrades as $pendingUpgrade): $pendingOut=deckQuery('SELECT * FROM cards WHERE id=?',[$pendingUpgrade['remove_card_id']])->fetch(); $pendingIn=deckQuery('SELECT * FROM cards WHERE id=?',[$pendingUpgrade['add_card_id']])->fetch(); ?>
 <section class="upgrade-pending" id="upgrade-<?= (int)$pendingUpgrade['id'] ?>"><div class="upgrade-pending-copy"><span class="plan-status">100 + 1 upgrade pendente</span><h3><?= h($pendingUpgrade['add_name']) ?> sobre <?= h($pendingUpgrade['remove_name']) ?></h3><p>Compare os dois lados antes de confirmar. O deck físico continua com 100 cartas até a troca ser aprovada.</p><div class="selection-actions"><form method="post"><?php $tokenFields('apply_upgrade'); ?><input type="hidden" name="upgrade" value="<?= (int)$pendingUpgrade['id'] ?>"><button class="primary-link">Confirmar troca</button></form><form method="post"><?php $tokenFields('cancel_upgrade'); ?><input type="hidden" name="upgrade" value="<?= (int)$pendingUpgrade['id'] ?>"><button class="secondary-link">Cancelar upgrade</button></form></div></div><div class="upgrade-pending-cards"><?php if($pendingOut) $upgradeDetail($pendingOut,'Sai'); ?><span class="upgrade-arrow" aria-hidden="true">→</span><?php if($pendingIn) $upgradeDetail($pendingIn,'Entra'); ?></div></section>
 <?php endforeach; endif; ?>
-<?php if($selectionStage==='review' && $upgradeIncoming && $finalCount===100): ?>
+<?php if($selectionStage==='candidate' && $upgradeIncoming && $finalCount===100): ?>
 <section class="upgrade-chooser" id="upgrade"><div class="section-heading"><div><h3>Escolha o que sai</h3><p>Compare a carta que entra com cada carta final sugerida para sair. A escolha apenas cria um plano; nada é substituído ainda.</p></div><span>100 + 1 upgrade</span></div><div class="upgrade-incoming-preview"><?php $upgradeDetail($upgradeIncoming,'Entra'); ?></div><div class="upgrade-cut-grid"><?php foreach($upgradeCuts as $cut): ?><article class="upgrade-cut"><?php $upgradeDetail($cut,'Sai'); ?><div class="upgrade-cut-meta"><small><?= (float)$cut['cut_score'] ? 'Associação EDHREC: '.number_format((float)$cut['cut_score']*100,0,',','.').'%' : 'Sem associação encontrada na cache' ?></small><form method="post"><?php $tokenFields('confirm_upgrade',$upgradeIncoming['id']); ?><input type="hidden" name="remove_card" value="<?= h($cut['id']) ?>"><input type="hidden" name="reason" value="Plano de upgrade sugerido pela menor associação EDHREC."><button class="primary-link">Usar como carta que sai</button></form></div></article><?php endforeach; ?></div></section>
 <?php endif; ?>
 
+<?php
+$bulkEntries = array_filter($items, fn($entry) => $entry['stage'] === $selectionStage);
+$openSlots = max(0, 100 - $finalCount);
+$bulkMoves = ['candidate' => [['deck', 'Aprovar para o deck →', 'primary-link']], 'deck' => [['candidate', '← Voltar às candidatas', 'secondary-link']]][$selectionStage];
+?>
 <?php if($scores && $groups): require __DIR__.'/deck_scoring_view.php'; elseif(!$commander && $groups): ?><p class="notice warning">Escolha a comandante para calcular o Índice de Encaixe das cartas.</p><?php endif; ?>
 <?php if(!$groups): ?>
 <p class="empty-state">Nenhuma carta nesta etapa. <a href="?deck=<?= $id ?>&view=discover#explore">Explore o catálogo</a> ou mova uma carta de outra etapa.</p>
 <?php else: ?>
-<div class="selection-toolbar"><span><?= count($groups) ?> <?= count($groups)===1?'tipo':'tipos' ?> · <?= array_sum(array_map(fn($entries)=>array_sum(array_column($entries,'quantity')),$groups)) ?> cartas</span><div><button type="button" class="selection-toggle-all" data-selection-expand>Abrir todos</button><button type="button" class="selection-toggle-all" data-selection-collapse>Fechar todos</button></div></div>
+<div class="selection-toolbar"><span><?= count($groups) ?> <?= count($groups)===1?'tipo':'tipos' ?> · <?= array_sum(array_map(fn($entries)=>array_sum(array_column($entries,'quantity')),$groups)) ?> cartas</span><div><?php if($bulkEntries): ?><button type="button" class="selection-toggle-all selection-bulk-toggle" data-bulk-toggle aria-pressed="false" aria-controls="bulk-move-form">Selecionar várias</button><?php endif; ?><button type="button" class="selection-toggle-all" data-selection-expand>Abrir todos</button><button type="button" class="selection-toggle-all" data-selection-collapse>Fechar todos</button></div></div>
 <?php endif; ?>
 
 <div class="selection-groups stage-<?= h($selectionStage) ?>">
-<?php foreach($groups as $category=>$entries): $groupKey=substr(md5($category),0,10); $groupCount=array_sum(array_column($entries,'quantity')); ?>
+<?php foreach($groups as $category=>$entries): $groupKey=substr(md5($category),0,10); $groupCount=array_sum(array_column($entries,'quantity')); $groupPickable=$category==='Comandante'?0:count($entries); ?>
+<div class="selection-type-wrap">
+<?php if($groupPickable): ?><button type="button" class="selection-group-pick" data-bulk-group="<?= h($groupKey) ?>">Marcar <?= h(mb_strtolower($category)) ?></button><?php endif; ?>
 <details class="selection-type" data-selection-group="<?= h($groupKey) ?>">
 <summary>
     <span class="selection-type-title"><?= h($category) ?> <b><?= $groupCount ?></b></span>
@@ -85,18 +86,19 @@ $stageHints=[
 <div class="selection-slots">
 <?php foreach($entries as $entry): $preview=cardImageUrl($entry); $isCommander=$category==='Comandante'; $dialogId='selection-card-'.$entry['id']; $hasNotes=trim((string)($entry['notes']??''))!==''; $fit=$isCommander?null:($scores['cards'][$entry['id']]??null); ?>
 <article class="selection-slot <?= $isCommander?'is-commander':'' ?>">
+<?php if(!$isCommander): ?><label class="selection-pick"><input type="checkbox" name="cards[]" value="<?= h($entry['id']) ?>" form="bulk-move-form" data-bulk-card data-quantity="<?= (int)$entry['quantity'] ?>"><span class="sr-only">Marcar <?= h($entry['name']) ?></span></label><?php endif; ?>
 <?php if($isCommander): ?>
     <a class="selection-tile" href="/card.php?id=<?= h($entry['id']) ?>" title="Abrir página da comandante">
 <?php else: ?>
     <button type="button" class="selection-tile" data-selection-open="<?= h($dialogId) ?>" aria-haspopup="dialog" aria-label="Avaliar <?= h($entry['name']) ?>">
 <?php endif; ?>
         <span class="selection-art"><?php if($preview): ?><img src="<?= h($preview) ?>" alt="<?= h($entry['name']) ?>" loading="lazy" width="244" height="340"><?php else: ?><span class="placeholder image-fallback"><strong><?= h($entry['name']) ?></strong><span>Imagem indisponível</span></span><?php endif; ?>
-        <?php if($fit): ?><b class="fit-badge is-<?= h($fit['band']) ?>" data-fit-card="<?= h($entry['id']) ?>" title="Índice de Encaixe <?= (int)$fit['score'] ?> · <?= h(deckScoreBandLabel($fit['band'])) ?>"><?= (int)$fit['score'] ?></b><?php endif; ?>
-        <?php if((int)$entry['quantity']>1): ?><b class="selection-qty <?= $fit?'has-fit':'' ?>"><?= (int)$entry['quantity'] ?>×</b><?php endif; ?>
+        <?php if((int)$entry['quantity']>1): ?><b class="selection-qty"><?= (int)$entry['quantity'] ?>×</b><?php endif; ?>
         <?php if(deckIsGameChanger($entry)): ?><b class="gc-badge selection-gc" title="Game Changer">GC</b><?php endif; ?>
-        <?php if($selectionStage==='deck'||$isCommander) echo $inventoryBadge($entry); ?></span>
+        <?php if(!$isCommander && $selectionStage==='candidate' && !empty($fit['relationships'])): ?><b class="selection-relation" title="<?= count($fit['relationships']) ?> relações diretas; abra a carta para ver quais"><?= count($fit['relationships']) ?> relação<?= count($fit['relationships'])===1?'':'ões' ?></b><?php endif; ?>
+        <?php echo $inventoryBadge($entry); ?></span>
         <span class="selection-tile-name"><?= h($entry['name']) ?></span>
-        <span class="selection-tile-meta"><?php if($isCommander): ?>Comandante<?php else: ?><?php if($fit): ?><span class="fit-band-text is-<?= h($fit['band']) ?>" data-fit-label="<?= h($entry['id']) ?>"><?= h(deckScoreBandLabel($fit['band'])) ?></span> · <?php endif; ?><?= $entry['role']!==''&&$entry['role']!==null?h($entry['role']):($fit?h(implode(', ',array_slice($fit['roles'],0,2))):'Sem função') ?><?php if($hasNotes): ?> · <span class="selection-noted">avaliada</span><?php endif; ?><?php endif; ?></span>
+        <span class="selection-tile-meta"><?php if($isCommander): ?>Comandante<?php else: ?><?= $entry['role']!==''&&$entry['role']!==null?h($entry['role']):($fit?h(implode(', ',array_slice($fit['roles'],0,2))):'Sem função') ?><?php if($hasNotes): ?> · <span class="selection-noted">avaliada</span><?php endif; ?><?php endif; ?></span>
 <?php if($isCommander): ?></a><?php else: ?></button><?php endif; ?>
 
 <?php if(!$isCommander): ?>
@@ -114,32 +116,25 @@ $stageHints=[
             <p class="selection-dialog-type"><span><?= h($entry['type_line'] ?: 'Tipo não informado') ?></span><span class="selection-dialog-mana"><?= manaSymbols($entry['mana_cost']??null) ?></span></p>
             <div class="selection-dialog-oracle"><?= nl2br(h(deckText($entry) ?: 'Texto Oracle não disponível.')) ?></div>
             <?php if($fit): ?>
-            <details class="fit-breakdown" <?= $selectionStage!=='deck'?'open':'' ?>>
-                <summary><b class="fit-badge is-<?= h($fit['band']) ?>"><?= (int)$fit['score'] ?></b><span><strong>Índice de Encaixe · <?= h(deckScoreBandLabel($fit['band'])) ?></strong><small>Por que esta nota?</small></span></summary>
+            <details class="fit-breakdown relationship-breakdown" <?= $selectionStage==='candidate'?'open':'' ?>>
+                <summary><span><strong>Relações encontradas</strong><small><?= $fit['relationships'] ? count($fit['relationships']).' conexão(ões) direta(s)' : 'Nenhuma relação direta entre as candidatas' ?></small></span></summary>
                 <?php if($fit['blocked']): ?><p class="fit-alert is-blocked"><?= h($fit['blocked']) ?></p><?php endif; ?>
                 <?php foreach($fit['notes'] as $fitNote): ?><p class="fit-alert"><?= h($fitNote) ?></p><?php endforeach; ?>
-                <ul class="fit-parts">
-                    <?php foreach($fit['breakdown'] as $part): ?>
-                    <li><span class="fit-part-label"><?= h($part['label']) ?></span><span class="fit-part-bar" aria-hidden="true"><i style="width:<?= round($part['max'] ? $part['points']/$part['max']*100 : 0) ?>%"></i></span><b><?= number_format($part['points'],0,',','.') ?><small>/<?= number_format($part['max'],0,',','.') ?></small></b><small class="fit-part-detail"><?= h($part['detail']) ?></small></li>
-                    <?php endforeach; ?>
-                </ul>
-                <?php if($fit['multiplier']<1 || $fit['bonus']): ?><p class="fit-math">Soma dos componentes × <?= number_format($fit['multiplier'],2,',','.') ?> pelas regras<?= $fit['bonus'] ? ' + '.(int)$fit['bonus'].' de bônus' : '' ?> = <?= (int)$fit['score'] ?>.</p><?php endif; ?>
+                <?php if($fit['relationships']): ?><ul class="relationship-list"><?php foreach($fit['relationships'] as $relationship): ?><li><strong><?= h($relationship['name']) ?><?= $relationship['kind']==='commander'?' · comandante':'' ?></strong><?php if($relationship['offers']): ?><span>Esta carta oferece: <?= h(implode(', ',$relationship['offers'])) ?>.</span><?php endif; ?><?php if($relationship['receives']): ?><span>Recebe: <?= h(implode(', ',$relationship['receives'])) ?>.</span><?php endif; ?></li><?php endforeach; ?></ul><?php else: ?><p class="fit-alert">Ainda não há uma oferta ou necessidade textual que conecte esta carta às candidatas. Isso não é uma avaliação negativa.</p><?php endif; ?>
                 <p class="fit-tags"><?php if($fit['roles']): ?><span><em>Função</em> <?= h(implode(', ',$fit['roles'])) ?></span><?php endif; ?><?php if($fit['produces']): ?><span><em>Produz</em> <?= h(implode(', ',array_slice($fit['produces'],0,5))) ?></span><?php endif; ?><?php if($fit['cares']): ?><span><em>Procura</em> <?= h(implode(', ',array_slice($fit['cares'],0,5))) ?></span><?php endif; ?></p>
             </details>
             <?php endif; ?>
 
             <div class="selection-dialog-moves">
-                <?php if($entry['stage']==='candidate'): $moveButton($entry,'review','Enviar para avaliação →'); ?>
-                <?php elseif($entry['stage']==='review'): ?>
+                <?php if($entry['stage']==='candidate'): ?>
                     <?php if($finalCount===100): ?><form method="post"><?php $tokenFields('prepare_upgrade',$entry['id']); ?><button class="primary-link">Preparar upgrade</button></form><?php else: ?><form method="post"><?php $tokenFields('move',$entry['id']); ?><input type="hidden" name="stage" value="deck"><button class="primary-link">Aprovar para o deck →</button></form><?php endif; ?>
-                    <?php $moveButton($entry,'candidate','← Voltar às candidatas'); ?>
-                <?php elseif($entry['stage']==='deck'): $moveButton($entry,'review','← Voltar para avaliação'); ?>
+                <?php elseif($entry['stage']==='deck'): $moveButton($entry,'candidate','← Voltar às candidatas'); ?>
                 <?php endif; ?>
             </div>
 
             <form method="post" class="builder-form selection-dialog-form"><?php $tokenFields('item',$entry['id']); ?>
                 <div class="selection-dialog-fields">
-                    <label>Etapa<select name="stage"><?php $stageOptions=['candidate'=>['candidate','review'],'review'=>['candidate','review','deck'],'deck'=>['deck','review']][$entry['stage']]??[$entry['stage']]; foreach($stageOptions as $key): ?><option value="<?= h($key) ?>" <?= $key===$entry['stage']?'selected':'' ?>><?= h($stages[$key]) ?></option><?php endforeach; ?></select></label>
+                    <label>Etapa<select name="stage"><?php $stageOptions=$stageMoves[$entry['stage']]??[$entry['stage']]; foreach($stageOptions as $key): ?><option value="<?= h($key) ?>" <?= $key===$entry['stage']?'selected':'' ?>><?= h($stages[$key]) ?></option><?php endforeach; ?></select></label>
                     <label>Quantidade<input type="number" name="quantity" min="1" max="1000" value="<?= (int)$entry['quantity'] ?>" required></label>
                 </div>
                 <label>Função<input name="role" value="<?= h($entry['role']) ?>" maxlength="100" placeholder="Compra, ramp, proteção…"></label>
@@ -154,6 +149,25 @@ $stageHints=[
 <?php endforeach; ?>
 </div>
 </details>
+</div>
 <?php endforeach; ?>
 </div>
+<?php if($bulkEntries): ?>
+<form method="post" id="bulk-move-form" class="selection-bulkbar" data-bulk-bar data-open-slots="<?= $openSlots ?>" hidden><?php $tokenFields('bulk_move'); ?>
+    <div class="selection-bulk-info">
+        <strong data-bulk-count role="status" aria-live="polite">Nenhuma carta marcada</strong>
+        <span class="selection-bulk-quick">
+            <button type="button" data-bulk-all>Marcar todas</button>
+            <button type="button" data-bulk-none>Desmarcar</button>
+        </span>
+        <small class="selection-bulk-warning" data-bulk-warning hidden></small>
+    </div>
+    <div class="selection-bulk-actions">
+        <?php foreach($bulkMoves as [$destination,$label,$class]): ?>
+        <button type="submit" name="stage" value="<?= h($destination) ?>" class="<?= h($class) ?>" data-bulk-submit="<?= h($destination) ?>" disabled><?= h($label) ?></button>
+        <?php endforeach; ?>
+        <button type="button" class="selection-toggle-all" data-bulk-exit>Concluir</button>
+    </div>
+</form>
+<?php endif; ?>
 </section>

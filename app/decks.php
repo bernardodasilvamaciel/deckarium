@@ -15,8 +15,13 @@ $message = $_SESSION['builder_message'] ?? ''; unset($_SESSION['builder_message'
 $error = '';
 $view = ($_GET['view'] ?? $_POST['view'] ?? '') === 'selection' ? 'selection' : 'discover';
 $selectionStage = (string)($_GET['stage'] ?? $_POST['selection_stage'] ?? 'candidate');
-if (!in_array($selectionStage,['candidate','review','deck'],true)) $selectionStage='candidate';
-$stages = ['candidate'=>'Candidatas','review'=>'Em avaliação','deck'=>'No deck'];
+// "Em avaliação" foi unificada com as candidatas: links antigos com stage=review abrem as candidatas.
+if (!in_array($selectionStage,['candidate','deck'],true)) $selectionStage='candidate';
+$stages = ['candidate'=>'Candidatas','deck'=>'No deck'];
+$stageMoves = ['candidate'=>['candidate','deck'],'deck'=>['deck','candidate']];
+// Filtro "Tipo de carta" do Explorar possibilidades: chave da URL => [termo do type_line, rótulo].
+$cardTypeOptions = ['creature'=>['Creature','Criatura'],'instant'=>['Instant','Instantânea'],'sorcery'=>['Sorcery','Feitiço'],'artifact'=>['Artifact','Artefato'],'enchantment'=>['Enchantment','Encantamento'],'planeswalker'=>['Planeswalker','Planeswalker'],'land'=>['Land','Terreno']];
+$cardTypesFrom = fn($value): array => array_values(array_intersect(array_keys($cardTypeOptions), array_map('strval', array_filter((array)$value, 'is_scalar'))));
 $wantsJson = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'fetch';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
@@ -43,44 +48,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ($action === 'strategy') {
                 deckQuery('UPDATE builder_decks SET strategy=?,terms=? WHERE id=? AND user_id=?',[substr(trim((string)$_POST['strategy']),0,5000),substr(trim((string)$_POST['terms']),0,1000),$id,$userId]);
                 $message = 'Estratégia e termos salvos.';
-            } elseif (in_array($action, ['scoring_config','scoring_reset','score_preview','apply_suggestions'], true)) {
+            } elseif (in_array($action, ['scoring_config','scoring_reset'], true)) {
                 $scoreCommander = $deck['commander_id'] ? deckQuery('SELECT * FROM cards WHERE id=?',[$deck['commander_id']])->fetch() : null;
-                if (!$scoreCommander) throw new RuntimeException('Escolha uma comandante para calcular o Índice de Encaixe.');
+                if (!$scoreCommander) throw new RuntimeException('Escolha uma comandante antes de ajustar metas e regras.');
                 if ($action === 'scoring_reset') {
                     deckQuery('UPDATE builder_decks SET scoring_config=NULL WHERE id=? AND user_id=?',[$id,$userId]);
-                    $message = 'Fórmula restaurada para o padrão Equilibrado.';
+                    $message = 'Metas e regras restauradas para o padrão Equilibrado.';
                 } elseif ($action === 'scoring_config') {
                     $scoreConfig = deckScoreConfigFromPost($_POST);
                     deckQuery('UPDATE builder_decks SET scoring_config=?::jsonb WHERE id=? AND user_id=?',[json_encode($scoreConfig),$id,$userId]);
-                    $message = 'Fórmula do Índice de Encaixe salva para este deck.';
-                } else {
-                    $scoreConfig = $action === 'score_preview' ? deckScoreConfigFromPost($_POST) : deckScoreConfig($deck['scoring_config'] ?? null);
-                    $scoreItems = deckScoreLoadItems($id, $userId);
-                    $scores = deckScoreSelection($deck, $scoreCommander, $scoreItems, $scoreConfig);
-                    $scoreStage = in_array($selectionStage, ['candidate','review'], true) ? $selectionStage : 'candidate';
-                    $suggested = deckScoreSuggestions($scores, $scoreStage, $scoreConfig);
-                    if ($action === 'score_preview') {
-                        header('Content-Type: application/json; charset=utf-8');
-                        echo json_encode(['ok'=>true,'summary'=>$scores['summary'],'suggestions'=>count($suggested),
-                            'cards'=>array_map(fn($card)=>['score'=>$card['score'],'band'=>$card['band'],'stage'=>$card['stage'],'label'=>deckScoreBandLabel($card['band'])], $scores['cards'])], JSON_UNESCAPED_UNICODE);
-                        exit;
-                    }
-                    $chosen = array_values(array_intersect(array_map('strval', (array)($_POST['cards'] ?? [])), array_map('strval', array_keys($suggested))));
-                    if (!$chosen) throw new RuntimeException('Nenhuma sugestão selecionada para aplicar.');
-                    $destination = $scoreStage === 'candidate' ? 'review' : 'deck';
-                    db()->beginTransaction();
-                    try {
-                        foreach ($chosen as $chosenId) {
-                            if ($destination === 'deck') {
-                                $currentCount=(int)deckQuery("SELECT COALESCE(SUM(quantity),0) FROM builder_items WHERE deck_id=? AND stage='deck'",[$id])->fetchColumn()+1;
-                                if ($currentCount >= 100) break;
-                            }
-                            deckQuery('UPDATE builder_items SET stage=? WHERE deck_id=? AND card_id=? AND stage=?',[$destination,$id,$chosenId,$scoreStage]);
-                        }
-                        db()->commit();
-                    } catch (Throwable $e) { db()->rollBack(); throw $e; }
-                    $message = count($chosen).(count($chosen)===1?' carta avançou':' cartas avançaram').($destination==='deck'?' para o deck':' para avaliação').' pelo Índice de Encaixe.';
+                    $message = 'Metas e regras salvas para este deck.';
                 }
+            } elseif ($action === 'bulk_move') {
+                // Movimentação em massa na Minha seleção: mesmas regras do mover individual, aplicadas na ordem da tela.
+                $source = $selectionStage;
+                $destination = (string)($_POST['stage'] ?? '');
+                $bulkAllowed = ['candidate'=>['deck'],'deck'=>['candidate']];
+                if (!in_array($destination, $bulkAllowed[$source] ?? [], true)) throw new RuntimeException('Movimento inválido: as cartas vão das candidatas para o deck e podem voltar.');
+                $chosen = array_slice(array_values(array_unique(array_filter(array_map('strval', array_filter((array)($_POST['cards'] ?? []), 'is_scalar')), fn($value) => (bool)preg_match('/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i', $value)))), 0, 400);
+                if (!$chosen) throw new RuntimeException('Marque ao menos uma carta para mover.');
+                $moved = 0; $skippedFull = 0; $skippedCopies = 0;
+                db()->beginTransaction();
+                try {
+                    deckQuery('SELECT id FROM builder_decks WHERE id=? AND user_id=? FOR UPDATE', [$id, $userId]);
+                    $rows = [];
+                    foreach (deckQuery('SELECT i.card_id::text card_id,i.quantity,c.type_line FROM builder_items i JOIN cards c ON c.id=i.card_id WHERE i.deck_id=? AND i.stage=? AND i.card_id::text = ANY(?::text[])', [$id, $source, '{'.implode(',', array_map('strtolower', $chosen)).'}'])->fetchAll() as $row) $rows[strtolower($row['card_id'])] = $row;
+                    $slots = 100 - ((int)deckQuery("SELECT COALESCE(SUM(quantity),0) FROM builder_items WHERE deck_id=? AND stage='deck'", [$id])->fetchColumn() + ($deck['commander_id'] ? 1 : 0));
+                    foreach ($chosen as $chosenId) {
+                        $row = $rows[strtolower($chosenId)] ?? null;
+                        if (!$row) continue;
+                        $quantity = max(1, (int)$row['quantity']);
+                        if ($destination === 'deck') {
+                            if ($quantity > 1 && !str_contains((string)$row['type_line'], 'Basic')) { $skippedCopies++; continue; }
+                            if ($quantity > $slots) { $skippedFull++; continue; }
+                            $slots -= $quantity;
+                        }
+                        deckQuery('UPDATE builder_items SET stage=? WHERE deck_id=? AND card_id=?::uuid AND stage=?', [$destination, $id, $row['card_id'], $source]);
+                        $moved++;
+                    }
+                    db()->commit();
+                } catch (Throwable $e) { if (db()->inTransaction()) db()->rollBack(); throw $e; }
+                $skippedNotes = [];
+                if ($skippedFull) $skippedNotes[] = $skippedFull.($skippedFull === 1 ? ' ficou' : ' ficaram').' de fora porque o deck chegou a 100 cartas (use “Preparar upgrade”)';
+                if ($skippedCopies) $skippedNotes[] = $skippedCopies.($skippedCopies === 1 ? ' tem' : ' têm').' mais de 1 cópia e Commander só permite isso para terrenos básicos';
+                if (!$moved) throw new RuntimeException('Nenhuma carta foi movida'.($skippedNotes ? ': '.implode('; ', $skippedNotes) : ' — a seleção mudou desde que a página abriu. Recarregue e tente novamente').'.');
+                $destinationLabel = ['candidate'=>'as candidatas','deck'=>'o deck'][$destination];
+                $message = $moved.($moved === 1 ? ' carta movida' : ' cartas movidas').' para '.$destinationLabel.'.'.($skippedNotes ? ' '.ucfirst(implode('; ', $skippedNotes)).'.' : '');
             } elseif ($action === 'sync_edhrec') {
                 if(!$deck['commander_id']) throw new RuntimeException('Escolha um comandante antes de buscar recomendações.');
                 $commanderCard=deckQuery('SELECT * FROM cards WHERE id=?',[$deck['commander_id']])->fetch();
@@ -90,15 +103,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $currentCount=(int)deckQuery("SELECT COALESCE(SUM(quantity),0) FROM builder_items WHERE deck_id=? AND stage='deck'",[$id])->fetchColumn()+1;
                 if ($currentCount!==100) throw new RuntimeException('O deck precisa estar fechado com 100 cartas para preparar um upgrade.');
                 $incoming=deckQuery('SELECT stage FROM builder_items WHERE deck_id=? AND card_id=?',[$id,(string)($_POST['card']??'')])->fetch();
-                if (!$incoming || $incoming['stage']!=='review') throw new RuntimeException('A carta precisa passar por candidatas e avaliação antes do upgrade.');
+                if (!$incoming || $incoming['stage']!=='candidate') throw new RuntimeException('A carta precisa estar nas candidatas para entrar num upgrade.');
                 $message='Escolha abaixo qual carta sairá para abrir espaço para o upgrade.';
             } elseif ($action === 'confirm_upgrade') {
                 $remove=(string)($_POST['remove_card']??''); $incoming=(string)($_POST['card']??'');
                 $currentCount=(int)deckQuery("SELECT COALESCE(SUM(quantity),0) FROM builder_items WHERE deck_id=? AND stage='deck'",[$id])->fetchColumn()+1;
                 if ($currentCount!==100) throw new RuntimeException('O deck precisa estar fechado com 100 cartas para confirmar um upgrade.');
                 $out=deckQuery("SELECT c.* FROM builder_items i JOIN cards c ON c.id=i.card_id WHERE i.deck_id=? AND i.card_id=? AND i.stage='deck'",[$id,$remove])->fetch();
-                $in=deckQuery("SELECT c.* FROM builder_items i JOIN cards c ON c.id=i.card_id WHERE i.deck_id=? AND i.card_id=? AND i.stage='review'",[$id,$incoming])->fetch();
-                if(!$out||!$in) throw new RuntimeException('Escolha uma carta do deck para sair e uma carta em avaliação para entrar.');
+                $in=deckQuery("SELECT c.* FROM builder_items i JOIN cards c ON c.id=i.card_id WHERE i.deck_id=? AND i.card_id=? AND i.stage='candidate'",[$id,$incoming])->fetch();
+                if(!$out||!$in) throw new RuntimeException('Escolha uma carta do deck para sair e uma candidata para entrar.');
                 if(($out['oracle_id']?:$out['id'])===($in['oracle_id']?:$in['id'])) throw new RuntimeException('As cartas do upgrade precisam ser diferentes.');
                 if(deckQuery("SELECT 1 FROM deck_upgrades WHERE deck_id=? AND status='planned' AND (remove_card_id=? OR add_card_id=?) LIMIT 1",[$id,$remove,$incoming])->fetchColumn()) throw new RuntimeException('Uma destas cartas já participa de outro upgrade pendente.');
                 deckQuery('INSERT INTO deck_upgrades(deck_id,remove_card_id,add_card_id,reason) VALUES (?,?,?,?)',[$id,$remove,$incoming,substr(trim((string)($_POST['reason']??'')),0,2000)]);
@@ -110,11 +123,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if($action==='cancel_upgrade') { deckQuery('DELETE FROM deck_upgrades WHERE id=?',[$upgradeId]); $message='Upgrade cancelado. A seleção foi preservada.'; }
                 else {
                     $out=deckQuery("SELECT * FROM builder_items WHERE deck_id=? AND card_id=? AND stage='deck'",[$id,$plan['remove_card_id']])->fetch();
-                    $in=deckQuery("SELECT * FROM builder_items WHERE deck_id=? AND card_id=? AND stage='review'",[$id,$plan['add_card_id']])->fetch();
-                    if(!$out||!$in) throw new RuntimeException('As cartas do upgrade precisam continuar no deck e em avaliação.');
-                    deckQuery("UPDATE builder_items SET stage='review' WHERE deck_id=? AND card_id=?",[$id,$plan['remove_card_id']]);
+                    $in=deckQuery("SELECT * FROM builder_items WHERE deck_id=? AND card_id=? AND stage='candidate'",[$id,$plan['add_card_id']])->fetch();
+                    if(!$out||!$in) throw new RuntimeException('As cartas do upgrade precisam continuar no deck e nas candidatas.');
+                    deckQuery("UPDATE builder_items SET stage='candidate' WHERE deck_id=? AND card_id=?",[$id,$plan['remove_card_id']]);
                     deckQuery("UPDATE builder_items SET stage='deck' WHERE deck_id=? AND card_id=?",[$id,$plan['add_card_id']]);
-                    deckQuery("UPDATE deck_upgrades SET status='done' WHERE id=?",[$upgradeId]); $message='Upgrade confirmado. A nova carta entrou e a anterior voltou para avaliação.';
+                    deckQuery("UPDATE deck_upgrades SET status='done' WHERE id=?",[$upgradeId]); $message='Upgrade confirmado. A nova carta entrou e a anterior voltou para as candidatas.';
                 }
             } elseif (in_array($action,['commander','add','item','remove','move'],true)) {
                 $cardId = (string)($_POST['card'] ?? '');
@@ -131,8 +144,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stage=(string)($_POST['stage']??'');
                     if(!isset($stages[$stage])) throw new RuntimeException('Etapa inválida.');
                     $currentStage=(string)deckQuery('SELECT stage FROM builder_items WHERE deck_id=? AND card_id=?',[$id,$cardId])->fetchColumn();
-                    $allowed=['candidate'=>['candidate','review'],'review'=>['candidate','review','deck'],'deck'=>['deck','review']];
-                    if(!in_array($stage,$allowed[$currentStage]??[],true)) throw new RuntimeException('Siga a sequência candidatas → avaliação → deck.');
+                    $allowed=$stageMoves;
+                    if(!in_array($stage,$allowed[$currentStage]??[],true)) throw new RuntimeException('Movimento inválido: as cartas vão das candidatas para o deck e podem voltar.');
                     if($stage==='deck' && $currentStage!=='deck') {
                         if(!str_contains((string)$card['type_line'],'Basic') && (int)deckQuery('SELECT quantity FROM builder_items WHERE deck_id=? AND card_id=?',[$id,$cardId])->fetchColumn()>1) throw new RuntimeException('Commander permite apenas 1 cópia de cada carta. Apenas terrenos básicos podem ter quantidade maior.');
                         $currentCount=(int)deckQuery("SELECT COALESCE(SUM(quantity),0) FROM builder_items WHERE deck_id=? AND stage='deck'",[$id])->fetchColumn()+($deck['commander_id']?1:0);
@@ -157,8 +170,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!isset($stages[$stage]) || !$quantity || $quantity<1 || $quantity>1000) throw new RuntimeException('Etapa ou quantidade inválida.');
                     if ($quantity>1 && !str_contains((string)$card['type_line'],'Basic')) throw new RuntimeException('Commander permite apenas 1 cópia de cada carta. Apenas terrenos básicos podem ter quantidade maior.');
                     $currentStage=(string)deckQuery('SELECT stage FROM builder_items WHERE deck_id=? AND card_id=?',[$id,$cardId])->fetchColumn();
-                    $allowed=['candidate'=>['candidate','review'],'review'=>['candidate','review','deck'],'deck'=>['deck','review']];
-                    if($stage!==$currentStage && !in_array($stage,$allowed[$currentStage]??[],true)) throw new RuntimeException('Siga a sequência candidatas → avaliação → deck.');
+                    $allowed=$stageMoves;
+                    if($stage!==$currentStage && !in_array($stage,$allowed[$currentStage]??[],true)) throw new RuntimeException('Movimento inválido: as cartas vão das candidatas para o deck e podem voltar.');
                     if($stage==='deck' && $currentStage!=='deck') {
                         $currentCount=(int)deckQuery("SELECT COALESCE(SUM(quantity),0) FROM builder_items WHERE deck_id=? AND stage='deck'",[$id])->fetchColumn()+($deck['commander_id']?1:0);
                         if($currentCount>=100) throw new RuntimeException('O deck já tem 100 cartas. Use “Preparar upgrade” para escolher a carta que sairá.');
@@ -178,7 +191,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['builder_message'] = $message;
         $return = '/decks.php' . ($id ? '?deck='.$id : '');
         if ($id && in_array($action,['add','item','remove'],true)) {
-            $return .= '&'.http_build_query(['q'=>(string)($_POST['q']??''),'oracle'=>(string)($_POST['oracle']??''),'type'=>(string)($_POST['type']??''),'match'=>(string)($_POST['match']??'all'),'availability'=>(string)($_POST['availability']??'all'),'colors'=>(string)($_POST['colors']??''),'sort'=>(string)($_POST['sort']??'relevance'),'rarity'=>(string)($_POST['rarity']??''),'set'=>(string)($_POST['set']??''),'cmc_min'=>(string)($_POST['cmc_min']??''),'cmc_max'=>(string)($_POST['cmc_max']??''),'page'=>max(1,(int)($_POST['page']??1))]);
+            $return .= '&'.http_build_query(['q'=>(string)($_POST['q']??''),'oracle'=>(string)($_POST['oracle']??''),'type'=>(string)($_POST['type']??''),'match'=>(string)($_POST['match']??'all'),'availability'=>(string)($_POST['availability']??'all'),'colors'=>(string)($_POST['colors']??''),'sort'=>(string)($_POST['sort']??'relevance'),'rarity'=>(string)($_POST['rarity']??''),'set'=>(string)($_POST['set']??''),'cmc_min'=>(string)($_POST['cmc_min']??''),'cmc_max'=>(string)($_POST['cmc_max']??''),'card_types'=>$cardTypesFrom($_POST['card_types']??[]),'role'=>(string)($_POST['role']??''),'page'=>max(1,(int)($_POST['page']??1))]);
             $return .= $action==='add' ? '#result-'.rawurlencode($cardId) : '#selection';
         }
         if($id && $view==='selection') {
@@ -244,14 +257,20 @@ $excludeOwned = $availability==='missing';
 // Com comandante escolhida, a busca começa limitada à identidade dela; o formulário envia colors_set para respeitar a escolha do usuário.
 $colorsOnly = array_key_exists('colors',$_GET) ? ($_GET['colors']==='1') : (isset($_GET['colors_set']) ? false : (bool)$commander);
 $commanderColors=array_values(array_intersect((array)($_GET['commander_colors']??[]),['W','U','B','R','G','C']));
+$cardTypes = $choosingCommander ? [] : $cardTypesFrom($_GET['card_types'] ?? []);
+// Função no deck (ramp, remoção…): usa o índice de funções do Índice de Encaixe.
+$roleFilterOptions = array_diff_key(DECK_SCORE_ROLES, ['plan'=>1]);
+$roleFilter = (string)($_GET['role'] ?? '');
+if ($choosingCommander || !isset($roleFilterOptions[$roleFilter])) $roleFilter = '';
 $catalogVisible = $deck && $view==='discover';
 $setOptions = $catalogVisible ? catalogCached('deck-filter-sets-v1',fn()=>deckQuery("SELECT set_code,MAX(set_name) set_name FROM cards WHERE set_code IS NOT NULL AND set_code<>'' GROUP BY set_code ORDER BY MAX(set_name),set_code")->fetchAll()) : [];
 $page = max(1,min(10000,(int)($_GET['page']??1)));
 $terms = array_slice(deckTerms($oracle),0,12);
 $highlightTerms=array_merge($terms,deckTerms($type),$q!==''?[$q]:[]);
-$filterHidden = function() use($q,$oracle,$type,$match,$availability,$colorsOnly,$sort,$rarity,$setFilter,$cmcMin,$cmcMax,$commanderColors,$page): void {
-    foreach (['q'=>$q,'oracle'=>$oracle,'type'=>$type,'match'=>$match,'availability'=>$availability,'colors'=>$colorsOnly?'1':'','sort'=>$sort,'rarity'=>$rarity,'set'=>$setFilter,'cmc_min'=>$cmcMin??'','cmc_max'=>$cmcMax??'','page'=>$page] as $k=>$v) echo '<input type="hidden" name="'.h($k).'" value="'.h((string)$v).'">';
+$filterHidden = function() use($q,$oracle,$type,$match,$availability,$colorsOnly,$sort,$rarity,$setFilter,$cmcMin,$cmcMax,$commanderColors,$cardTypes,$roleFilter,$page): void {
+    foreach (['q'=>$q,'oracle'=>$oracle,'type'=>$type,'match'=>$match,'availability'=>$availability,'colors'=>$colorsOnly?'1':'','sort'=>$sort,'rarity'=>$rarity,'set'=>$setFilter,'cmc_min'=>$cmcMin??'','cmc_max'=>$cmcMax??'','role'=>$roleFilter,'page'=>$page] as $k=>$v) echo '<input type="hidden" name="'.h($k).'" value="'.h((string)$v).'">';
     foreach($commanderColors as $color) echo '<input type="hidden" name="commander_colors[]" value="'.h($color).'">';
+    foreach($cardTypes as $cardType) echo '<input type="hidden" name="card_types[]" value="'.h($cardType).'">';
 };
 $tokenFields = function(string $action, ?string $card = null) use($csrf,$id,$view,$selectionStage): void {
     echo '<input type="hidden" name="view" value="'.h($view).'"><input type="hidden" name="selection_stage" value="'.h($selectionStage).'">';
@@ -269,6 +288,16 @@ $items = $deck ? deckQuery(deckOwnedSql()."SELECT c.*,i.stage,i.quantity,i.role,
     ) x),0) other_decks
     FROM builder_items i JOIN cards c ON c.id=i.card_id LEFT JOIN owned o ON o.logical_id=COALESCE(c.oracle_id,c.id) LEFT JOIN ".deckCollectionPrintingSql()." bc ON bc.scryfall_id=c.id WHERE i.deck_id=? ORDER BY c.name",[$id])->fetchAll() : [];
 $leader=$commander ? ($commander['oracle_id']?:$commander['id']) : null;
+$needPanel = [];
+if ($commander && !$choosingCommander && $view==='discover') {
+    try {
+        $needConfig = deckScoreConfig($deck['scoring_config'] ?? null);
+        $needPanel = deckNeedSuggestions($commander, deckScoreSelection($deck, $commander, $items, $needConfig), $items, $needConfig);
+    } catch (Throwable $needError) {
+        error_log('Painel de necessidades: '.$needError->getMessage());
+        $needPanel = [];
+    }
+}
 $selectedByLogical = [];
 foreach ($items as $selected) $selectedByLogical[(string)($selected['oracle_id'] ?: $selected['id'])] = $selected;
 $pendingUpgrade=null; $pendingUpgrades=[]; $upgradeCuts=[];
@@ -311,6 +340,59 @@ if($recommendedLandTotal!==null){
     for($i=0;$allocated<$recommendedLandTotal;$i++,$allocated++) $landRecommendation[$rankedColors[$i%count($rankedColors)]]++;
 }
 if ($deck && isset($_GET['export'])) {
+    if($_GET['export']==='json'){
+        // Exportação completa: deck, comandante, candidatas e todos os dados de cada carta.
+        $jsonColumns=['colors','color_identity','keywords','prices','legalities','card_faces','raw'];
+        $decodeCard=function(array $row) use($jsonColumns): array {
+            $card=[];
+            foreach(['id','oracle_id','lang','name','mana_cost','cmc','type_line','oracle_text','colors','color_identity','keywords','set_code','set_name','collector_number','rarity','artist','released_at','layout','image_uri','image_uri_back','prices','legalities','card_faces','edhrec_rank_cached','commander_eligible','imported_at','raw'] as $key){
+                if(!array_key_exists($key,$row)) continue;
+                $value=$row[$key];
+                if(in_array($key,$jsonColumns,true) && is_string($value)) $value=json_decode($value,true);
+                if($key==='cmc' && $value!==null) $value=(float)$value;
+                if($key==='commander_eligible' && $value!==null) $value=in_array($value,[true,'t',1,'1'],true);
+                $card[$key==='edhrec_rank_cached'?'edhrec_rank':$key]=$value;
+            }
+            return $card;
+        };
+        $jsonConfig=deckScoreConfig($deck['scoring_config']??null);
+        $jsonScores=$commander ? deckScoreSelection($deck,$commander,$items,$jsonConfig) : null;
+        $jsonSynergy=$commander ? deckQuery("SELECT COALESCE(card.oracle_id,card.id)::text,json_build_object('score',MAX(s.score),'inclusion',MAX(s.inclusion),'metric',MAX(s.metric),'synced_at',MAX(s.synced_at)) FROM deck_synergy s JOIN cards leader ON leader.id=s.commander_id JOIN cards card ON card.id=s.card_id WHERE COALESCE(leader.oracle_id,leader.id)=?::uuid GROUP BY 1",[$leader])->fetchAll(PDO::FETCH_KEY_PAIR) : [];
+        $gameChangerNames=array_flip(array_map('strtolower',deckScoreGameChangers()));
+        $cardEntry=function(array $row,string $stage,int $quantity,string $role,string $notes,int $owned,int $otherUsed) use($decodeCard,$jsonScores,$jsonSynergy,$gameChangerNames): array {
+            $logical=(string)($row['oracle_id']?:$row['id']); $fit=$jsonScores['cards'][$row['id']]??null;
+            $synergy=isset($jsonSynergy[$logical]) ? json_decode((string)$jsonSynergy[$logical],true) : null;
+            return [
+                'name'=>$row['name'],
+                'selection'=>['stage'=>$stage,'stage_label'=>$stage==='commander'?'Comandante':deckStageLabel($stage),'quantity'=>$quantity,'role'=>$role,'notes'=>$notes],
+                'collection'=>['owned_total'=>$owned,'owned_this_printing'=>(int)($row['owned_printing']??0),'normal'=>(int)($row['normal_quantity']??0),'foil'=>(int)($row['foil_quantity']??0),'used_in_other_decks'=>$otherUsed,'available'=>max(0,$owned-$otherUsed),'missing'=>max(0,$quantity-max(0,$owned-$otherUsed))],
+                'price_brl'=>deckSelectedPriceBrl($row),
+                'game_changer'=>isset($gameChangerNames[strtolower((string)$row['name'])]),
+                'images'=>['front'=>cardImageUrl($row),'back'=>cardImageUrl($row,'back')],
+                'edhrec_synergy'=>$synergy,
+                'relationships'=>$fit ? ['blocked'=>$fit['blocked'],'roles'=>$fit['roles'],'produces'=>$fit['produces'],'cares'=>$fit['cares'],'notes'=>$fit['notes'],'connections'=>$fit['relationships']] : null,
+                'scryfall'=>$decodeCard($row),
+            ];
+        };
+        $jsonCards=[];
+        foreach($items as $row) $jsonCards[]=$cardEntry($row,(string)$row['stage'],(int)$row['quantity'],(string)$row['role'],(string)$row['notes'],(int)$row['owned'],(int)$row['other_used']);
+        usort($jsonCards,fn($a,$b)=>[$a['selection']['stage']!=='deck',$a['name']]<=>[$b['selection']['stage']!=='deck',$b['name']]);
+        $payload=[
+            'format'=>'deckarium-deck','version'=>1,'exported_at'=>date(DATE_ATOM),
+            'deck'=>['id'=>(int)$deck['id'],'name'=>$deck['name'],'status'=>$deck['status'],'strategy'=>$deck['strategy'],'terms'=>$deck['terms'],'created_at'=>$deck['created_at'],
+                'card_count'=>$finalCount,'land_count'=>$landCount,'candidate_count'=>array_sum(array_map(fn($row)=>$row['stage']==='candidate'?(int)$row['quantity']:0,$items)),
+                'color_identity'=>$identity,'price_total_brl'=>round($deckPriceTotal,2),'unpriced_cards'=>$deckUnpriced,
+                'mana_curve'=>array_map('intval',$curveCounts),'mana_symbols'=>$pipCounts,'warnings'=>$warnings,'shopping_list'=>$shopping],
+            'relationships'=>['config'=>$jsonConfig,'needs'=>$jsonScores['needs']??[],'open_slots'=>$jsonScores['open_slots']??null,'game_changers'=>$jsonScores['game_changers']??null],
+            'commander'=>$commander ? $cardEntry($commander,'commander',1,'Comandante','',(int)($commanderOwned??0),(int)($commanderOtherUsed??0)) : null,
+            'cards'=>$jsonCards,
+            'upgrades'=>array_map(fn($u)=>['id'=>(int)$u['id'],'remove'=>$u['remove_name'],'add'=>$u['add_name'],'reason'=>$u['reason'],'status'=>$u['status'],'created_at'=>$u['created_at']],$pendingUpgrades),
+        ];
+        $fileName=trim((string)preg_replace('/[^a-z0-9]+/','-',strtolower(iconv('UTF-8','ASCII//TRANSLIT//IGNORE',(string)$deck['name'])?:'deck')),'-')?:'deck';
+        header('Content-Type: application/json; charset=utf-8'); header('Content-Disposition: attachment; filename="deckarium-'.$fileName.'-'.$id.'.json"');
+        echo json_encode($payload,JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_INVALID_UTF8_SUBSTITUTE|JSON_PRESERVE_ZERO_FRACTION);
+        exit;
+    }
     if($_GET['export']==='liga'){
         $scope=($_GET['liga_scope']??'missing')==='all'?'all':'missing';$ligaRows=[];
         $addLigaRow=function(array $row,int $quantity,int $owned) use(&$ligaRows,$scope):void{
@@ -342,11 +424,21 @@ if ($catalogVisible) {
         $params[]=$like($term);
     }
     if ($typeConditions) $where[]='('.implode(' OR ',$typeConditions).')';
+    // Tipo de carta: qualquer um dos tipos marcados (ex.: Instantânea ou Feitiço), em qualquer face.
+    if ($cardTypes) {
+        $where[]='('.implode(' OR ',array_fill(0,count($cardTypes),"COALESCE(c.type_line,'') ILIKE ?")).')';
+        foreach ($cardTypes as $cardType) $params[]='%'.$cardTypeOptions[$cardType][0].'%';
+    }
     $conditions=[];foreach($terms as $term){$conditions[]="({$textExpr}) ILIKE ?";$params[]=$like($term);}
     if($conditions)$where[]='('.implode($match==='any'?' OR ':' AND ',$conditions).')';
     if($ownedOnly)$where[]='COALESCE(o.owned,0)>0';
     if($excludeOwned)$where[]='COALESCE(o.owned,0)=0';
     if($colorsOnly && $commander){$where[]='c.color_identity <@ ?::jsonb';$params[]=json_encode($identity);}
+    if($roleFilter!==''){
+        // Com comandante, só a identidade dela; sem, qualquer cor.
+        $roleIds = deckNeedRoleIds($roleFilter, $commander ? $identity : ['W','U','B','R','G']);
+        $where[]='COALESCE(c.oracle_id,c.id) = ANY(?::uuid[])'; $params[]='{'.implode(',',$roleIds).'}';
+    }
     if($rarity!==''){$where[]='c.rarity=?';$params[]=$rarity;}
     if($setFilter!==''){$where[]='upper(c.set_code)=?';$params[]=$setFilter;}
     if($cmcMin!==null){$where[]='COALESCE(c.cmc,0)>=?';$params[]=$cmcMin;}
@@ -413,7 +505,7 @@ pageHeader('Meus decks');
 <?php endif; ?>
 <?php require __DIR__.'/deck_discovery_view.php'; ?>
 <?php else: require __DIR__.'/deck_selection_view.php'; ?>
-<section id="balance" class="section-block"><h2>Análise e próximos passos</h2><div class="builder-intro"><div class="panel"><h3>Composição escolhida</h3><p><strong><?= $finalCount ?></strong> cartas contando o comandante · <strong><?= $landCount ?></strong> terrenos</p><p class="deck-value"><span>Valor estimado das cartas aprovadas</span><strong>R$ <?= number_format($deckPriceTotal,2,',','.') ?></strong><?php if($deckUnpriced): ?><small><?= $deckUnpriced ?> carta(s) sem cotação</small><?php endif; ?></p><p>Referência para o formato: 100 cartas. <?= max(0,100-$finalCount) ?> espaços restantes<?= $finalCount>100?' · '.($finalCount-100).' acima da referência':'' ?>.</p><?php foreach($roles as $role=>$count): ?><p><?= h($role) ?>: <?= $count ?></p><?php endforeach; ?><p class="muted">As funções só contam as cartas aprovadas, com a classificação que você informou.</p><h3>Demanda de mana colorida</h3><p><?= h(implode(' · ',array_map(fn($c)=>$c.': '.$pipCounts[$c],array_keys($pipCounts)))) ?></p><p class="muted">Contagem de símbolos nos custos. Híbridos contam em ambas as cores. Não é uma recomendação de terrenos: custos alternativos, faces, aceleração e turnos de jogo exigem avaliação adicional.</p><?php foreach($warnings as $warning): ?><p class="notice warning"><?= h($warning) ?></p><?php endforeach; ?><p class="muted">Alertas básicos, não uma validação completa de legalidade ou força do deck.</p><a href="?deck=<?= $id ?>&export=deck">Exportar deck em texto</a><form method="get" class="liga-export"><input type="hidden" name="deck" value="<?= $id ?>"><input type="hidden" name="export" value="liga"><label>Exportação para Liga<select name="liga_scope"><option value="missing">Somente cartas que faltam</option><option value="all">Deck completo, inclusive minha coleção</option></select></label><button class="secondary-link">Baixar CSV padrão Liga</button></form></div>
+<section id="balance" class="section-block"><h2>Análise e próximos passos</h2><div class="builder-intro"><div class="panel"><h3>Composição escolhida</h3><p><strong><?= $finalCount ?></strong> cartas contando o comandante · <strong><?= $landCount ?></strong> terrenos</p><p class="deck-value"><span>Valor estimado das cartas aprovadas</span><strong>R$ <?= number_format($deckPriceTotal,2,',','.') ?></strong><?php if($deckUnpriced): ?><small><?= $deckUnpriced ?> carta(s) sem cotação</small><?php endif; ?></p><p>Referência para o formato: 100 cartas. <?= max(0,100-$finalCount) ?> espaços restantes<?= $finalCount>100?' · '.($finalCount-100).' acima da referência':'' ?>.</p><?php foreach($roles as $role=>$count): ?><p><?= h($role) ?>: <?= $count ?></p><?php endforeach; ?><p class="muted">As funções só contam as cartas aprovadas, com a classificação que você informou.</p><h3>Demanda de mana colorida</h3><p><?= h(implode(' · ',array_map(fn($c)=>$c.': '.$pipCounts[$c],array_keys($pipCounts)))) ?></p><p class="muted">Contagem de símbolos nos custos. Híbridos contam em ambas as cores. Não é uma recomendação de terrenos: custos alternativos, faces, aceleração e turnos de jogo exigem avaliação adicional.</p><?php foreach($warnings as $warning): ?><p class="notice warning"><?= h($warning) ?></p><?php endforeach; ?><p class="muted">Alertas básicos, não uma validação completa de legalidade ou força do deck.</p><span class="deck-export-links"><a href="?deck=<?= $id ?>&export=deck">Exportar deck em texto</a><a href="?deck=<?= $id ?>&export=json" title="Deck, candidatas e comandante com todos os dados de cada carta: Scryfall completo, coleção, preços, notas e Índice de Encaixe">Exportar deck em JSON (completo)</a></span><form method="get" class="liga-export"><input type="hidden" name="deck" value="<?= $id ?>"><input type="hidden" name="export" value="liga"><label>Exportação para Liga<select name="liga_scope"><option value="missing">Somente cartas que faltam</option><option value="all">Deck completo, inclusive minha coleção</option></select></label><button class="secondary-link">Baixar CSV padrão Liga</button></form></div>
 <div class="panel"><h3>Disponibilidade das cartas</h3><p>Os indicadores aparecem sobre cada carta aprovada e consideram todas as impressões da mesma carta.</p><div class="inventory-legend"><span><i class="inventory-dot is-available"></i> Disponível na coleção</span><span><i class="inventory-dot is-limited"></i> Quantidade limitada</span><span><i class="inventory-dot is-reserved"></i> Usada em outros decks</span></div><p class="muted">Uma cópia física só pode ser comprometida uma vez. Se você possui duas cópias, a carta pode aparecer em até dois decks. Cartas candidatas não reservam cópias.</p></div></div></section>
 <?php endif; endif; if ($deck && $commander && !$choosingCommander): ?>
 <section id="mana-analysis" class="section-block mana-analysis"><div class="section-heading"><div><h2>Leitura do deck</h2><p class="muted">Uma visão rápida da curva e dos símbolos de mana das cartas aprovadas.</p></div><span class="analysis-total"><?= $finalCount ?>/100 cartas</span></div><div class="analysis-grid"><div class="panel"><h3>Curva de mana</h3><div class="mana-curve" aria-label="Curva de mana"><?php for($cost=0;$cost<=10;$cost++): $count=(int)($curveCounts[$cost]??0); ?><button type="button" class="mana-column" data-mana-cost="<?= $cost ?>" aria-controls="mana-list-<?= $cost ?>" aria-expanded="false"><span><?= $count ?></span><i class="mana-bar" style="height:<?= $maxCurve?max(4,round($count/$maxCurve*110)):4 ?>px"></i><small><?= $cost===10?'10+':$cost ?></small></button><?php endfor; ?></div><?php for($cost=0;$cost<=10;$cost++): ?><div class="mana-card-list" id="mana-list-<?= $cost ?>" data-mana-list="<?= $cost ?>" hidden><h4>Cartas de custo <?= $cost===10?'10 ou mais':$cost ?></h4><?php if(!$curveCards[$cost]): ?><p class="muted">Nenhuma carta final nesse valor.</p><?php else: foreach($curveCards[$cost] as $curveCard): ?><a class="mana-card-item" href="/card.php?id=<?= h($curveCard['id']) ?>"><?php if($src=cardImageUrl($curveCard,'front','small')): ?><img src="<?= h($src) ?>" alt="" loading="lazy"><?php endif; ?><span><strong><?= (int)($curveCard['quantity']??1) ?>× <?= h($curveCard['name']) ?></strong><small><?= h($curveCard['type_line']??'') ?></small></span></a><?php endforeach; endif; ?></div><?php endfor; ?><p class="muted">Cartas não-terreno aprovadas no deck final. Clique em uma barra para ver as cartas daquele valor. Upgrades planejados não entram até serem confirmados.</p></div><div class="panel"><h3>Porcentagem de mana escolhida</h3><div class="mana-distribution"><?php foreach($pipCounts as $color=>$count): $percent=$manaTotal?round($count/$manaTotal*100):0; ?><div><div class="mana-label"><strong><?= $color ?></strong><span><?= $percent ?>% · <?= $count ?> símbolos</span></div><div class="mana-track"><i class="mana-fill mana-<?= $color ?>" style="width:<?= $percent ?>%"></i></div></div><?php endforeach; ?></div><p class="muted">Baseado nos custos das cartas aprovadas e da comandante. Terrenos básicos não entram nesta porcentagem.</p></div></div></section>

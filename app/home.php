@@ -12,20 +12,6 @@ declare(strict_types=1);
     </form>
     <div class="home-explore"><span>Comece por</span><a href="/?type=Dragon#catalogo">Dragões</a><a href="/?type=Legendary#catalogo">Lendárias</a><a href="/?catalog=1#catalogo">Todo o catálogo</a></div>
   </div>
-  <figure class="dragon-exhibit">
-    <div class="dragon-stage" id="dragon-stage" aria-label="Smaug, modelo 3D de J.Kirkwood">
-      <img class="dragon-fallback" src="/assets/smaug-reference.png" width="488" height="680" alt="Carta Smaug the Magnificent, referência para a escultura do dragão">
-      <div class="dragon-controls" hidden>
-        <button type="button" data-dragon="left" aria-label="Girar dragão à esquerda"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10a8 8 0 1 1 1 9M4 4v6h6"/></svg></button>
-        <button type="button" data-dragon="pause" aria-pressed="false">Pausar</button>
-        <button type="button" data-dragon="right" aria-label="Girar dragão à direita"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a8 8 0 1 0-1 9M20 4v6h-6"/></svg></button>
-        <button type="button" data-dragon="full">Corpo inteiro</button>
-        <button type="button" data-dragon="detail">Detalhes</button>
-      </div>
-      <button class="dragon-retry" type="button" hidden>Tentar carregar o 3D</button>
-    </div>
-    <figcaption><div><strong>Smaug, o Magnífico</strong><span>Modelo de <a href="https://sketchfab.com/3d-models/8136889761c84cc1b6815b11aa7f6f74" target="_blank" rel="noopener noreferrer">J.Kirkwood</a> · Sketchfab · requer internet</span></div><small id="dragon-hint" role="status">Ative o JavaScript para explorar o modelo 3D.</small></figcaption>
-  </figure>
 </section>
 <nav class="home-destinations" aria-label="Seu espaço no Deckarium">
   <a href="/collection.php"><span><strong>Minha coleção</strong><small>Suas cartas, bem organizadas.</small></span><span aria-hidden="true">↗</span></a>

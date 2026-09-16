@@ -132,6 +132,31 @@
     });
     guide.addEventListener('toggle', () => { try { localStorage.setItem(openKey, guide.open ? '1' : '0'); } catch (error) { /* armazenamento indisponível */ } });
   });
+  document.querySelectorAll('[data-deck-needs]').forEach(panel => {
+    const tabs = [...panel.querySelectorAll('[data-need-tab]')];
+    const panels = [...panel.querySelectorAll('[data-need-panel]')];
+    if (!tabs.length) return;
+    panel.classList.add('js-needs');
+    const select = (name, focus = false) => {
+      tabs.forEach(tab => {
+        const active = tab.dataset.needTab === name;
+        tab.setAttribute('aria-selected', String(active));
+        tab.tabIndex = active ? 0 : -1;
+        if (active && focus) tab.focus();
+      });
+      panels.forEach(item => { item.hidden = item.dataset.needPanel !== name; });
+    };
+    select((tabs.find(tab => tab.getAttribute('aria-selected') === 'true') || tabs[0]).dataset.needTab);
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => select(tab.dataset.needTab));
+      tab.addEventListener('keydown', event => {
+        if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+        select(tabs[next].dataset.needTab, true);
+      });
+    });
+  });
   document.querySelectorAll('[data-dialog-open]').forEach(trigger => {
     const dialog = document.getElementById(trigger.dataset.dialogOpen);
     if (!(dialog instanceof HTMLDialogElement)) return;
@@ -223,6 +248,73 @@
     groups.forEach(group => group.addEventListener('toggle', persist));
     selectionWorkspace.querySelector('[data-selection-expand]')?.addEventListener('click', () => { groups.forEach(group => { group.open = true; }); persist(); });
     selectionWorkspace.querySelector('[data-selection-collapse]')?.addEventListener('click', () => { groups.forEach(group => { group.open = false; }); persist(); });
+
+    /* Movimentação em massa: marca cartas e move todas de uma vez. */
+    const bulkForm = selectionWorkspace.querySelector('[data-bulk-bar]');
+    const bulkToggle = selectionWorkspace.querySelector('[data-bulk-toggle]');
+    if (bulkForm && bulkToggle) {
+      const boxes = [...selectionWorkspace.querySelectorAll('[data-bulk-card]')];
+      const countNode = bulkForm.querySelector('[data-bulk-count]');
+      const warning = bulkForm.querySelector('[data-bulk-warning]');
+      const openSlots = Number(bulkForm.dataset.openSlots || 0);
+      const groupBoxes = key => boxes.filter(box => box.closest('.selection-type-wrap')?.querySelector('[data-bulk-group]')?.dataset.bulkGroup === key);
+      const update = () => {
+        const chosen = boxes.filter(box => box.checked);
+        const copies = chosen.reduce((sum, box) => sum + Number(box.dataset.quantity || 1), 0);
+        boxes.forEach(box => box.closest('.selection-slot')?.classList.toggle('is-picked', box.checked));
+        countNode.textContent = chosen.length ? `${chosen.length} ${chosen.length === 1 ? 'carta marcada' : 'cartas marcadas'}` : 'Nenhuma carta marcada';
+        bulkForm.querySelectorAll('[data-bulk-submit]').forEach(button => { button.disabled = !chosen.length; });
+        const deckButton = bulkForm.querySelector('[data-bulk-submit="deck"]');
+        const overflow = deckButton && copies > openSlots;
+        warning.hidden = !overflow;
+        if (overflow) warning.textContent = openSlots ? `O deck tem ${openSlots} ${openSlots === 1 ? 'vaga' : 'vagas'}: entram as primeiras na ordem da tela e o restante fica nas candidatas.` : 'O deck já tem 100 cartas. Use “Preparar upgrade” numa carta para trocar.';
+        selectionWorkspace.querySelectorAll('[data-bulk-group]').forEach(button => {
+          const own = groupBoxes(button.dataset.bulkGroup);
+          const all = own.length && own.every(box => box.checked);
+          button.classList.toggle('is-active', all);
+          button.setAttribute('aria-pressed', String(all));
+        });
+      };
+      const setMode = on => {
+        selectionWorkspace.classList.toggle('is-bulk', on);
+        bulkForm.hidden = !on;
+        bulkToggle.setAttribute('aria-pressed', String(on));
+        bulkToggle.textContent = on ? 'Sair da seleção' : 'Selecionar várias';
+        if (!on) boxes.forEach(box => { box.checked = false; });
+        update();
+      };
+      bulkToggle.addEventListener('click', () => setMode(!selectionWorkspace.classList.contains('is-bulk')));
+      bulkForm.querySelector('[data-bulk-exit]')?.addEventListener('click', () => { setMode(false); bulkToggle.focus(); });
+      bulkForm.querySelector('[data-bulk-all]')?.addEventListener('click', () => { boxes.forEach(box => { box.checked = true; }); update(); });
+      bulkForm.querySelector('[data-bulk-none]')?.addEventListener('click', () => { boxes.forEach(box => { box.checked = false; }); update(); });
+      bulkForm.querySelector('[data-bulk-band]')?.addEventListener('click', event => {
+        const band = event.currentTarget.dataset.bulkBand;
+        boxes.forEach(box => { box.checked = Boolean(box.closest('.selection-slot')?.querySelector(`.fit-badge.is-${band}`)); });
+        update();
+      });
+      selectionWorkspace.querySelectorAll('[data-bulk-group]').forEach(button => button.addEventListener('click', () => {
+        const own = groupBoxes(button.dataset.bulkGroup);
+        const check = !own.every(box => box.checked);
+        own.forEach(box => { box.checked = check; });
+        update();
+      }));
+      boxes.forEach(box => box.addEventListener('change', update));
+      // No modo de seleção, clicar na carta marca/desmarca em vez de abrir o modal.
+      selectionWorkspace.addEventListener('click', event => {
+        if (!selectionWorkspace.classList.contains('is-bulk')) return;
+        const tile = event.target instanceof Element ? event.target.closest('button[data-selection-open]') : null;
+        if (!tile) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const box = tile.closest('.selection-slot')?.querySelector('[data-bulk-card]');
+        if (box) { box.checked = !box.checked; update(); }
+      }, true);
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && selectionWorkspace.classList.contains('is-bulk') && !document.querySelector('dialog[open]')) setMode(false);
+      });
+      bulkForm.addEventListener('submit', event => { if (!boxes.some(box => box.checked)) event.preventDefault(); });
+      update();
+    }
   }
   const previewLinks = document.querySelectorAll('[data-card-preview], .mana-card-item');
   if (previewLinks.length) {
@@ -331,6 +423,7 @@
     create_commander_deck: ['Abrindo o deck', 'Buscando temas, combos e novidades no EDHREC.'],
     delete_deck: ['Excluindo o deck', ''],
     move: ['Movendo a carta', ''],
+    bulk_move: ['Movendo as cartas marcadas', 'Conferindo vagas do deck e regras de cópia.'],
     item: ['Salvando a carta', ''],
     remove: ['Retirando da seleção', ''],
     strategy: ['Salvando a intenção', ''],

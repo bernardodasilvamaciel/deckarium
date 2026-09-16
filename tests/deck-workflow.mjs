@@ -18,13 +18,14 @@ try {
  h=await get(`/decks.php?deck=${deck}&q=Fabled%20Passage&oracle=&type=pirate%3Bsacrifice`);assert(h.includes('Adicionar às candidatas'));
  h=await get(`/decks.php?deck=${deck}&q=Fabled%20Passage&oracle=xyznooracleterm&type=pirate%3Bland`);assert(h.includes('Nenhuma carta corresponde'));
  h=await get(`/decks.php?deck=${deck}&q=Fabled%20Passage&oracle=&owned=1`);const card=h.match(/name="card" value="([^"]+)"/)[1];
- await post({action:'add',card,oracle:''});await post({action:'item',card,stage:'review',quantity:'1',role:'Terrenos',notes:'Habilita sacrifício',oracle:''});
- h=await get(`/decks.php?deck=${deck}&view=selection&stage=review`);assert(h.includes('Habilita sacrifício'));
- const moved=await post({action:'move',card,stage:'deck',view:'selection',selection_stage:'review'});assert(moved.includes('view=selection&stage=review'));
+ await post({action:'add',card,oracle:''});await post({action:'item',card,stage:'candidate',quantity:'1',role:'Terrenos',notes:'Habilita sacrifício',oracle:''});
+ h=await get(`/decks.php?deck=${deck}&view=selection&stage=candidate`);assert(h.includes('Habilita sacrifício'));
+ const moved=await post({action:'move',card,stage:'deck',view:'selection',selection_stage:'candidate'});assert(moved.includes('view=selection&stage=candidate'));
  h=await get(`/decks.php?deck=${deck}&view=selection&stage=deck`);assert(h.includes('Habilita sacrifício'));assert(h.includes('selection-art'));
   await post({action:'item',card,stage:'deck',quantity:'1',role:'Terrenos',notes:'Teste de quantidade',oracle:''});
   const shopping=await get(`/decks.php?deck=${deck}&export=shopping`);assert.equal(typeof shopping,'string');
-  const exported=await get(`/decks.php?deck=${deck}&export=deck`);assert(exported.includes('1 Fabled Passage'));assert(exported.includes('1 Hearthhull, the Worldseed'));
+  const exported=await get(`/decks.php?deck=${deck}&export=deck`);
+  const json=JSON.parse(await get(`/decks.php?deck=${deck}&export=json`));assert.equal(json.format,'deckarium-deck');assert(json.cards.some(c=>c.name==='Fabled Passage'&&c.selection.stage==='deck'&&c.scryfall.oracle_text!==undefined));assert(json.commander&&json.commander.name.includes('Hearthhull'));assert(exported.includes('1 Fabled Passage'));assert(exported.includes('1 Hearthhull, the Worldseed'));
   const liga=await get(`/decks.php?deck=${deck}&export=liga&liga_scope=all`);assert(liga.includes('Edicao (PTBR)'));assert(liga.includes('Fabled Passage'));
   h=await get(`/decks.php?deck=${deck}&view=selection&stage=deck`);assert(h.includes('Valor estimado das cartas aprovadas'));assert(h.includes('Baixar CSV padrão Liga'));
  // Reject forged writes without changing the persisted deck.

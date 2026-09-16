@@ -203,7 +203,7 @@ Para importar ou atualizar o catálogo Scryfall, abra **Status → Catálogo do 
 docker compose exec app php bin/sync_scryfall.php default_cards
 ~~~
 
-Depois, em Minha coleção, importe um CSV com as colunas Name,Scryfall ID,Quantity. Em Meus decks, crie um planejamento ou importe uma lista do Moxfield. Escolha a comandante antes de adicionar cartas às candidatas; a seleção segue candidatas → avaliação → deck e finaliza automaticamente em 100 cartas.
+Depois, em Minha coleção, importe um CSV com as colunas Name,Scryfall ID,Quantity. Em Meus decks, crie um planejamento ou importe uma lista do Moxfield. Escolha a comandante antes de adicionar cartas às candidatas; a seleção segue candidatas → deck e finaliza automaticamente em 100 cartas.
 
 Comandos úteis:
 

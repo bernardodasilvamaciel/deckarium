@@ -1,12 +1,13 @@
 <?php
 declare(strict_types=1);
-$advancedOpen=$match==='any' || $rarity!=='' || $setFilter!=='' || $cmcMin!==null || $cmcMax!==null || $commanderColors;
+$advancedOpen=$match==='any' || $roleFilter!=='' || $rarity!=='' || $setFilter!=='' || $cmcMin!==null || $cmcMax!==null || $commanderColors;
 $clearUrl='?'.http_build_query(['deck'=>$id]+($choosingCommander?['choose'=>1]:[])).'#explore';
 $sortOptions=$choosingCommander
     ? ['popular'=>'Mais populares','relevance'=>'Disponibilidade e relevância','name'=>'Nome','newest'=>'Mais recentes','owned'=>'Mais cópias na coleção']
     : ['synergy'=>'Maior sinergia','relevance'=>'Disponibilidade e relevância','name'=>'Nome','newest'=>'Mais recentes','owned'=>'Mais cópias na coleção'];
 ?>
 <?php if(!$choosingCommander && $commander) require __DIR__.'/deck_guide_view.php'; ?>
+<?php if(!$choosingCommander && $commander && $needPanel) require __DIR__.'/deck_needs_view.php'; ?>
 <?php if(!$choosingCommander && $commander): ?><p class="strategy-color-note">As opções são priorizadas pela identidade de cores <strong><?= h(implode(' · ',$identity?:['C'])) ?></strong> e pelos sinais do texto Oracle da comandante.</p><?php endif; ?>
 <section id="explore" class="section-block discovery-section <?= $choosingCommander?'commander-discovery':'' ?>">
 <div class="discovery-heading">
@@ -21,6 +22,12 @@ $sortOptions=$choosingCommander
         <label>Tipos e temas<input name="type" value="<?= h($type) ?>" placeholder="pirate; vehicle; treasure"></label>
         <label>Ordenar por<select name="sort" data-builder-sort><?php foreach($sortOptions as $value=>$label): ?><option value="<?= $value ?>" <?= $sort===$value?'selected':'' ?>><?= h($label) ?></option><?php endforeach; ?></select></label>
     </div>
+    <?php if(!$choosingCommander): ?>
+    <fieldset class="card-type-filter"><legend>Tipo de carta</legend>
+        <?php foreach($cardTypeOptions as $typeKey=>[$typeTerm,$typeLabel]): ?><label class="card-type-chip"><input type="checkbox" name="card_types[]" value="<?= h($typeKey) ?>" <?= in_array($typeKey,$cardTypes,true)?'checked':'' ?>><span><?= h($typeLabel) ?></span></label><?php endforeach; ?>
+        <small><?= $cardTypes ? 'Mostrando cartas de qualquer tipo marcado.' : 'Nenhum marcado: todos os tipos.' ?></small>
+    </fieldset>
+    <?php endif; ?>
     <div class="filter-quick-row">
         <label class="filter-availability">Disponibilidade<select name="availability"><option value="all" <?= $availability==='all'?'selected':'' ?>>Todas as cartas</option><option value="owned" <?= $availability==='owned'?'selected':'' ?>>Somente minha coleção</option><option value="missing" <?= $availability==='missing'?'selected':'' ?>>Fora da coleção</option></select></label>
         <?php if(!$choosingCommander): ?><label class="builder-check"><input type="checkbox" name="colors" value="1" <?= $colorsOnly?'checked':'' ?>> Somente identidade da comandante</label><?php endif; ?>
@@ -29,6 +36,7 @@ $sortOptions=$choosingCommander
     <details class="filter-advanced" <?= $advancedOpen?'open':'' ?>><summary>Mais filtros</summary>
         <div class="filter-advanced-grid">
             <label>Combinação do Oracle<select name="match"><option value="all" <?= $match==='all'?'selected':'' ?>>Todos os termos</option><option value="any" <?= $match==='any'?'selected':'' ?>>Qualquer termo</option></select></label>
+            <?php if(!$choosingCommander): ?><label>Função no deck<select name="role"><option value="">Qualquer função</option><?php foreach($roleFilterOptions as $roleKey=>$roleLabel): ?><option value="<?= h($roleKey) ?>" <?= $roleFilter===$roleKey?'selected':'' ?>><?= h($roleLabel) ?></option><?php endforeach; ?></select></label><?php endif; ?>
             <label>Raridade<select name="rarity"><option value="">Todas</option><option value="common" <?= $rarity==='common'?'selected':'' ?>>Comum</option><option value="uncommon" <?= $rarity==='uncommon'?'selected':'' ?>>Incomum</option><option value="rare" <?= $rarity==='rare'?'selected':'' ?>>Rara</option><option value="mythic" <?= $rarity==='mythic'?'selected':'' ?>>Mítica</option><option value="special" <?= $rarity==='special'?'selected':'' ?>>Especial</option></select></label>
             <label>Edição<select name="set"><option value="">Todas as edições</option><?php foreach($setOptions as $setOption): ?><option value="<?= h($setOption['set_code']) ?>" <?= $setFilter===$setOption['set_code']?'selected':'' ?>><?= h($setOption['set_name']) ?> (<?= h(strtoupper($setOption['set_code'])) ?>)</option><?php endforeach; ?></select></label>
             <label>Custo mínimo<input type="number" name="cmc_min" min="0" step="1" value="<?= $cmcMin===null?'':h((string)$cmcMin) ?>"></label>

@@ -56,7 +56,7 @@ pageHeader('Criar conta');
     <p>Crie uma conta gratuita para guardar sua coleção, planejar decks de Commander e acompanhar cada troca.</p>
     <ul class="auth-benefits">
       <li><strong>Importe sua coleção</strong><span>CSV do ManaBox com impressões e foils.</span></li>
-      <li><strong>Planeje com calma</strong><span>Candidatas → avaliação → deck de 100 cartas.</span></li>
+      <li><strong>Planeje com calma</strong><span>Candidatas → deck de 100 cartas.</span></li>
       <li><strong>Privado por padrão</strong><span>Outras contas não veem seus decks nem sua coleção.</span></li>
     </ul>
   </div>
