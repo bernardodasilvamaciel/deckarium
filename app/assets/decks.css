@@ -402,6 +402,12 @@ body:has(.selection-dialog[open]){overflow:hidden}
 .relationship-list li:last-child{border-bottom:0}
 .relationship-list strong{font-size:.82rem;color:var(--accent)}
 .relationship-list span{color:var(--muted)}
+.relationship-group{margin:0;padding:10px 0;border-top:1px dashed var(--line)}
+.relationship-group h4{margin:0 12px 4px;font:700 .84rem 'Segoe UI',sans-serif;color:var(--ink)}
+.relationship-help{position:relative;display:inline-block;margin:8px 0 0}
+.relationship-help>summary{display:grid;place-items:center;width:22px;height:22px;padding:0;border:1px solid var(--accent);border-radius:50%;color:var(--accent);font:800 .78rem/1 'Segoe UI',sans-serif;cursor:pointer;list-style:none}
+.relationship-help>summary::-webkit-details-marker{display:none}
+.relationship-help>p{position:absolute;z-index:4;left:0;top:26px;width:min(380px,calc(100vw - 72px));margin:0;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:0 10px 26px #17241c25;color:var(--ink);font-size:.78rem;line-height:1.45}
 .relationship-config{grid-template-columns:repeat(2,minmax(0,1fr))}
 @media(max-width:820px){.relationship-config{grid-template-columns:1fr}}
 .selection-relation{position:absolute;top:8px;right:8px;z-index:2;padding:4px 7px;border-radius:6px;background:#fffefae8;color:var(--accent);font:800 .66rem/1 'Segoe UI',sans-serif;box-shadow:0 2px 7px #17241c2e}

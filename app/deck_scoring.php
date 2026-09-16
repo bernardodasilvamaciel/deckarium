@@ -399,7 +399,7 @@ function deckScoreSelection(array $deck, ?array $commander, array $items, array 
             else $notes[] = 'Destruição de terrenos em massa.';
         }
         $result['cards'][$item['id']] = [
-            'blocked' => $blocked, 'notes' => $notes, 'stage' => $item['stage'], 'name' => (string)$item['name'], 'relationships' => [],
+            'blocked' => $blocked, 'notes' => $notes, 'stage' => $item['stage'], 'name' => (string)$item['name'], 'relationships' => ['deck' => [], 'candidates' => []],
             'game_changer' => isset($gameChangers[strtolower((string)$item['name'])]),
             'produces' => array_values(array_map(fn($f) => deckScoreFeatureLibrary()[$f][0], array_keys($profile['produces']))),
             'cares' => array_values(array_merge(array_map(fn($f) => deckScoreFeatureLibrary()[$f][0], array_keys($profile['cares'])), array_map('ucfirst', array_keys($profile['tribes_cared'])))),
@@ -408,17 +408,20 @@ function deckScoreSelection(array $deck, ?array $commander, array $items, array 
     }
 
     $candidates = array_values(array_filter($items, fn($item) => $item['stage'] === 'candidate'));
-    foreach ($candidates as $candidate) {
-        $profile = $profiles[$candidate['id']];
-        $toCommander = deckCardRelationship($profile, $commanderProfile);
-        $fromCommander = deckCardRelationship($commanderProfile, $profile);
-        if ($toCommander || $fromCommander) $result['cards'][$candidate['id']]['relationships'][] = ['name' => (string)$commander['name'], 'kind' => 'commander', 'offers' => $toCommander, 'receives' => $fromCommander];
-        foreach ($candidates as $other) {
-            if ($candidate['id'] === $other['id']) continue;
-            $offers = deckCardRelationship($profile, $profiles[$other['id']]);
-            $receives = deckCardRelationship($profiles[$other['id']], $profile);
-            if ($offers || $receives) $result['cards'][$candidate['id']]['relationships'][] = ['name' => (string)$other['name'], 'kind' => 'candidate', 'offers' => $offers, 'receives' => $receives];
-        }
+    $deckItems = array_values(array_filter($items, fn($item) => $item['stage'] === 'deck'));
+    $connect = static function (array $source, array $target, array $sourceProfile, array $targetProfile, string $group, array &$result): void {
+        if ($source['id'] === $target['id']) return;
+        $offers = deckCardRelationship($sourceProfile, $targetProfile);
+        $receives = deckCardRelationship($targetProfile, $sourceProfile);
+        if ($offers || $receives) $result['cards'][$source['id']]['relationships'][$group][] = ['name' => (string)$target['name'], 'offers' => $offers, 'receives' => $receives];
+    };
+    foreach ($candidates as $candidate) foreach ($candidates as $other) $connect($candidate, $other, $profiles[$candidate['id']], $profiles[$other['id']], 'candidates', $result);
+    foreach ($deckItems as $card) {
+        $toCommander = deckCardRelationship($profiles[$card['id']], $commanderProfile);
+        $fromCommander = deckCardRelationship($commanderProfile, $profiles[$card['id']]);
+        if ($toCommander || $fromCommander) $result['cards'][$card['id']]['relationships']['deck'][] = ['name' => (string)$commander['name'] . ' · comandante', 'offers' => $toCommander, 'receives' => $fromCommander];
+        foreach ($deckItems as $other) $connect($card, $other, $profiles[$card['id']], $profiles[$other['id']], 'deck', $result);
+        foreach ($candidates as $other) $connect($card, $other, $profiles[$card['id']], $profiles[$other['id']], 'candidates', $result);
     }
     return $result;
 }

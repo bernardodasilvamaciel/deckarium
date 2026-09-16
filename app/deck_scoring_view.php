@@ -9,7 +9,8 @@ unset($missingNeeds['plan']);
     <div class="fit-panel-head">
         <div>
             <h3>Relações entre candidatas</h3>
-            <p>Sem nota e sem recomendação automática: abra uma candidata para ver o que ela oferece à comandante e às outras candidatas — e o que recebe delas. O cálculo olha somente para este conjunto de candidatas.</p>
+            <p>Sem nota e sem recomendação automática: as relações mostram trocas diretas entre textos de cartas na sua seleção.</p>
+            <details class="relationship-help"><summary aria-label="Como funcionam as relações">?</summary><p>Uma relação aparece quando uma carta produz algo que outra procura — por exemplo, fichas, tesouros, marcadores, sacrifícios ou efeitos de entrada. Em Candidatas, a comparação é só entre candidatas. No Deck, as conexões são separadas entre cartas já aprovadas e candidatas.</p></details>
         </div>
         <div class="fit-panel-actions"><button type="button" class="secondary-link" data-dialog-open="fit-config-dialog">Ajustar metas e regras</button></div>
     </div>
