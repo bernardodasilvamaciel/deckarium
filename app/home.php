@@ -27,4 +27,3 @@ declare(strict_types=1);
     <?php if (!$recentSets): ?><p class="muted">As edições aparecerão após a sincronização do catálogo. <?php if (authIsAdmin()): ?><a href="/status.php">Consultar status</a><?php endif; ?></p><?php endif; ?>
   </div>
 </section>
-<div class="home-catalog-heading"><h2>Encontre sua próxima carta</h2><p>Pesquise no acervo e refine os resultados pelos filtros abaixo.</p></div>
