@@ -24,7 +24,7 @@ $guideTabs = [
     'news' => ['Novidades', count($guideNewCards) + count($guideSimilar)],
 ];
 ?>
-<details class="commander-guide" id="commander-guide" data-commander-guide="<?= h((string)($commander['oracle_id'] ?: $commander['id'])) ?>" open>
+<details class="commander-guide" data-guide-standalone id="commander-guide" data-commander-guide="<?= h((string)($commander['oracle_id'] ?: $commander['id'])) ?>" open>
 <summary class="guide-summary">
     <span class="guide-summary-art" aria-hidden="true"><?php if ($guideArt): ?><img src="<?= h($guideArt) ?>" alt="" loading="lazy"><?php endif; ?></span>
     <span class="guide-summary-copy">

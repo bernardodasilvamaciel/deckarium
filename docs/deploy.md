@@ -124,7 +124,7 @@ sudo chown deploy:deploy . .env && sudo chmod 700 . && sudo chmod 600 .env
 # não use chown -R aqui: data/storage precisa continuar com o www-data
 ```
 
-## 5. Mover o armazenamento do Docker para /opt (recomendado)
+## 5. Mover o armazenamento do Docker para /opt (recomendado, antes do primeiro deploy)
 
 Os volumes do Deckarium já ficam em `/opt`, mas imagens, camadas e cache de build do Docker ficam por padrão
 em `/var/lib/docker`, na partição `/` (28 GB). Para mover tudo para `/opt`:
@@ -134,7 +134,13 @@ cat /etc/docker/daemon.json 2>/dev/null        # se já existir, adicione a chav
 sudo systemctl stop docker docker.socket       # para TODOS os containers da máquina
 sudo mkdir -p /opt/docker
 sudo rsync -aHAX --info=progress2 /var/lib/docker/ /opt/docker/
-echo '{ "data-root": "/opt/docker" }' | sudo tee /etc/docker/daemon.json
+sudo tee /etc/docker/daemon.json <<'JSON'
+{
+  "data-root": "/opt/docker",
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "10m", "max-file": "3" }
+}
+JSON
 sudo systemctl start docker
 docker info --format '{{.DockerRootDir}}'      # deve mostrar /opt/docker
 docker ps -a                                   # confira que tudo voltou
@@ -150,6 +156,14 @@ Crie e envie uma tag (`git tag v1.0.0 && git push origin v1.0.0`). Depois, no se
 ```bash
 docker exec -it deckarium-app php bin/sync_scryfall.php default_cards
 docker exec -it deckarium-app php bin/download_images.php unique small 8
+```
+
+### Tags do Scryfall Tagger (opcional, recomendado)
+
+Completam as relações entre cartas. Rode depois do primeiro sync e, se quiser, de tempos em tempos:
+
+```bash
+docker exec deckarium-app php bin/sync_tagger.php
 ```
 
 ## 7. Cloudflared

@@ -46,7 +46,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
             $name=trim((string)($_POST['name']??'')); if($name==='') $name=$card['name'].' — planejamento';
             $deckId=(int)deckQuery("INSERT INTO builder_decks(user_id,name,commander_id) VALUES (?,?,?) RETURNING id",[$userId,substr($name,0,160),$card['id']])->fetchColumn();
             deckSchema(); deckRefreshInsightsIfStale($card);
-            header('Location: /decks.php?deck='.$deckId.'&view=discover#explore',true,303); exit;
+            header('Location: /decks.php?deck='.$deckId.'&view=overview',true,303); exit;
         }
         throw new RuntimeException('Ação inválida.');
     }catch(Throwable $e){$cardActionError=$e instanceof RuntimeException?$e->getMessage():'Não foi possível salvar a ação.';}

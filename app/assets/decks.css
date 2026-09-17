@@ -165,6 +165,7 @@
 .selection-tile .selection-art img{display:block;width:100%;height:auto;aspect-ratio:488/680;object-fit:cover;border-radius:9px;box-shadow:0 6px 16px #17241c26}
 .selection-tile-name{font-size:.84rem;font-weight:600;line-height:1.25;overflow-wrap:anywhere}
 .selection-tile-meta{font-size:.72rem;color:var(--muted);line-height:1.3}
+.selection-tile-synergy{display:block;color:var(--accent);font-size:.72rem;font-weight:800;line-height:1.3;font-variant-numeric:tabular-nums}
 .selection-noted{color:var(--accent);font-weight:700}
 .selection-qty{position:absolute;top:8px;left:8px;padding:3px 7px;border-radius:6px;background:#171e26d9;color:#fff;font:700 .72rem 'Segoe UI',sans-serif}
 .selection-gc{position:absolute;top:8px;right:8px;box-shadow:0 2px 6px #17241c55}
@@ -508,6 +509,7 @@ body:has(.selection-dialog[open]){overflow:hidden}
 .selection-bulk-warning{flex-basis:100%;color:#8a5d12;font-size:.76rem}
 .selection-bulk-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
 .selection-bulk-actions .primary-link,.selection-bulk-actions .secondary-link{min-height:40px;padding:8px 16px;font-size:.84rem}
+.selection-bulk-remove{min-height:40px;padding:8px 12px;border:1px solid #b65752;border-radius:6px;background:var(--surface);color:#a13f3a;font:700 .84rem 'Segoe UI',sans-serif;cursor:pointer}.selection-bulk-remove:hover:not(:disabled){background:#fff0ee}.selection-bulk-remove:disabled{opacity:.55;cursor:default}
 @media(max-width:700px){
   .selection-group-pick{top:18px;right:36px;min-height:30px;padding:4px 9px;font-size:.72rem}
   .selection-bulkbar{bottom:8px;padding:10px 12px}
@@ -561,3 +563,56 @@ body:has(.selection-dialog[open]){overflow:hidden}
 @media(max-width:800px){.deck-needs-cards{grid-template-columns:repeat(3,minmax(0,1fr))}.filter-advanced-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.deck-needs{padding:16px}.deck-needs-head,.deck-needs-panel-head{flex-direction:column;align-items:stretch}.deck-needs-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.deck-needs-cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 12px}.filter-advanced-grid{grid-template-columns:1fr}}
 .deck-export-links{display:flex;flex-wrap:wrap;gap:6px 18px}
+
+/* Relações v2: motivo + trecho do texto de cada carta. */
+.relationship-list-v2 li{gap:7px}
+.relation-reason{display:grid;gap:4px;border-left:3px solid var(--relation-color,#59625f);padding:3px 0 3px 10px}
+.relation-reason-head{color:var(--ink)!important;font-size:.78rem;line-height:1.45}
+.relation-reason.is-in .relation-reason-head{color:var(--muted)!important}
+.relation-chip{display:inline-block;margin-right:7px;padding:1px 8px;border-radius:999px;background:color-mix(in srgb,var(--relation-color,#59625f) 13%,#fff);color:var(--relation-color,#59625f);font-size:.68rem;font-weight:700;letter-spacing:.01em;vertical-align:1px}
+.relation-source{font-size:.66rem;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.relation-quotes{display:grid;gap:2px}
+.relation-quotes q{display:block;font-size:.72rem;line-height:1.4;color:var(--muted);font-style:italic;quotes:none;padding-left:16px;position:relative}
+.relation-quotes q::before{content:'↳';position:absolute;left:2px;font-style:normal;opacity:.6}
+.relationship-board-link{margin:6px 12px 2px;font-size:.78rem}
+.relationship-board-link a{font-weight:700}
+
+/* Metas automáticas por comandante. */
+.fit-targets-mode{display:grid;gap:8px}
+.fit-mode-option{display:grid!important;grid-template-columns:auto 1fr;gap:10px;align-items:start;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer}
+.fit-mode-option:has(input:checked){border-color:var(--accent);background:var(--soft)}
+.fit-mode-option input{margin-top:3px}
+.fit-mode-option span{display:grid;gap:2px}
+.fit-mode-option strong{font-size:.84rem}
+.fit-mode-option small{font-size:.74rem;color:var(--muted);font-weight:400;line-height:1.4}
+.fit-auto-hint{display:block;font-size:.66rem;color:var(--muted);font-weight:600}
+.fit-target-notes{margin:10px 0 4px;padding-left:18px;display:grid;gap:3px;font-size:.74rem;color:var(--muted)}
+.fit-target-notes strong{color:var(--ink)}
+
+/* Explorar: modo "Encaixa no deck". */
+.fit-mode-note{display:grid;gap:4px;margin:0 0 14px;padding:12px 14px;border-radius:10px;background:var(--soft);border:1px solid color-mix(in srgb,var(--accent) 25%,var(--line))}
+.fit-mode-note p{margin:0;font-size:.82rem;color:var(--muted)}
+.fit-preview{margin:6px 0 10px;border:1px solid var(--line);border-radius:9px;background:#fff}
+.fit-preview summary{display:grid;gap:2px;padding:8px 10px;cursor:pointer;list-style:none}
+.fit-preview summary::-webkit-details-marker{display:none}
+.fit-preview-count{font-size:.8rem;font-weight:700;color:var(--accent)}
+.fit-preview-count::after{content:' ▾';font-size:.7rem}
+.fit-preview[open] .fit-preview-count::after{content:' ▴'}
+.fit-preview-names{font-size:.74rem;color:var(--muted);line-height:1.35}
+.fit-preview ul{list-style:none;margin:0;padding:0 10px 8px;display:grid;gap:8px}
+.fit-preview li{display:grid;gap:4px;font-size:.74rem;border-top:1px dashed var(--line);padding-top:7px}
+.fit-preview li strong{color:var(--ink)}
+.fit-preview-reason{display:grid;gap:2px;border-left:3px solid var(--relation-color);padding-left:8px;color:var(--ink);line-height:1.35}
+.fit-preview-reason q{quotes:none;font-style:italic;color:var(--muted);font-size:.7rem}
+.fit-preview-none,.fit-preview-more{font-size:.74rem;color:var(--muted);margin:4px 0 8px}
+
+/* Subpáginas do deck. */
+.deck-module-nav{flex-wrap:wrap}
+.deck-tab-badge{display:inline-block;margin-left:4px;padding:0 6px;border-radius:999px;background:rgba(0,0,0,.08);font-size:.72rem}
+.deck-module-nav a[aria-current="page"] .deck-tab-badge{background:rgba(255,255,255,.22)}
+.deck-overview-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:22px 0 8px}
+.deck-overview-card{display:grid;gap:4px;align-content:start;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--surface);text-decoration:none;color:var(--ink);transition:border-color .15s ease,transform .15s ease}
+.deck-overview-card:hover{border-color:var(--accent);transform:translateY(-1px)}
+.deck-overview-card span{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent)}
+.deck-overview-card strong{font-size:.98rem}
+.deck-overview-card small{font-size:.78rem;color:var(--muted);line-height:1.4}

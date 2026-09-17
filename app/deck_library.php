@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/deck_insights.php';
 require_once __DIR__ . '/deck_scoring.php';
+require_once __DIR__ . '/deck_relations.php';
 
 function deckSchema(): void {
     db()->exec("ALTER TABLE cards ADD COLUMN IF NOT EXISTS edhrec_rank_cached int GENERATED ALWAYS AS (
@@ -42,7 +43,12 @@ function deckSchema(): void {
         CREATE TABLE IF NOT EXISTS deck_synergy (
             commander_id uuid NOT NULL REFERENCES cards(id) ON DELETE CASCADE, card_id uuid NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
             metric text NOT NULL DEFAULT 'synergy', score numeric NOT NULL, inclusion numeric NULL, deck_count int NULL,
-            source_url text NOT NULL, synced_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(commander_id,card_id));");
+            source_url text NOT NULL, synced_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(commander_id,card_id));
+        CREATE TABLE IF NOT EXISTS deck_spellbook_cache (
+            deck_id bigint PRIMARY KEY REFERENCES builder_decks(id) ON DELETE CASCADE, payload jsonb NOT NULL, synced_at timestamptz NOT NULL DEFAULT now());
+        CREATE TABLE IF NOT EXISTS card_tags (
+            oracle_id uuid NOT NULL, tag text NOT NULL, PRIMARY KEY(oracle_id, tag));
+        CREATE INDEX IF NOT EXISTS card_tags_tag_idx ON card_tags(tag);");
     // A chave primária da coleção inclui o dono (user_id) e é mantida pela migração em auth.php.
     db()->exec("CREATE INDEX IF NOT EXISTS builder_items_deck_stage_idx ON builder_items(deck_id,stage);
         CREATE INDEX IF NOT EXISTS builder_items_card_idx ON builder_items(card_id);
@@ -162,7 +168,41 @@ function deckSyncEdhrec(array $commander): int {
         db()->commit();
     }catch(Throwable $e){db()->rollBack();throw $e;}
     if(!$saved) throw new RuntimeException('Nenhuma recomendação compatível com o catálogo local foi encontrada.');
+    try { deckStoreRoleEstimates($commander, $best, $data); } catch (Throwable) { /* metas voltam para a leitura do texto */ }
     return $saved;
+}
+
+/**
+ * Estimativa de quantas cartas de cada função um deck típico da comandante usa: soma das taxas de inclusão
+ * (decks com a carta ÷ decks possíveis) das cartas listadas pelo EDHREC, por função, calibrada para 99 cartas.
+ */
+function deckStoreRoleEstimates(array $commander, array $best, array $data): void {
+    $sums = array_fill_keys(['lands','ramp','draw','removal','wipe','protection','recursion','tutor'], 0.0);
+    $nonland = 0.0; $listed = 0;
+    foreach ($best as $entry) {
+        $row = $entry['row'];
+        $potential = (int)($row['potential_decks'] ?? 0);
+        $count = isset($row['num_decks']) ? (int)$row['num_decks'] : (isset($row['inclusion']) ? (int)$row['inclusion'] : 0);
+        if ($potential <= 0 || $count <= 0) continue;
+        $rate = min(1.0, $count / $potential);
+        $profile = deckScoreProfile($entry['card']);
+        $listed++;
+        if (!empty($profile['is_land'])) {
+            if (!str_contains((string)$entry['card']['type_line'], 'Basic')) $sums['lands'] += $rate;
+            continue;
+        }
+        $nonland += $rate;
+        foreach (array_keys($profile['roles']) as $role) if (isset($sums[$role])) $sums[$role] += $rate;
+    }
+    if ($listed < 30 || $nonland <= 0) return;
+    $landAverage = is_numeric($data['land'] ?? null) ? (float)$data['land'] : null;
+    // As listas do EDHREC cobrem as cartas mais jogadas; a cauda longa é compensada proporcionalmente.
+    $factor = max(1.0, min(1.8, (99 - ($landAverage ?? 37)) / $nonland));
+    $estimates = [];
+    foreach ($sums as $role => $sum) $estimates[$role] = $role === 'lands' ? null : round($sum * $factor, 1);
+    $estimates['lands'] = $landAverage;
+    deckQuery("UPDATE deck_commander_insights SET payload = payload || jsonb_build_object('role_estimates', ?::jsonb, 'role_sample', ?::int) WHERE commander_id=?",
+        [json_encode($estimates), $listed, $commander['id']]);
 }
 
 function deckStrategyCatalog(): array {
@@ -233,41 +273,85 @@ function deckCollectionPrintingSql(): string {
         COALESCE(SUM(quantity) FILTER(WHERE foil),0)::int foil_quantity
         FROM builder_collection WHERE user_id={$userId} GROUP BY scryfall_id)";
 }
-function deckImport(string $path, bool $replace = true): array {
+/** Erro de importação com a lista de linhas do CSV que não entraram. */
+class CollectionImportException extends RuntimeException {
+    public function __construct(string $message, public readonly array $lines = [], public readonly array $headers = []) { parent::__construct($message); }
+}
+
+/**
+ * Importa um CSV de coleção (Name, Scryfall ID, Quantity, Foil).
+ * $mode: 'replace' (substitui tudo; qualquer linha inválida cancela), 'add' (soma) ou 'subtract' (remove cópias).
+ * Em 'add' e 'subtract' as linhas válidas são aplicadas e as inválidas voltam em 'failed' com número e motivo.
+ */
+function deckImport(string $path, bool|string $mode = 'replace'): array {
+    $mode = is_bool($mode) ? ($mode ? 'replace' : 'add') : $mode;
+    if (!in_array($mode, ['replace','add','subtract'], true)) throw new RuntimeException('Modo de importação inválido.');
     $fp = fopen($path, 'r');
     if (!$fp) throw new RuntimeException('Não foi possível ler o CSV.');
     $headers = fgetcsv($fp, 0, ',', '"', '');
-    if (!$headers) throw new RuntimeException('CSV vazio.');
-    $headers[0] = preg_replace('/^\xEF\xBB\xBF/', '', $headers[0]);
+    if (!$headers || $headers === [null]) throw new RuntimeException('CSV vazio.');
+    $headers[0] = preg_replace('/^\xEF\xBB\xBF/', '', (string)$headers[0]);
+    $headers = array_map(fn($h) => trim((string)$h), $headers);
     $map = array_flip($headers);
-    foreach (['Name','Scryfall ID','Quantity'] as $key) if (!isset($map[$key])) throw new RuntimeException('Use a exportação CSV do ManaBox com Name, Scryfall ID e Quantity.');
-    $rows = []; $line = 1;
+    $missingColumns = array_values(array_filter(['Name','Scryfall ID','Quantity'], fn($key) => !isset($map[$key])));
+    if ($missingColumns) throw new CollectionImportException('Faltam colunas no cabeçalho (linha 1): '.implode(', ', $missingColumns).'. Use a exportação do ManaBox com Name, Scryfall ID e Quantity.', [['line'=>1,'name'=>'','reason'=>'Colunas ausentes: '.implode(', ', $missingColumns),'row'=>$headers]], $headers);
+    $rows = []; $failed = []; $line = 1;
+    $foilValues=['1','true','yes','sim','foil','etched']; $normalValues=['','0','false','no','nao','não','normal'];
     while (($row = fgetcsv($fp, 0, ',', '"', '')) !== false) {
-        $line++; if ($row === [null]) continue;
-        $id = trim($row[$map['Scryfall ID']] ?? ''); $qty = trim($row[$map['Quantity']] ?? '');
-        if (!preg_match('/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i', $id) || !ctype_digit($qty) || (int)$qty < 1 || (int)$qty > 100000) throw new RuntimeException("ID ou quantidade inválida na linha {$line}. A coleção anterior foi preservada.");
-        $id = strtolower($id); $foilValue=strtolower(trim((string)($row[$map['Foil']??-1]??'normal')));
-        $foilValues=['1','true','yes','sim','foil','etched'];$normalValues=['','0','false','no','nao','não','normal'];
-        if(!in_array($foilValue,array_merge($foilValues,$normalValues),true))throw new RuntimeException("Acabamento inválido na linha {$line}. Use normal, foil, 0 ou 1.");
-        $foil=in_array($foilValue,$foilValues,true); $key=$id.'|'.($foil?'1':'0');
-        if (!isset($rows[$key])) $rows[$key] = ['id'=>$id,'name' => $row[$map['Name']] ?? '', 'quantity' => 0,'foil'=>$foil];
-        $rows[$key]['quantity'] += (int)$qty;
+        $line++;
+        if ($row === [null] || implode('', array_map('trim', array_map('strval', $row))) === '') continue;
+        $name = trim((string)($row[$map['Name']] ?? ''));
+        $id = strtolower(trim((string)($row[$map['Scryfall ID']] ?? ''))); $qty = trim((string)($row[$map['Quantity']] ?? ''));
+        $foilValue = strtolower(trim((string)($row[$map['Foil'] ?? -1] ?? 'normal')));
+        $reasons = [];
+        if ($id === '') $reasons[] = 'Scryfall ID vazio';
+        elseif (!preg_match('/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/', $id)) $reasons[] = 'Scryfall ID inválido (“'.mb_substr($id, 0, 40).'”)';
+        if (!ctype_digit($qty) || (int)$qty < 1 || (int)$qty > 100000) $reasons[] = 'quantidade inválida (“'.mb_substr($qty, 0, 12).'”; use um número inteiro de 1 a 100000)';
+        if (!in_array($foilValue, array_merge($foilValues, $normalValues), true)) $reasons[] = 'acabamento inválido (“'.mb_substr($foilValue, 0, 20).'”; use normal, foil, 0 ou 1)';
+        if (count($row) < count($headers) - 1 && $reasons) $reasons[] = 'a linha tem menos colunas que o cabeçalho';
+        if ($reasons) { $failed[] = ['line'=>$line,'name'=>$name,'reason'=>ucfirst(implode('; ', $reasons)).'.','row'=>$row]; continue; }
+        $foil = in_array($foilValue, $foilValues, true); $key = $id.'|'.($foil?'1':'0');
+        if (!isset($rows[$key])) $rows[$key] = ['id'=>$id,'name'=>$name,'quantity'=>0,'foil'=>$foil,'lines'=>[],'rows'=>[]];
+        $rows[$key]['quantity'] += (int)$qty; $rows[$key]['lines'][] = $line; $rows[$key]['rows'][] = $row;
     }
     fclose($fp);
-    if (!$rows) throw new RuntimeException('Nenhuma carta válida no CSV.');
+    $userId = deckOwnerId();
+    if ($userId < 1) throw new RuntimeException('Entre na sua conta para importar a coleção.');
+    // Substituir a coleção inteira com linhas faltando apagaria cartas: nesse modo, qualquer erro cancela tudo.
+    if ($mode === 'replace' && $failed) throw new CollectionImportException(count($failed).(count($failed) === 1 ? ' linha do CSV tem erro' : ' linhas do CSV têm erro').'. Nada foi importado e a coleção anterior foi preservada — corrija as linhas abaixo e envie de novo.', $failed, $headers);
+    if (!$rows) throw new CollectionImportException($failed ? 'Nenhuma linha válida no CSV. A coleção não foi alterada.' : 'Nenhuma carta no CSV.', $failed, $headers);
+    $applied = ['printings'=>0,'quantity'=>0];
     db()->beginTransaction();
     try {
-        $userId=deckOwnerId();
-        if ($userId<1) throw new RuntimeException('Entre na sua conta para importar a coleção.');
-        if ($replace) deckQuery('DELETE FROM builder_collection WHERE user_id=?',[$userId]);
+        if ($mode === 'replace') deckQuery('DELETE FROM builder_collection WHERE user_id=?', [$userId]);
         foreach ($rows as $row) {
-            $foilSql=$row['foil']?'true':'false';
-            if ($replace) deckQuery('INSERT INTO builder_collection(user_id,scryfall_id,name,quantity,foil) VALUES (?,?,?,?,?)', [$userId,$row['id'],$row['name'],$row['quantity'],$foilSql]);
-            else deckQuery('INSERT INTO builder_collection(user_id,scryfall_id,name,quantity,foil) VALUES (?,?,?,?,?) ON CONFLICT(user_id,scryfall_id,foil) DO UPDATE SET name=excluded.name,quantity=builder_collection.quantity+excluded.quantity', [$userId,$row['id'],$row['name'],$row['quantity'],$foilSql]);
+            $foilSql = $row['foil'] ? 'true' : 'false';
+            if ($mode === 'subtract') {
+                $current = deckQuery('SELECT quantity FROM builder_collection WHERE user_id=? AND scryfall_id=?::uuid AND foil=? FOR UPDATE', [$userId, $row['id'], $foilSql])->fetchColumn();
+                $finish = $row['foil'] ? 'foil' : 'normal';
+                if ($current === false) {
+                    foreach ($row['lines'] as $i => $lineNumber) $failed[] = ['line'=>$lineNumber,'name'=>$row['name'],'reason'=>'Esta impressão ('.$finish.') não está na sua coleção.','row'=>$row['rows'][$i]];
+                    continue;
+                }
+                if ((int)$current < $row['quantity']) {
+                    foreach ($row['lines'] as $i => $lineNumber) $failed[] = ['line'=>$lineNumber,'name'=>$row['name'],'reason'=>'Tentou remover '.$row['quantity'].' cópia(s) '.$finish.', mas a coleção tem '.(int)$current.'.','row'=>$row['rows'][$i]];
+                    continue;
+                }
+                if ((int)$current === $row['quantity']) deckQuery('DELETE FROM builder_collection WHERE user_id=? AND scryfall_id=?::uuid AND foil=?', [$userId, $row['id'], $foilSql]);
+                else deckQuery('UPDATE builder_collection SET quantity=quantity-? WHERE user_id=? AND scryfall_id=?::uuid AND foil=?', [$row['quantity'], $userId, $row['id'], $foilSql]);
+            } elseif ($mode === 'replace') {
+                deckQuery('INSERT INTO builder_collection(user_id,scryfall_id,name,quantity,foil) VALUES (?,?,?,?,?)', [$userId,$row['id'],$row['name'],$row['quantity'],$foilSql]);
+            } else {
+                deckQuery('INSERT INTO builder_collection(user_id,scryfall_id,name,quantity,foil) VALUES (?,?,?,?,?) ON CONFLICT(user_id,scryfall_id,foil) DO UPDATE SET name=excluded.name,quantity=LEAST(1000000,builder_collection.quantity+excluded.quantity)', [$userId,$row['id'],$row['name'],$row['quantity'],$foilSql]);
+            }
+            $applied['printings']++; $applied['quantity'] += $row['quantity'];
         }
+        if ($applied['printings'] === 0) { db()->rollBack(); usort($failed, fn($x, $y) => $x['line'] <=> $y['line']); throw new CollectionImportException('Nenhuma linha pôde ser aplicada. A coleção não foi alterada.', $failed, $headers); }
         db()->commit();
-    } catch (Throwable $e) { db()->rollBack(); throw $e; }
-    return ['printings'=>count($rows),'quantity'=>array_sum(array_column($rows,'quantity'))];
+    } catch (CollectionImportException $e) { throw $e; }
+    catch (Throwable $e) { if (db()->inTransaction()) db()->rollBack(); throw $e; }
+    usort($failed, fn($x, $y) => $x['line'] <=> $y['line']);
+    return $applied + ['mode'=>$mode,'failed'=>$failed,'headers'=>$headers];
 }
 function deckLigaCsv(array $rows): string {
     $fp=fopen('php://temp','w+');
@@ -308,3 +392,18 @@ function deckStageLabel(?string $stage): string {
 function deckCommanderSql(): string {
     return 'c.commander_eligible';
 }
+
+/** Abas das subpáginas de um deck (decks.php e deck_board.php). */
+function deckSectionNav(int $deckId, string $current, bool $hasCommander, int $finalCount): string {
+    $tabs = $hasCommander
+        ? ['overview'=>'Visão geral','guide'=>'Guia da comandante','needs'=>'O que falta','explore'=>'Explorar','selection'=>'Minha seleção','board'=>'Quadro de relações']
+        : ['explore'=>'Escolher comandante','selection'=>'Minha seleção'];
+    $html = '<nav class="tabs deck-module-nav" aria-label="Seções do deck"><a href="/decks.php">← Biblioteca</a>';
+    foreach ($tabs as $key => $label) {
+        $href = $key === 'board' ? '/deck_board.php?deck='.$deckId : '/decks.php?deck='.$deckId.'&amp;view='.$key;
+        $badge = $key === 'selection' ? ' <span class="deck-tab-badge">'.$finalCount.'/100</span>' : '';
+        $html .= '<a href="'.$href.'"'.($current === $key ? ' aria-current="page"' : '').'>'.h($label).$badge.'</a>';
+    }
+    return $html.'</nav>';
+}
+

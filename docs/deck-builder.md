@@ -4,13 +4,28 @@ Acesse `http://localhost:8080/decks.php` ou **Meus decks** no menu. O módulo fu
 
 ## Fluxo
 
-1. Importe a exportação completa CSV do ManaBox, com `Name`, `Scryfall ID`, `Quantity` e, quando disponível, `Foil`. A importação mantém versões normais e foil separadas, substitui as quantidades da coleção e preserva os decks; arquivos inválidos preservam a coleção anterior. Impressões desconhecidas são armazenadas e sinalizadas.
+1. Em **Minha coleção**, envie um CSV (`Name`, `Scryfall ID`, `Quantity` e, opcional, `Foil`) para **substituir**, **somar** ou **subtrair** cópias (vendas e trocas). Ao substituir, qualquer linha com erro cancela tudo; ao somar ou subtrair, as linhas corretas são aplicadas. Em todos os casos a página lista cada linha que não entrou com número, carta, motivo e conteúdo, e oferece essas linhas em CSV para corrigir e reenviar. Subtrair mais cópias do que a coleção tem, ou uma impressão/acabamento que não está nela, é erro daquela linha. Impressões desconhecidas do catálogo continuam aceitas ao importar e são sinalizadas.
 2. Planeje um deck do zero ou cole uma exportação textual do Moxfield. Cabeçalhos `Commander` e `Deck` são reconhecidos; listas simples no formato `1 Nome da carta` também funcionam. A importação escolhe primeiro a impressão exata presente na coleção.
 3. Ao criar um deck, escolha imediatamente uma comandante na lista. A mesma busca e os mesmos filtros usados depois para explorar o catálogo já funcionam nessa etapa; apenas a ordenação por sinergia fica indisponível até existir uma comandante de referência.
 4. Depois da escolha, registre a estratégia e busque palavras ou frases literais do Oracle em inglês, separadas por ponto e vírgula: `sacrifice; land; graveyard`. **Todos os termos** usa AND; **Qualquer termo** usa OR. Ambas as faces são pesquisadas. Combine nome, tipo, disponibilidade, identidade de cor, raridade, edição e custo no mesmo painel.
 5. Adicione cartas às candidatas e aprove-as para o deck (ou devolva-as às candidatas). Você define quantidade, função e observações. A edição expandida mostra imagem, tipo, custo e texto Oracle.
 6. A lista é finalizada automaticamente quando comandante + cartas aprovadas chegam a 100 cartas. Cada troca é planejada dentro da seleção, relacionando uma carta do deck com qualquer impressão do catálogo e indicando quando ela está disponível na coleção.
 7. Consulte a composição e o valor estimado. Exporte o deck em texto, as cópias faltantes ou um CSV no padrão da Liga para pesquisar preços do deck completo ou somente do que falta.
+
+## Subpáginas do deck
+
+Cada deck tem abas curtas em vez de uma página longa (`decks.php?deck=ID&view=…`):
+
+| Aba | `view` | Conteúdo |
+|---|---|---|
+| Visão geral | `overview` (padrão) | Comandante, Minha intenção, atalhos para as outras abas, análise (composição, exportações, disponibilidade), curva e mana |
+| Guia da comandante | `guide` | Planos, combos, mecânicas e novidades |
+| O que falta | `needs` | Metas por função e sugestões |
+| Explorar | `explore` | Filtros e resultados, inclusive “Encaixa no deck” |
+| Minha seleção | `selection` | Candidatas e deck |
+| Quadro de relações | `deck_board.php` | Setas entre as cartas |
+
+Links antigos com `view=discover` abrem a Visão geral, ou o Explorar quando trazem parâmetros de busca (`q`, `oracle`, `sort`, `page`…). Sem comandante, o deck mostra só a escolha da comandante e a seleção. As abas vêm de `deckSectionNav()`.
 
 ## Recomendações do EDHREC
 
@@ -46,9 +61,11 @@ Ao escolher uma comandante, o Deckarium consulta o EDHREC (se a cache tiver mais
 
 Os dados ficam em `deck_commander_insights` e são atualizados pelo botão “Atualizar” do guia. `EDHREC_JSON_BASE` permite apontar para outro endereço em testes. Na busca, “Somente identidade da comandante” vem marcado por padrão depois que a comandante é escolhida.
 
-## Índice de Encaixe
+## Índice de Encaixe (histórico)
 
-Na Minha seleção, cada carta recebe uma nota de 0 a 100 (`app/deck_scoring.php`):
+> A nota foi substituída pelas relações explicáveis acima; as metas e regras continuam em uso.
+
+Na versão anterior, cada carta recebia uma nota de 0 a 100 (`app/deck_scoring.php`):
 
 `nota = 100 × regras × Σ(peso × componente) ÷ Σ(pesos) + bônus`
 
@@ -64,6 +81,42 @@ Na Minha seleção, cada carta recebe uma nota de 0 a 100 (`app/deck_scoring.php
 ## O que o deck precisa
 
 Em **Comandante e descobertas**, logo após o guia, o painel compara as cartas aprovadas com as metas de função da fórmula (terrenos, ramp, compra, remoção pontual, remoção em massa, proteção, recursão, tutores). Cada função mostra quanto falta, quantas candidatas já a cumprem e seis cartas do catálogo na identidade da comandante que ainda não estão na seleção — primeiro por sinergia EDHREC, depois pela popularidade — com botão de adicionar. “Ver todas” abre o Explorar com o filtro **Função no deck**. O índice de funções (`deckNeedRoleIndex`, mesmas regex do Índice de Encaixe rodando no PostgreSQL) é gerado uma vez por sincronização do catálogo (~5 s) e aquecido ao escolher a comandante. Na Minha seleção fica só um link para esse painel.
+
+## Relações entre cartas
+
+As relações (`app/deck_relations.php`) são setas **A → B**: a carta A *fornece* algo e a carta B *aproveita*. Cada relação traz o motivo em português e o trecho do texto Oracle das duas cartas.
+
+- **Texto Oracle, frase por frase** (sem lembretes; o nome da carta e “this creature” viram `~`): Tesouros, Comida, Pistas, Sangue, fichas de criatura, mesa larga, sacrifício (corpos × saídas), mortes, marcadores +1/+1 e -1/-1, proliferar, efeitos de entrada e blink, criaturas entrando, explorar, terrenos entrando, cemitério, descarte, instantâneas/feitiços, mágicas não criatura, artefatos, encantamentos, equipamentos/Auras, lendárias, ataques, ganho e perda de vida, compra, cartas dos oponentes, goad, energia, veneno e cópias.
+- **Fichas criadas** (`raw.all_parts` do Scryfall), inclusive o tipo da ficha (ex.: ficha de Merfolk). Fichas que vão para o oponente (Beast Within, Ravenform) não contam.
+- **Tribos:** tipos de criatura da carta, changeling e menções no texto (“Other Merfolk you control…”). Cartas “escolha um tipo de criatura” usam a tribo principal do deck (a da comandante tem prioridade).
+- **Tags do Scryfall Tagger** (opcional): `php bin/sync_tagger.php` grava em `card_tags` as tags de função usadas (`deckRelationTagMap()`); elas só completam o que o texto não detectou e aparecem marcadas como “Scryfall Tagger”.
+- **Combos:** combos do EDHREC (guia da comandante) e do Commander Spellbook com todas as peças presentes viram setas tracejadas.
+
+Na Minha seleção, o diálogo de cada carta lista as relações com o deck e com as candidatas nesse formato.
+
+## Quadro de relações
+
+`deck_board.php?deck=ID` (aba **Quadro de relações** do deck) desenha comandante, deck e candidatas num quadro branco com setas coloridas por grupo.
+
+- Clique numa carta para ver no painel o que ela **fornece para** e **aproveita de** cada carta, com os trechos. Clique no nome do parceiro para ir até ele. `?focus=<id>` abre com a carta em foco (link no diálogo da seleção).
+- **Agrupar por tema:** quando uma mesma relação aparece 7 vezes ou mais (ex.: todos os Merfolk → lordes), as cartas se ligam a um quadro do tema em vez de dezenas de setas cruzadas. **Agrupar terrenos:** terrenos que só fornecem “terrenos entrando” viram um bloco.
+- Filtros por etapa e por grupo de relação, busca de carta, zoom, arrastar cartas (posições lembradas no navegador) e “Reorganizar”.
+- **Combos no Commander Spellbook:** botão no painel consulta o *Find My Combos* (`SPELLBOOK_API_BASE`, padrão `https://backend.commanderspellbook.com`) e guarda o resultado em `deck_spellbook_cache`. Combos completos viram setas; os que “faltam 1 carta” mostram se você tem a peça na coleção.
+- Assets próprios: `assets/board.js` e `assets/board.css`.
+
+## Metas automáticas por comandante
+
+As metas de função (terrenos, ramp, compra, remoções, proteção, recursão, tutores) e a curva são calculadas para a comandante (`deckDynamicTargets()`):
+
+1. **Com dados do EDHREC:** média de terrenos e curva média das listas; para cada função, a soma das taxas de inclusão (decks com a carta ÷ decks possíveis) das cartas listadas, calibrada para 99 cartas e limitada a faixas razoáveis. Os valores são gravados em `deck_commander_insights.payload.role_estimates` ao atualizar o EDHREC (versão 3 do guia).
+2. **Sem EDHREC:** base comum ajustada pela leitura da comandante (custo alto → mais ramp; landfall → mais terrenos; mágicas → mais compra; cemitério/mortes → mais recursão; ataques/equipamentos → mais proteção; fichas → menos remoção em massa).
+
+Em “Ajustar metas e regras”, **Automáticas** é o padrão (`scoring_config.targets_mode = auto`); editar um número passa para **Personalizadas**, e “Restaurar padrão” volta ao automático.
+
+## Explorar: Encaixa no deck e ocultar selecionadas
+
+- **Ocultar cartas já no deck ou nas candidatas** vem marcado com comandante (`hide_selected`).
+- **Ordenar por → Encaixa no deck (coleção)** (`sort=fit`): só cartas da sua coleção, na identidade, legais no Commander e fora da seleção. Cada resultado mostra com quantas cartas da seleção se liga e, ao abrir, os motivos com os trechos — antes de adicionar às candidatas. A ordem é pelo peso das relações (relações com a comandante valem mais).
 
 ## Exportação JSON
 

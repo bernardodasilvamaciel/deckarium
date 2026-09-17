@@ -13,7 +13,12 @@ deckSchema();
 $id = max(0,(int)($_GET['deck'] ?? $_POST['deck'] ?? 0));
 $message = $_SESSION['builder_message'] ?? ''; unset($_SESSION['builder_message']);
 $error = '';
-$view = ($_GET['view'] ?? $_POST['view'] ?? '') === 'selection' ? 'selection' : 'discover';
+// Subpáginas do deck: cada uma é curta e tem sua própria aba.
+$deckViews = ['overview'=>'Visão geral','guide'=>'Guia da comandante','needs'=>'O que falta','explore'=>'Explorar','selection'=>'Minha seleção'];
+$view = (string)($_GET['view'] ?? $_POST['view'] ?? '');
+// Parâmetros de busca indicam o Explorar (links antigos, redirecionamentos após adicionar, paginação, planos do guia).
+$exploreParams = array_intersect(array_keys($_GET), ['q','oracle','type','sort','page','role','card_types','availability','colors','colors_set','rarity','set','cmc_min','cmc_max','choose','synergy','owned','exclude_owned','hide_selected','match','commander_colors']);
+if ($view === 'discover' || !isset($deckViews[$view])) $view = $exploreParams ? 'explore' : 'overview';
 $selectionStage = (string)($_GET['stage'] ?? $_POST['selection_stage'] ?? 'candidate');
 // "Em avaliação" foi unificada com as candidatas: links antigos com stage=review abrem as candidatas.
 if (!in_array($selectionStage,['candidate','deck'],true)) $selectionStage='candidate';
@@ -38,7 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if($result['unmatched']) $message.=' Não localizadas: '.implode(', ',array_slice($result['unmatched'],0,8)).(count($result['unmatched'])>8?'…':'').'.';
         } elseif ($action === 'import') {
             if (($_FILES['collection']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) throw new RuntimeException('Selecione um CSV válido dentro do limite de upload do servidor.');
-            $result = deckImport($_FILES['collection']['tmp_name']);
+            try { $result = deckImport($_FILES['collection']['tmp_name'], 'replace'); }
+            catch (CollectionImportException $importError) { throw new RuntimeException($importError->getMessage().' '.implode(' ', array_map(fn($failedLine) => 'Linha '.$failedLine['line'].($failedLine['name']!==''?' ('.$failedLine['name'].')':'').': '.$failedLine['reason'], array_slice($importError->lines, 0, 8))).(count($importError->lines) > 8 ? ' Veja todas em Minha coleção.' : '')); }
             $message = number_format($result['quantity'],0,',','.') . ' cartas importadas. As quantidades da coleção foram substituídas pelo CSV.';
         } else {
             $deck = deckQuery('SELECT * FROM builder_decks WHERE id=? AND user_id=?',[$id,$userId])->fetch();
@@ -53,12 +59,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$scoreCommander) throw new RuntimeException('Escolha uma comandante antes de ajustar metas e regras.');
                 if ($action === 'scoring_reset') {
                     deckQuery('UPDATE builder_decks SET scoring_config=NULL WHERE id=? AND user_id=?',[$id,$userId]);
-                    $message = 'Metas e regras restauradas para o padrão Equilibrado.';
+                    $message = 'Metas e regras restauradas: as metas voltaram a ser calculadas para a comandante.';
                 } elseif ($action === 'scoring_config') {
                     $scoreConfig = deckScoreConfigFromPost($_POST);
                     deckQuery('UPDATE builder_decks SET scoring_config=?::jsonb WHERE id=? AND user_id=?',[json_encode($scoreConfig),$id,$userId]);
                     $message = 'Metas e regras salvas para este deck.';
                 }
+            } elseif ($action === 'bulk_remove') {
+                // Remoção em massa é limitada às candidatas; cartas já aprovadas continuam exigindo a ação de devolvê-las.
+                if ($selectionStage !== 'candidate') throw new RuntimeException('Somente cartas candidatas podem ser removidas em massa.');
+                $chosen = array_slice(array_values(array_unique(array_filter(array_map('strval', array_filter((array)($_POST['cards'] ?? []), 'is_scalar')), fn($value) => (bool)preg_match('/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i', $value)))), 0, 400);
+                if (!$chosen) throw new RuntimeException('Marque ao menos uma candidata para remover.');
+                $removed = deckQuery("DELETE FROM builder_items WHERE deck_id=? AND stage='candidate' AND card_id::text = ANY(?::text[])", [$id, '{'.implode(',', array_map('strtolower', $chosen)).'}'])->rowCount();
+                if (!$removed) throw new RuntimeException('Nenhuma candidata foi removida — a seleção mudou desde que a página abriu. Recarregue e tente novamente.');
+                $message = $removed.($removed === 1 ? ' candidata removida da seleção.' : ' candidatas removidas da seleção.');
             } elseif ($action === 'bulk_move') {
                 // Movimentação em massa na Minha seleção: mesmas regras do mover individual, aplicadas na ordem da tela.
                 $source = $selectionStage;
@@ -191,14 +205,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['builder_message'] = $message;
         $return = '/decks.php' . ($id ? '?deck='.$id : '');
         if ($id && in_array($action,['add','item','remove'],true)) {
-            $return .= '&'.http_build_query(['q'=>(string)($_POST['q']??''),'oracle'=>(string)($_POST['oracle']??''),'type'=>(string)($_POST['type']??''),'match'=>(string)($_POST['match']??'all'),'availability'=>(string)($_POST['availability']??'all'),'colors'=>(string)($_POST['colors']??''),'sort'=>(string)($_POST['sort']??'relevance'),'rarity'=>(string)($_POST['rarity']??''),'set'=>(string)($_POST['set']??''),'cmc_min'=>(string)($_POST['cmc_min']??''),'cmc_max'=>(string)($_POST['cmc_max']??''),'card_types'=>$cardTypesFrom($_POST['card_types']??[]),'role'=>(string)($_POST['role']??''),'page'=>max(1,(int)($_POST['page']??1))]);
+            $return .= '&'.http_build_query(['q'=>(string)($_POST['q']??''),'oracle'=>(string)($_POST['oracle']??''),'type'=>(string)($_POST['type']??''),'match'=>(string)($_POST['match']??'all'),'availability'=>(string)($_POST['availability']??'all'),'colors'=>(string)($_POST['colors']??''),'hide_selected'=>(string)($_POST['hide_selected']??'1'),'sort'=>(string)($_POST['sort']??'relevance'),'rarity'=>(string)($_POST['rarity']??''),'set'=>(string)($_POST['set']??''),'cmc_min'=>(string)($_POST['cmc_min']??''),'cmc_max'=>(string)($_POST['cmc_max']??''),'card_types'=>$cardTypesFrom($_POST['card_types']??[]),'role'=>(string)($_POST['role']??''),'page'=>max(1,(int)($_POST['page']??1))]);
             $return .= $action==='add' ? '#result-'.rawurlencode($cardId) : '#selection';
         }
         if($id && $view==='selection') {
             $return='/decks.php?deck='.$id.'&view=selection&stage='.urlencode($selectionStage);
             $return.=$action==='prepare_upgrade' ? '&upgrade_card='.rawurlencode((string)($_POST['card']??'')).'#upgrade' : '#selection';
         }
-        if($id && $action==='sync_edhrec') $return='/decks.php?deck='.$id.'&sort=synergy#explore';
+        if($id && $action==='sync_edhrec') $return='/decks.php?deck='.$id.'&view=guide';
+        if($id && in_array($action,['strategy','commander'],true)) $return='/decks.php?deck='.$id.'&view=overview';
         header('Location: '.$return, true,303); exit;
     } catch (Throwable $e) {
         $error = $e instanceof RuntimeException && !($e instanceof PDOException) ? $e->getMessage() : 'Não foi possível salvar. Nenhuma seleção foi descartada; tente novamente.';
@@ -228,7 +243,9 @@ $collection = deckQuery('SELECT COALESCE(SUM(quantity),0) total,COUNT(*) printin
 $q = substr(trim((string)($_GET['q']??'')),0,200);
 $choosingCommander = (bool)$deck && (!$commander || isset($_GET['choose']));
 $guideInsights=null;$guidePlans=[];$guideCombos=[];$guideMechanics=['own'=>[],'new'=>[]];$guideNewCards=[];$guideSimilar=[];
-if($commander && !$choosingCommander && $view==='discover'){
+// Sem comandante (ou trocando), o deck só tem a escolha da comandante no Explorar.
+if($deck && $choosingCommander && $view!=='selection') $view='explore';
+if($commander && !$choosingCommander && in_array($view,['guide','overview'],true)){
     $guideInsights=deckCommanderInsights($commander);
     $guidePlans=deckGuidePlans($commander,$guideInsights);
     $guideCombos=deckGuideCombos($commander,$guideInsights);
@@ -241,8 +258,11 @@ $type = substr(trim((string)($_GET['type']??'')),0,120);
 $match = ($_GET['match']??(str_contains((string)($_GET['oracle']??''),';')?'any':'all'))==='any' ? 'any' : 'all';
 $defaultSort=$choosingCommander?'popular':($commander?'synergy':'relevance');
 $sort = (string)($_GET['sort'] ?? ((($_GET['synergy']??'')==='1')?'synergy':$defaultSort));
-if (!in_array($sort,['relevance','name','newest','owned','synergy','popular'],true)) $sort=$defaultSort;
-if($choosingCommander && $sort==='synergy') $sort='popular';
+if (!in_array($sort,['relevance','name','newest','owned','synergy','popular','fit'],true)) $sort=$defaultSort;
+if($choosingCommander && in_array($sort,['synergy','fit'],true)) $sort='popular';
+if(!$commander && $sort==='fit') $sort=$defaultSort;
+// "Encaixa no deck": só cartas da coleção, na identidade, fora da seleção, ordenadas pelas relações com o deck.
+$fitMode = $sort==='fit' && $commander && !$choosingCommander;
 $rarity = (string)($_GET['rarity'] ?? '');
 if (!in_array($rarity,['common','uncommon','rare','mythic','special'],true)) $rarity='';
 $setFilter = strtoupper(substr(trim((string)($_GET['set'] ?? '')),0,16));
@@ -252,23 +272,26 @@ $availability=(string)($_GET['availability']??'');
 if($availability==='' && ($_GET['owned']??'')==='1') $availability='owned';
 if($availability==='' && ($_GET['exclude_owned']??'')==='1') $availability='missing';
 if(!in_array($availability,['all','owned','missing'],true)) $availability=$choosingCommander?'owned':'all';
+if($fitMode) $availability='owned';
 $ownedOnly = $availability==='owned';
 $excludeOwned = $availability==='missing';
 // Com comandante escolhida, a busca começa limitada à identidade dela; o formulário envia colors_set para respeitar a escolha do usuário.
-$colorsOnly = array_key_exists('colors',$_GET) ? ($_GET['colors']==='1') : (isset($_GET['colors_set']) ? false : (bool)$commander);
+$colorsOnly = $fitMode || (array_key_exists('colors',$_GET) ? ($_GET['colors']==='1') : (isset($_GET['colors_set']) ? false : (bool)$commander));
+// Esconder o que já está no deck ou nas candidatas: ligado por padrão com comandante (o formulário envia colors_set).
+$hideSelected = $fitMode || (!$choosingCommander && $commander && (array_key_exists('hide_selected',$_GET) ? $_GET['hide_selected']==='1' : !isset($_GET['colors_set'])));
 $commanderColors=array_values(array_intersect((array)($_GET['commander_colors']??[]),['W','U','B','R','G','C']));
 $cardTypes = $choosingCommander ? [] : $cardTypesFrom($_GET['card_types'] ?? []);
 // Função no deck (ramp, remoção…): usa o índice de funções do Índice de Encaixe.
 $roleFilterOptions = array_diff_key(DECK_SCORE_ROLES, ['plan'=>1]);
 $roleFilter = (string)($_GET['role'] ?? '');
 if ($choosingCommander || !isset($roleFilterOptions[$roleFilter])) $roleFilter = '';
-$catalogVisible = $deck && $view==='discover';
+$catalogVisible = $deck && $view==='explore';
 $setOptions = $catalogVisible ? catalogCached('deck-filter-sets-v1',fn()=>deckQuery("SELECT set_code,MAX(set_name) set_name FROM cards WHERE set_code IS NOT NULL AND set_code<>'' GROUP BY set_code ORDER BY MAX(set_name),set_code")->fetchAll()) : [];
 $page = max(1,min(10000,(int)($_GET['page']??1)));
 $terms = array_slice(deckTerms($oracle),0,12);
 $highlightTerms=array_merge($terms,deckTerms($type),$q!==''?[$q]:[]);
-$filterHidden = function() use($q,$oracle,$type,$match,$availability,$colorsOnly,$sort,$rarity,$setFilter,$cmcMin,$cmcMax,$commanderColors,$cardTypes,$roleFilter,$page): void {
-    foreach (['q'=>$q,'oracle'=>$oracle,'type'=>$type,'match'=>$match,'availability'=>$availability,'colors'=>$colorsOnly?'1':'','sort'=>$sort,'rarity'=>$rarity,'set'=>$setFilter,'cmc_min'=>$cmcMin??'','cmc_max'=>$cmcMax??'','role'=>$roleFilter,'page'=>$page] as $k=>$v) echo '<input type="hidden" name="'.h($k).'" value="'.h((string)$v).'">';
+$filterHidden = function() use($q,$oracle,$type,$match,$availability,$colorsOnly,$hideSelected,$sort,$rarity,$setFilter,$cmcMin,$cmcMax,$commanderColors,$cardTypes,$roleFilter,$page): void {
+    foreach (['q'=>$q,'oracle'=>$oracle,'type'=>$type,'match'=>$match,'availability'=>$availability,'colors'=>$colorsOnly?'1':'','hide_selected'=>$hideSelected?'1':'0','sort'=>$sort,'rarity'=>$rarity,'set'=>$setFilter,'cmc_min'=>$cmcMin??'','cmc_max'=>$cmcMax??'','role'=>$roleFilter,'page'=>$page] as $k=>$v) echo '<input type="hidden" name="'.h($k).'" value="'.h((string)$v).'">';
     foreach($commanderColors as $color) echo '<input type="hidden" name="commander_colors[]" value="'.h($color).'">';
     foreach($cardTypes as $cardType) echo '<input type="hidden" name="card_types[]" value="'.h($cardType).'">';
 };
@@ -277,7 +300,16 @@ $tokenFields = function(string $action, ?string $card = null) use($csrf,$id,$vie
     echo '<input type="hidden" name="csrf" value="'.h($csrf).'"><input type="hidden" name="deck" value="'.$id.'"><input type="hidden" name="action" value="'.h($action).'">';
     if ($card) echo '<input type="hidden" name="card" value="'.h($card).'">';
 };
-$items = $deck ? deckQuery(deckOwnedSql()."SELECT c.*,i.stage,i.quantity,i.role,i.notes,COALESCE(o.owned,0) owned,COALESCE(bc.quantity,0) owned_printing,COALESCE(bc.normal_quantity,0) normal_quantity,COALESCE(bc.foil_quantity,0) foil_quantity,
+$leader=$commander ? ($commander['oracle_id']?:$commander['id']) : null;
+$selectionSynergyJoin = '';
+$selectionSynergyParams = [];
+$selectionSynergySelect = 'NULL::text synergy_metric,NULL::numeric synergy_score';
+if ($leader) {
+    $selectionSynergyJoin = " LEFT JOIN (SELECT DISTINCT ON(COALESCE(source.oracle_id,source.id)) s.metric,s.score,COALESCE(source.oracle_id,source.id) logical_id FROM deck_synergy s JOIN cards leader ON leader.id=s.commander_id JOIN cards source ON source.id=s.card_id WHERE COALESCE(leader.oracle_id,leader.id)=?::uuid ORDER BY COALESCE(source.oracle_id,source.id),s.synced_at DESC,s.score DESC) synergy ON synergy.logical_id=COALESCE(c.oracle_id,c.id)";
+    $selectionSynergyParams[] = $leader;
+    $selectionSynergySelect = 'synergy.metric synergy_metric,synergy.score synergy_score';
+}
+$items = $deck ? deckQuery(deckOwnedSql()."SELECT c.*,i.stage,i.quantity,i.role,i.notes,COALESCE(o.owned,0) owned,COALESCE(bc.quantity,0) owned_printing,COALESCE(bc.normal_quantity,0) normal_quantity,COALESCE(bc.foil_quantity,0) foil_quantity,{$selectionSynergySelect},
     COALESCE((SELECT SUM(x.quantity)::int FROM (
         SELECT SUM(oi.quantity)::int quantity FROM builder_items oi JOIN builder_decks oid ON oid.id=oi.deck_id AND oid.user_id={$userId} JOIN cards oc ON oc.id=oi.card_id WHERE oi.stage='deck' AND oi.deck_id<>i.deck_id AND COALESCE(oc.oracle_id,oc.id)=COALESCE(c.oracle_id,c.id)
         UNION ALL SELECT COUNT(*)::int quantity FROM builder_decks od JOIN cards oc ON oc.id=od.commander_id WHERE od.user_id={$userId} AND od.id<>i.deck_id AND COALESCE(oc.oracle_id,oc.id)=COALESCE(c.oracle_id,c.id)
@@ -286,12 +318,11 @@ $items = $deck ? deckQuery(deckOwnedSql()."SELECT c.*,i.stage,i.quantity,i.role,
         SELECT oi.deck_id FROM builder_items oi JOIN builder_decks oid ON oid.id=oi.deck_id AND oid.user_id={$userId} JOIN cards oc ON oc.id=oi.card_id WHERE oi.stage='deck' AND oi.deck_id<>i.deck_id AND COALESCE(oc.oracle_id,oc.id)=COALESCE(c.oracle_id,c.id)
         UNION SELECT od.id FROM builder_decks od JOIN cards oc ON oc.id=od.commander_id WHERE od.user_id={$userId} AND od.id<>i.deck_id AND COALESCE(oc.oracle_id,oc.id)=COALESCE(c.oracle_id,c.id)
     ) x),0) other_decks
-    FROM builder_items i JOIN cards c ON c.id=i.card_id LEFT JOIN owned o ON o.logical_id=COALESCE(c.oracle_id,c.id) LEFT JOIN ".deckCollectionPrintingSql()." bc ON bc.scryfall_id=c.id WHERE i.deck_id=? ORDER BY c.name",[$id])->fetchAll() : [];
-$leader=$commander ? ($commander['oracle_id']?:$commander['id']) : null;
+    FROM builder_items i JOIN cards c ON c.id=i.card_id LEFT JOIN owned o ON o.logical_id=COALESCE(c.oracle_id,c.id) LEFT JOIN ".deckCollectionPrintingSql()." bc ON bc.scryfall_id=c.id{$selectionSynergyJoin} WHERE i.deck_id=? ORDER BY c.name",array_merge($selectionSynergyParams,[$id]))->fetchAll() : [];
 $needPanel = [];
-if ($commander && !$choosingCommander && $view==='discover') {
+if ($commander && !$choosingCommander && in_array($view,['needs','overview'],true)) {
     try {
-        $needConfig = deckScoreConfig($deck['scoring_config'] ?? null);
+        $needConfig = deckScoreConfigFor($deck, $commander);
         $needPanel = deckNeedSuggestions($commander, deckScoreSelection($deck, $commander, $items, $needConfig), $items, $needConfig);
     } catch (Throwable $needError) {
         error_log('Painel de necessidades: '.$needError->getMessage());
@@ -355,7 +386,7 @@ if ($deck && isset($_GET['export'])) {
             }
             return $card;
         };
-        $jsonConfig=deckScoreConfig($deck['scoring_config']??null);
+        $jsonConfig=deckScoreConfigFor($deck,$commander?:null);
         $jsonScores=$commander ? deckScoreSelection($deck,$commander,$items,$jsonConfig) : null;
         $jsonSynergy=$commander ? deckQuery("SELECT COALESCE(card.oracle_id,card.id)::text,json_build_object('score',MAX(s.score),'inclusion',MAX(s.inclusion),'metric',MAX(s.metric),'synced_at',MAX(s.synced_at)) FROM deck_synergy s JOIN cards leader ON leader.id=s.commander_id JOIN cards card ON card.id=s.card_id WHERE COALESCE(leader.oracle_id,leader.id)=?::uuid GROUP BY 1",[$leader])->fetchAll(PDO::FETCH_KEY_PAIR) : [];
         $gameChangerNames=array_flip(array_map('strtolower',deckScoreGameChangers()));
@@ -411,12 +442,14 @@ if ($deck && isset($_GET['export'])) {
     else { if ($commander) echo '1 '.$commander['name']."\n"; foreach($items as $row) if($row['stage']==='deck') echo $row['quantity'].' '.$row['name']."\n"; }
     exit;
 }
-$results=[]; $hasMore=false; $resultTotal=0; $totalPages=1;
+$results=[]; $hasMore=false; $resultTotal=0; $totalPages=1; $fitPreview=[]; $fitConnected=0;
 if ($catalogVisible) {
     $where=[];$params=[];
     // Literal substring search: escaping prevents % and _ acting as wildcards.
     $like=fn($s)=>'%'.str_replace(['\\','%','_'],['\\\\','\\%','\\_'],$s).'%';
     if($q!==''){$where[]='c.name ILIKE ?';$params[]=$like($q);}
+    // Cartas da Art Series não são jogáveis e não devem aparecer como possibilidades de deck.
+    if (!$choosingCommander) $where[]="COALESCE(c.raw->>'set_type','') <> 'art_series'";
     $textExpr="COALESCE(c.oracle_text,'') || ' ' || COALESCE((SELECT string_agg(f->>'oracle_text',' ') FROM jsonb_array_elements(c.card_faces) f),'')";
     $typeConditions=[];
     foreach (array_slice(deckTerms($type),0,12) as $term) {
@@ -431,9 +464,16 @@ if ($catalogVisible) {
     }
     $conditions=[];foreach($terms as $term){$conditions[]="({$textExpr}) ILIKE ?";$params[]=$like($term);}
     if($conditions)$where[]='('.implode($match==='any'?' OR ':' AND ',$conditions).')';
-    if($ownedOnly)$where[]='COALESCE(o.owned,0)>0';
+    // Só a coleção: parte das cartas lógicas da coleção (índice cards_logical_idx) em vez de varrer o catálogo.
+    // No modo "Encaixa no deck" a consulta já parte da coleção (builder_collection).
+    if($ownedOnly && !$fitMode)$where[]='COALESCE(c.oracle_id,c.id) IN (SELECT logical_id FROM owned)';
     if($excludeOwned)$where[]='COALESCE(o.owned,0)=0';
     if($colorsOnly && $commander){$where[]='c.color_identity <@ ?::jsonb';$params[]=json_encode($identity);}
+    if($hideSelected && $commander){
+        $hiddenLogical=array_values(array_unique(array_merge(array_map('strval',array_keys($selectedByLogical)),[(string)$leader])));
+        $where[]='COALESCE(c.oracle_id,c.id) <> ALL(?::uuid[])'; $params[]='{'.implode(',',$hiddenLogical).'}';
+    }
+    if($fitMode){ $where[]="c.legalities->>'commander'='legal'"; $where[]="COALESCE(c.raw->>'digital','false')='false'"; }
     if($roleFilter!==''){
         // Com comandante, só a identidade dela; sem, qualquer cor.
         $roleIds = deckNeedRoleIds($roleFilter, $commander ? $identity : ['W','U','B','R','G']);
@@ -469,6 +509,24 @@ if ($catalogVisible) {
               default => 'r.owned_printing DESC,r.owned DESC,r.released_at DESC NULLS LAST,r.name,r.id'
      };
      $edhrecRankSelect=$choosingCommander ? 'c.edhrec_rank_cached' : 'NULL::int';
+     if($fitMode){
+        // Todas as cartas da coleção que passam nos filtros (limitado pelo tamanho da coleção), com relações calculadas em PHP.
+        // Na coleção cada carta já tem uma impressão própria: parte de builder_collection (rápido e sem varrer o catálogo).
+        $fitRows=deckQuery("SELECT * FROM (SELECT DISTINCT ON(COALESCE(c.oracle_id,c.id)) c.*,b.quantity owned_printing,NULL::int edhrec_rank,NULL::text synergy_metric,NULL::numeric synergy_score
+            FROM builder_collection b JOIN cards c ON c.id=b.scryfall_id
+            {$whereSql} AND b.user_id=".(int)$userId." ORDER BY COALESCE(c.oracle_id,c.id),b.quantity DESC,(c.lang='en') DESC,c.released_at DESC NULLS LAST) fit LIMIT 6000",$params)->fetchAll();
+        $fitOwned=deckOwnedLogicalMap();
+        foreach($fitRows as &$fitRow) $fitRow['owned']=(int)($fitOwned[(string)($fitRow['oracle_id']?:$fitRow['id'])]??0);
+        unset($fitRow);
+        $fitSelection=[(string)$commander['id']=>$commander+['stage'=>'commander']];
+        foreach($items as $selectedItem) $fitSelection[(string)$selectedItem['id']]=$selectedItem;
+        $fitOutsiders=[]; foreach($fitRows as $fitRow) $fitOutsiders[(string)$fitRow['id']]=$fitRow;
+        $fitPreview=deckRelationPreview($fitOutsiders,$fitSelection,$commander);
+        usort($fitRows,fn($a,$b)=>[($fitPreview[$b['id']]['score']??0),($fitPreview[$b['id']]['partners']??0),$b['owned_printing']] <=> [($fitPreview[$a['id']]['score']??0),($fitPreview[$a['id']]['partners']??0),$a['owned_printing']] ?: strcmp((string)$a['name'],(string)$b['name']));
+        $resultTotal=count($fitRows); $fitConnected=count($fitPreview);
+        $results=array_slice($fitRows,$offset,24);
+        $totalPages=max(1,(int)ceil($resultTotal/24)); $hasMore=$page<$totalPages;
+     } else {
      $outerOrder=str_replace(['r.','synergy_score'],['page.','page.synergy_score'],$resultOrder);
      $results=deckQuery(deckOwnedSql($id)."SELECT c.*,page.owned,page.owned_printing,page.edhrec_rank,page.synergy_metric,page.synergy_score,page.total_count FROM (
          SELECT r.*,{$synergySelect},COUNT(*) OVER() total_count FROM (SELECT DISTINCT ON(COALESCE(c.oracle_id,c.id)) c.id,c.name,c.released_at,COALESCE(c.oracle_id,c.id) logical_id,COALESCE(o.owned,0) owned,COALESCE(bc.quantity,0) owned_printing,{$edhrecRankSelect} edhrec_rank FROM cards c LEFT JOIN owned o ON o.logical_id=COALESCE(c.oracle_id,c.id) LEFT JOIN used u ON u.logical_id=COALESCE(c.oracle_id,c.id) LEFT JOIN ".deckCollectionPrintingSql()." bc ON bc.scryfall_id=c.id {$whereSql} ORDER BY COALESCE(c.oracle_id,c.id),{$commanderOrder}) r{$synergyJoin}
@@ -476,6 +534,7 @@ if ($catalogVisible) {
      ) page JOIN cards c ON c.id=page.id ORDER BY {$outerOrder}",$resultParams)->fetchAll();
     $resultTotal=(int)($results[0]['total_count']??0); $totalPages=max(1,(int)ceil($resultTotal/24));
     $hasMore=$page<$totalPages; $results=array_slice($results,0,24);
+     }
 }
 pageHeader('Meus decks');
 ?>
@@ -494,27 +553,43 @@ pageHeader('Meus decks');
 <button type="button" class="deck-delete-trigger" data-deck-delete="deck-delete-<?= $d['id'] ?>" aria-haspopup="dialog">Excluir</button><dialog class="deck-delete-dialog" id="deck-delete-<?= $d['id'] ?>" aria-labelledby="deck-delete-title-<?= $d['id'] ?>"><form method="dialog" class="deck-delete-cancel"><button type="submit" aria-label="Fechar confirmação">×</button></form><h3 id="deck-delete-title-<?= $d['id'] ?>">Excluir “<?= h($d['name']) ?>”?</h3><p>O deck e seus registros de upgrade serão excluídos. Sua coleção permanecerá salva.</p><div class="deck-delete-actions"><button type="button" class="secondary-link" data-dialog-close>Cancelar</button><form method="post"><input type="hidden" name="csrf" value="<?= h($csrf) ?>"><input type="hidden" name="deck" value="<?= $d['id'] ?>"><input type="hidden" name="action" value="delete_deck"><button class="deck-delete-confirm">Excluir deck</button></form></div></dialog></article>
 <?php endforeach; ?></div></section>
 <?php else: ?>
-<nav class="tabs deck-module-nav" aria-label="Módulos de decks"><a href="/decks.php">Biblioteca</a><a href="?deck=<?= $id ?>&view=discover" <?= $view==='discover'?'aria-current="page"':'' ?>>Comandante e descobertas</a><a href="?deck=<?= $id ?>&view=selection" <?= $view==='selection'?'aria-current="page"':'' ?>>Minha seleção · <?= $finalCount ?>/100</a></nav>
+<?php
+$needMissingCount = $needPanel ? count(array_filter($needPanel, fn($need) => $need['missing'] > 0)) : 0;
+$candidateCount = array_sum(array_map(fn($row) => $row['stage']==='candidate' ? (int)$row['quantity'] : 0, $items));
+?>
+<?= deckSectionNav($id, ($choosingCommander && $view==='explore') ? 'explore' : $view, $commander && !$choosingCommander, $finalCount) ?>
 <div class="deck-workflow-bar <?= $isComplete?'is-complete':'' ?>"><div><strong><?= $isComplete?'Deck finalizado automaticamente':'Planejamento em andamento' ?></strong><span><?= $isComplete?'100 cartas aprovadas na seleção.':'A seleção é finalizada automaticamente quando chegar a 100 cartas no deck.' ?></span></div><span class="deck-progress"><?= $finalCount ?>/100 cartas</span></div>
-<?php if($view==='discover'): ?>
-<?php if(!$choosingCommander): ?>
+<?php if($view==='overview'): ?>
 <section id="intent" class="builder-intro">
 <div class="panel"><div class="panel-heading"><h2>Comandante</h2><a href="?deck=<?= $id ?>&choose=1#explore">Trocar</a></div><div class="builder-commander"><?php if($src=cardImageUrl($commander)): ?><img src="<?= h($src) ?>" alt="<?= h($commander['name']) ?>" width="146" height="204"><?php endif; ?><div><h3><?= h($commander['name']) ?></h3><p class="commander-identity"><strong>Identidade:</strong> <?= $identity?manaSymbols($identityMana):'<span class="muted">Incolor</span>' ?></p><p><?= nl2br(h(deckText($commander))) ?></p></div></div></div>
 <form method="post" class="panel builder-form"><?php $tokenFields('strategy'); ?><h2>Minha intenção</h2><label>Estratégia e mecânicas<textarea name="strategy" rows="4" placeholder="Plano principal, temas secundários e o que quero evitar"><?= h($deck['strategy']) ?></textarea></label><label>Termos Oracle para explorar<input name="terms" value="<?= h($deck['terms']) ?>" placeholder="sacrifice; land; graveyard"></label><small>Separe palavras ou frases por ponto e vírgula. Estes termos são filtros escolhidos por você, não uma avaliação automática de sinergia.</small><button class="primary-link">Salvar intenção</button></form>
 </section>
-<?php endif; ?>
+<section class="deck-overview-links" aria-label="Próximos passos">
+    <a class="deck-overview-card" href="?deck=<?= $id ?>&amp;view=guide"><span>Guia da comandante</span><strong><?= count($guidePlans) ?> planos · <?= count($guideCombos) ?> combos</strong><small>Temas do EDHREC, combos, mecânicas e novidades.</small></a>
+    <a class="deck-overview-card" href="?deck=<?= $id ?>&amp;view=needs"><span>O que falta</span><strong><?= $needMissingCount ? $needMissingCount.($needMissingCount===1?' função abaixo da meta':' funções abaixo da meta') : 'Metas atingidas' ?></strong><small>Metas por função calculadas para a comandante, com sugestões.</small></a>
+    <a class="deck-overview-card" href="?deck=<?= $id ?>&amp;view=explore&amp;sort=fit"><span>Explorar</span><strong>Encaixa no deck</strong><small>Cartas da sua coleção que se ligam ao deck.</small></a>
+    <a class="deck-overview-card" href="?deck=<?= $id ?>&amp;view=selection&amp;stage=candidate"><span>Minha seleção</span><strong><?= $finalCount ?>/100 no deck · <?= $candidateCount ?> candidata<?= $candidateCount===1?'':'s' ?></strong><small>Aprove candidatas e ajuste metas e regras.</small></a>
+    <a class="deck-overview-card" href="/deck_board.php?deck=<?= $id ?>"><span>Quadro de relações</span><strong>Setas entre as cartas</strong><small>Quem fornece e quem aproveita cada recurso.</small></a>
+</section>
+<?php elseif($view==='guide'): ?>
+<?php require __DIR__.'/deck_guide_view.php'; ?>
+<?php elseif($view==='needs'): ?>
+<?php if($needPanel): require __DIR__.'/deck_needs_view.php'; else: ?><p class="empty-state">Não foi possível calcular as metas agora. Tente recarregar a página.</p><?php endif; ?>
+<?php elseif($view==='explore'): ?>
 <?php require __DIR__.'/deck_discovery_view.php'; ?>
-<?php else: require __DIR__.'/deck_selection_view.php'; ?>
+<?php else: require __DIR__.'/deck_selection_view.php'; endif; ?>
+<?php if($view==='overview'): ?>
 <section id="balance" class="section-block"><h2>Análise e próximos passos</h2><div class="builder-intro"><div class="panel"><h3>Composição escolhida</h3><p><strong><?= $finalCount ?></strong> cartas contando o comandante · <strong><?= $landCount ?></strong> terrenos</p><p class="deck-value"><span>Valor estimado das cartas aprovadas</span><strong>R$ <?= number_format($deckPriceTotal,2,',','.') ?></strong><?php if($deckUnpriced): ?><small><?= $deckUnpriced ?> carta(s) sem cotação</small><?php endif; ?></p><p>Referência para o formato: 100 cartas. <?= max(0,100-$finalCount) ?> espaços restantes<?= $finalCount>100?' · '.($finalCount-100).' acima da referência':'' ?>.</p><?php foreach($roles as $role=>$count): ?><p><?= h($role) ?>: <?= $count ?></p><?php endforeach; ?><p class="muted">As funções só contam as cartas aprovadas, com a classificação que você informou.</p><h3>Demanda de mana colorida</h3><p><?= h(implode(' · ',array_map(fn($c)=>$c.': '.$pipCounts[$c],array_keys($pipCounts)))) ?></p><p class="muted">Contagem de símbolos nos custos. Híbridos contam em ambas as cores. Não é uma recomendação de terrenos: custos alternativos, faces, aceleração e turnos de jogo exigem avaliação adicional.</p><?php foreach($warnings as $warning): ?><p class="notice warning"><?= h($warning) ?></p><?php endforeach; ?><p class="muted">Alertas básicos, não uma validação completa de legalidade ou força do deck.</p><span class="deck-export-links"><a href="?deck=<?= $id ?>&export=deck">Exportar deck em texto</a><a href="?deck=<?= $id ?>&export=json" title="Deck, candidatas e comandante com todos os dados de cada carta: Scryfall completo, coleção, preços, notas e Índice de Encaixe">Exportar deck em JSON (completo)</a></span><form method="get" class="liga-export"><input type="hidden" name="deck" value="<?= $id ?>"><input type="hidden" name="export" value="liga"><label>Exportação para Liga<select name="liga_scope"><option value="missing">Somente cartas que faltam</option><option value="all">Deck completo, inclusive minha coleção</option></select></label><button class="secondary-link">Baixar CSV padrão Liga</button></form></div>
 <div class="panel"><h3>Disponibilidade das cartas</h3><p>Os indicadores aparecem sobre cada carta aprovada e consideram todas as impressões da mesma carta.</p><div class="inventory-legend"><span><i class="inventory-dot is-available"></i> Disponível na coleção</span><span><i class="inventory-dot is-limited"></i> Quantidade limitada</span><span><i class="inventory-dot is-reserved"></i> Usada em outros decks</span></div><p class="muted">Uma cópia física só pode ser comprometida uma vez. Se você possui duas cópias, a carta pode aparecer em até dois decks. Cartas candidatas não reservam cópias.</p></div></div></section>
-<?php endif; endif; if ($deck && $commander && !$choosingCommander): ?>
+<?php endif; endif; if ($deck && $commander && !$choosingCommander): ?><?php if($view==='overview'): ?>
 <section id="mana-analysis" class="section-block mana-analysis"><div class="section-heading"><div><h2>Leitura do deck</h2><p class="muted">Uma visão rápida da curva e dos símbolos de mana das cartas aprovadas.</p></div><span class="analysis-total"><?= $finalCount ?>/100 cartas</span></div><div class="analysis-grid"><div class="panel"><h3>Curva de mana</h3><div class="mana-curve" aria-label="Curva de mana"><?php for($cost=0;$cost<=10;$cost++): $count=(int)($curveCounts[$cost]??0); ?><button type="button" class="mana-column" data-mana-cost="<?= $cost ?>" aria-controls="mana-list-<?= $cost ?>" aria-expanded="false"><span><?= $count ?></span><i class="mana-bar" style="height:<?= $maxCurve?max(4,round($count/$maxCurve*110)):4 ?>px"></i><small><?= $cost===10?'10+':$cost ?></small></button><?php endfor; ?></div><?php for($cost=0;$cost<=10;$cost++): ?><div class="mana-card-list" id="mana-list-<?= $cost ?>" data-mana-list="<?= $cost ?>" hidden><h4>Cartas de custo <?= $cost===10?'10 ou mais':$cost ?></h4><?php if(!$curveCards[$cost]): ?><p class="muted">Nenhuma carta final nesse valor.</p><?php else: foreach($curveCards[$cost] as $curveCard): ?><a class="mana-card-item" href="/card.php?id=<?= h($curveCard['id']) ?>"><?php if($src=cardImageUrl($curveCard,'front','small')): ?><img src="<?= h($src) ?>" alt="" loading="lazy"><?php endif; ?><span><strong><?= (int)($curveCard['quantity']??1) ?>× <?= h($curveCard['name']) ?></strong><small><?= h($curveCard['type_line']??'') ?></small></span></a><?php endforeach; endif; ?></div><?php endfor; ?><p class="muted">Cartas não-terreno aprovadas no deck final. Clique em uma barra para ver as cartas daquele valor. Upgrades planejados não entram até serem confirmados.</p></div><div class="panel"><h3>Porcentagem de mana escolhida</h3><div class="mana-distribution"><?php foreach($pipCounts as $color=>$count): $percent=$manaTotal?round($count/$manaTotal*100):0; ?><div><div class="mana-label"><strong><?= $color ?></strong><span><?= $percent ?>% · <?= $count ?> símbolos</span></div><div class="mana-track"><i class="mana-fill mana-<?= $color ?>" style="width:<?= $percent ?>%"></i></div></div><?php endforeach; ?></div><p class="muted">Baseado nos custos das cartas aprovadas e da comandante. Terrenos básicos não entram nesta porcentagem.</p></div></div></section>
 <?php if($recommendedLandTotal!==null): ?><section class="section-block land-recommendation"><div class="panel"><h3>Sugestão inicial de terrenos</h3><p>Para este deck finalizado, uma base de aproximadamente <strong><?= $recommendedLandTotal ?> terrenos</strong> é um ponto de partida. A divisão abaixo usa a proporção de símbolos coloridos das cartas aprovadas; revise conforme sua curva, ramp e terrenos não básicos.</p><div class="land-recommendation-grid"><?php foreach($landRecommendation as $color=>$amount): ?><span><strong><?= h($colorNames[$color]) ?></strong><b><?= $amount ?></b></span><?php endforeach; ?></div><p class="muted">Isto é uma recomendação estatística, não uma alteração automática do deck.</p></div></section><?php endif; ?>
+<?php endif; ?>
 <?php $selectionMap=[]; foreach($items as $selected){$selectionMap[(string)$selected['id']]=['stage'=>$selected['stage'],'label'=>deckStageLabel($selected['stage']),'image'=>cardImageUrl($selected,'front','small')];} ?>
 <script>window.builderSelection=<?= json_encode($selectionMap,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
 <script>window.builderHasCommander=<?= $commander?'true':'false' ?>;</script>
 <script>window.builderChoosingCommander=<?= $choosingCommander?'true':'false' ?>;</script>
-<?php if($view==='discover'): $exploreSelection=[]; foreach($results as $exploreCard){$logical=(string)($exploreCard['oracle_id']?:$exploreCard['id']); if(isset($selectedByLogical[$logical])) $exploreSelection[(string)$exploreCard['id']]=['stage'=>$selectedByLogical[$logical]['stage'],'label'=>deckStageLabel($selectedByLogical[$logical]['stage'])];} ?>
+<?php if($view==='explore'): $exploreSelection=[]; foreach($results as $exploreCard){$logical=(string)($exploreCard['oracle_id']?:$exploreCard['id']); if(isset($selectedByLogical[$logical])) $exploreSelection[(string)$exploreCard['id']]=['stage'=>$selectedByLogical[$logical]['stage'],'label'=>deckStageLabel($selectedByLogical[$logical]['stage'])];} ?>
 <script>window.builderExploreSelection=<?= json_encode($exploreSelection,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
 <?php endif; ?>
 <?php endif; pageFooter(); ?>

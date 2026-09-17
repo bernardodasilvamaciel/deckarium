@@ -58,6 +58,7 @@ function deckScoreDefaultConfig(): array
         'bracket' => $preset['bracket'],
         'max_price' => 0,
         'thresholds' => ['advance' => 70, 'review' => 45],
+        'targets_mode' => 'auto',
     ];
 }
 
@@ -84,6 +85,91 @@ function deckScoreConfig(mixed $raw): array
     }
     if ($config['thresholds']['review'] > $config['thresholds']['advance']) $config['thresholds']['review'] = $config['thresholds']['advance'];
     if (array_sum($config['weights']) === 0) $config['weights'] = deckScoreDefaultConfig()['weights'];
+    // Metas automáticas (calculadas para a comandante) ou personalizadas. Configurações antigas sem o campo
+    // continuam automáticas enquanto as metas forem as padrão.
+    $defaults = deckScoreDefaultConfig();
+    $mode = (string)($raw['targets_mode'] ?? '');
+    if (!in_array($mode, ['auto', 'manual'], true)) $mode = ($config['targets'] == $defaults['targets'] && $config['curve'] == $defaults['curve']) ? 'auto' : 'manual';
+    $config['targets_mode'] = $mode;
+    return $config;
+}
+
+/**
+ * Metas de função e curva para uma comandante.
+ * 1) EDHREC: média de terrenos, curva média e taxa de inclusão das cartas de cada função nos decks dela;
+ * 2) sem EDHREC: base comum ajustada pela leitura do texto e do custo da comandante.
+ * Devolve ['targets' => [...], 'curve' => [...], 'source' => 'edhrec'|'text', 'notes' => [função => motivo], 'decks' => int].
+ */
+function deckDynamicTargets(array $commander): array
+{
+    static $cache = [];
+    $key = (string)($commander['oracle_id'] ?: $commander['id']);
+    if (isset($cache[$key])) return $cache[$key];
+    $defaults = deckScoreDefaultConfig();
+    $targets = $defaults['targets'];
+    $curve = $defaults['curve'];
+    $notes = [];
+    $profile = function_exists('deckRelationProfile') ? deckRelationProfile($commander) : ['provides' => [], 'consumes' => [], 'tribes_cared' => []];
+    $consumes = $profile['consumes'];
+    $provides = $profile['provides'];
+    $mv = (float)($commander['cmc'] ?? 0);
+    $text = strtolower(deckText($commander));
+
+    // Leitura do texto: ajustes pequenos sobre a base comum de Commander.
+    if ($mv >= 6) { $targets['ramp'] += 3; $targets['lands'] += 1; $notes['ramp'] = 'Comandante de custo ' . (int)$mv . ': mais aceleração para conjurá-la cedo.'; }
+    elseif ($mv >= 5) { $targets['ramp'] += 2; $notes['ramp'] = 'Comandante de custo ' . (int)$mv . ': um pouco mais de aceleração.'; }
+    elseif ($mv <= 2) { $targets['ramp'] -= 2; $targets['lands'] -= 2; $notes['ramp'] = 'Comandante barata: menos aceleração e terrenos.'; }
+    if (isset($consumes['landfall'])) { $targets['lands'] += 2; $targets['ramp'] += 2; $notes['lands'] = 'Ganha quando terrenos entram: mais terrenos e busca de terrenos.'; }
+    if (isset($consumes['spells']) || isset($consumes['noncreature'])) { $targets['draw'] += 2; $targets['removal'] += 1; $notes['draw'] = 'Joga muitas mágicas: mais compra para não ficar sem cartas.'; }
+    if (isset($consumes['graveyard']) || isset($consumes['death'])) { $targets['recursion'] += 3; $notes['recursion'] = 'Usa o cemitério ou mortes: mais recursão.'; }
+    if (isset($consumes['equipment']) || isset($consumes['combat_self']) || preg_match('/equipped|enchanted creature|commander damage/', $text)) { $targets['protection'] += 3; $notes['protection'] = 'Precisa conectar ataques: proteger a comandante vale mais.'; }
+    if (isset($provides['tokens']) || isset($consumes['wide']) || isset($consumes['tokens'])) { $targets['wipe'] = max(1, $targets['wipe'] - 1); $notes['wipe'] = 'Monta mesa larga: menos remoções em massa que também atingem você.'; }
+    if ($profile['tribes_cared'] ?? []) { $targets['tutor'] = max(1, $targets['tutor'] - 1); }
+    if ($mv >= 5) { $curve['2'] += 1; $curve['5'] -= 1; }
+    if ($mv <= 3 && (isset($consumes['combat_team']) || isset($consumes['wide']))) { $curve['1'] += 2; $curve['2'] += 2; $curve['5'] -= 2; $curve['6'] -= 1; $curve['7'] -= 1; $notes['curve'] = 'Comandante agressiva e barata: curva mais baixa.'; }
+    $source = 'text';
+    $decks = 0;
+
+    $insights = function_exists('deckCommanderInsights') ? deckCommanderInsights($commander) : null;
+    $estimates = is_array($insights['role_estimates'] ?? null) ? $insights['role_estimates'] : [];
+    if ($estimates) {
+        $source = 'edhrec';
+        $decks = (int)($insights['deck_count'] ?? 0);
+        foreach ($estimates as $role => $value) {
+            if ($value === null || !isset($targets[$role])) continue;
+            // Mistura: a média do EDHREC domina, mas nunca some uma função essencial.
+            $floor = ['lands' => 30, 'ramp' => 6, 'draw' => 6, 'removal' => 4, 'wipe' => 1, 'protection' => 1, 'recursion' => 1, 'tutor' => 0][$role];
+            $ceiling = ['lands' => 42, 'ramp' => 18, 'draw' => 16, 'removal' => 14, 'wipe' => 6, 'protection' => 10, 'recursion' => 10, 'tutor' => 8][$role];
+            $targets[$role] = max($floor, min($ceiling, (int)round((float)$value)));
+            $notes[$role] = 'Média das listas desta comandante no EDHREC' . ($decks ? ' (' . number_format($decks, 0, ',', '.') . ' decks)' : '') . '.';
+        }
+    }
+    if (is_array($insights['mana_curve'] ?? null) && array_sum($insights['mana_curve']) > 20) {
+        $raw = array_fill_keys(array_keys($curve), 0);
+        foreach ($insights['mana_curve'] as $cost => $amount) {
+            $bucket = (string)max(1, min(7, (int)$cost));
+            $raw[$bucket] += (int)$amount;
+        }
+        $nonland = 99 - $targets['lands'];
+        $total = max(1, array_sum($raw));
+        foreach ($raw as $bucket => $amount) $curve[$bucket] = (int)round($amount / $total * $nonland);
+        $notes['curve'] = 'Curva média das listas desta comandante no EDHREC.';
+        $source = 'edhrec';
+    }
+    foreach ($targets as $role => $value) $targets[$role] = max(0, min(60, (int)$value));
+    foreach ($curve as $bucket => $value) $curve[$bucket] = max(0, min(40, (int)$value));
+    return $cache[$key] = ['targets' => $targets, 'curve' => $curve, 'source' => $source, 'notes' => $notes, 'decks' => $decks];
+}
+
+/** Configuração do deck com metas automáticas aplicadas quando o modo for "auto". */
+function deckScoreConfigFor(array $deck, ?array $commander): array
+{
+    $config = deckScoreConfig($deck['scoring_config'] ?? null);
+    $config['dynamic'] = $commander ? deckDynamicTargets($commander) : null;
+    if ($config['dynamic'] && $config['targets_mode'] === 'auto') {
+        $config['targets'] = $config['dynamic']['targets'];
+        $config['curve'] = $config['dynamic']['curve'];
+    }
     return $config;
 }
 
@@ -407,21 +493,40 @@ function deckScoreSelection(array $deck, ?array $commander, array $items, array 
         ];
     }
 
-    $candidates = array_values(array_filter($items, fn($item) => $item['stage'] === 'candidate'));
-    $deckItems = array_values(array_filter($items, fn($item) => $item['stage'] === 'deck'));
-    $connect = static function (array $source, array $target, array $sourceProfile, array $targetProfile, string $group, array &$result): void {
-        if ($source['id'] === $target['id']) return;
-        $offers = deckCardRelationship($sourceProfile, $targetProfile);
-        $receives = deckCardRelationship($targetProfile, $sourceProfile);
-        if ($offers || $receives) $result['cards'][$source['id']]['relationships'][$group][] = ['name' => (string)$target['name'], 'offers' => $offers, 'receives' => $receives];
-    };
-    foreach ($candidates as $candidate) foreach ($candidates as $other) $connect($candidate, $other, $profiles[$candidate['id']], $profiles[$other['id']], 'candidates', $result);
-    foreach ($deckItems as $card) {
-        $toCommander = deckCardRelationship($profiles[$card['id']], $commanderProfile);
-        $fromCommander = deckCardRelationship($commanderProfile, $profiles[$card['id']]);
-        if ($toCommander || $fromCommander) $result['cards'][$card['id']]['relationships']['deck'][] = ['name' => (string)$commander['name'] . ' · comandante', 'offers' => $toCommander, 'receives' => $fromCommander];
-        foreach ($deckItems as $other) $connect($card, $other, $profiles[$card['id']], $profiles[$other['id']], 'deck', $result);
-        foreach ($candidates as $other) $connect($card, $other, $profiles[$card['id']], $profiles[$other['id']], 'candidates', $result);
+    // Relações v2 (deck_relations.php): setas com motivo e trecho do texto de cada lado.
+    $graphNodes = [(string)$commander['id'] => $commander + ['stage' => 'commander']];
+    foreach ($items as $item) $graphNodes[(string)$item['id']] = $item;
+    $graph = deckRelationGraph($graphNodes, $commander);
+    $result['tribe'] = $graph['tribe'];
+    $features = deckRelationFeatures();
+    foreach ($graph['profiles'] as $nodeId => $relationProfile) {
+        if (!isset($result['cards'][$nodeId])) continue;
+        $result['cards'][$nodeId]['produces'] = array_values(array_unique(array_merge(array_map(fn($f) => $features[$f][0], array_keys($relationProfile['provides'])), array_map('ucfirst', array_keys($relationProfile['tribes'])))));
+        $result['cards'][$nodeId]['cares'] = array_values(array_unique(array_merge(array_map(fn($f) => $features[$f][0], array_keys($relationProfile['consumes'])), array_map('ucfirst', array_keys($relationProfile['tribes_cared'])), $relationProfile['chosen_type'] && $graph['tribe'] ? [ucfirst($graph['tribe']) . ' (tipo escolhido)'] : [])));
+    }
+    $pairs = [];
+    foreach ($graph['edges'] as $edge) $pairs[$edge['from']][$edge['to']] = $edge['reasons'];
+    $stageOf = static fn(string $nodeId): string => (string)($graphNodes[$nodeId]['stage'] ?? '');
+    foreach ($items as $item) {
+        $sourceId = (string)$item['id'];
+        $partners = array_unique(array_merge(array_keys($pairs[$sourceId] ?? []), array_keys(array_filter($pairs, fn($targets) => isset($targets[$sourceId])))));
+        foreach ($partners as $otherId) {
+            $otherId = (string)$otherId;
+            if ($otherId === $sourceId) continue;
+            $otherStage = $stageOf($otherId);
+            // Candidatas veem só candidatas; cartas do deck veem deck + comandante e, à parte, as candidatas.
+            if ($item['stage'] === 'candidate' && $otherStage !== 'candidate') continue;
+            $group = $otherStage === 'candidate' ? 'candidates' : 'deck';
+            $gives = $pairs[$sourceId][$otherId] ?? [];
+            $takes = $pairs[$otherId][$sourceId] ?? [];
+            $result['cards'][$sourceId]['relationships'][$group][] = [
+                'id' => $otherId,
+                'name' => (string)$graphNodes[$otherId]['name'] . ($otherStage === 'commander' ? ' · comandante' : ''),
+                'offers' => array_values(array_unique(array_column($gives, 'label'))), 'receives' => array_values(array_unique(array_column($takes, 'label'))),
+                'gives' => $gives, 'takes' => $takes, 'weight' => deckRelationWeight($gives) + deckRelationWeight($takes),
+            ];
+        }
+        foreach (['deck', 'candidates'] as $group) usort($result['cards'][$sourceId]['relationships'][$group], fn($x, $y) => [str_ends_with($y['name'], '· comandante'), $y['weight']] <=> [str_ends_with($x['name'], '· comandante'), $x['weight']]);
     }
     return $result;
 }
@@ -445,6 +550,7 @@ function deckScoreConfigFromPost(array $post): array
         'bracket' => $post['bracket'] ?? null,
         'max_price' => $post['max_price'] ?? null,
         'thresholds' => (array)($post['thresholds'] ?? []),
+        'targets_mode' => ($post['targets_mode'] ?? 'manual') === 'auto' ? 'auto' : 'manual',
     ]);
 }
 

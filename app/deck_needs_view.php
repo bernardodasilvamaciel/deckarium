@@ -23,7 +23,7 @@ $needExploreUrl = static fn(string $role): string => '?' . http_build_query(['de
         <div>
             <span class="guide-kicker">O que o deck precisa</span>
             <h2><?= $needMissing ? count($needMissing) . (count($needMissing) === 1 ? ' função abaixo da meta' : ' funções abaixo da meta') : 'Todas as metas de função atingidas' ?></h2>
-            <p>Contagem das cartas já aprovadas no deck contra as metas da fórmula (<?= (int)$finalCount ?>/100 cartas). As sugestões respeitam a identidade da comandante, deixam de fora o que já está na seleção e vêm primeiro pela sinergia no EDHREC.</p>
+            <p>Contagem das cartas já aprovadas no deck contra as metas calculadas para a comandante (<?= (int)$finalCount ?>/100 cartas). As sugestões respeitam a identidade da comandante, deixam de fora o que já está na seleção e vêm primeiro pela sinergia no EDHREC.</p>
         </div>
         <a class="secondary-link" href="?deck=<?= (int)$id ?>&view=selection&stage=candidate#fit-panel">Ajustar metas</a>
     </div>

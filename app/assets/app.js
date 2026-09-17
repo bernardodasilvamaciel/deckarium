@@ -1,4 +1,36 @@
 (() => {
+  const sidebar = document.querySelector('[data-sidebar]');
+  const sidebarToggle = document.querySelector('[data-sidebar-toggle]');
+  const sidebarScrim = document.querySelector('[data-sidebar-scrim]');
+  if (sidebar && sidebarToggle) {
+    const mobileQuery = window.matchMedia('(max-width: 850px)');
+    const readState = () => {
+      try {
+        const saved = localStorage.getItem(mobileQuery.matches ? 'deckarium:sidebar-mobile-collapsed' : 'deckarium:sidebar-desktop-collapsed');
+        return saved === null ? mobileQuery.matches : saved === 'true';
+      } catch (_) { return mobileQuery.matches; }
+    };
+    const setCollapsed = (collapsed, persist = true) => {
+      sidebar.classList.toggle('is-collapsed', collapsed);
+      document.body.classList.toggle('sidebar-collapsed', collapsed);
+      sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
+      const label = sidebarToggle.querySelector('[data-sidebar-toggle-label]');
+      if (label) label.textContent = collapsed ? 'Expandir navegação' : 'Recolher navegação';
+      if (sidebarScrim) sidebarScrim.hidden = collapsed || !mobileQuery.matches;
+      if (persist) try { localStorage.setItem(mobileQuery.matches ? 'deckarium:sidebar-mobile-collapsed' : 'deckarium:sidebar-desktop-collapsed', String(collapsed)); } catch (_) {}
+    };
+    setCollapsed(readState(), false);
+    sidebarToggle.addEventListener('click', () => setCollapsed(!sidebar.classList.contains('is-collapsed')));
+    sidebarScrim?.addEventListener('click', () => setCollapsed(true));
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && mobileQuery.matches && !sidebar.classList.contains('is-collapsed')) {
+        setCollapsed(true);
+        sidebarToggle.focus();
+      }
+    });
+    mobileQuery.addEventListener('change', () => setCollapsed(readState(), false));
+  }
+
   const bindPrintingAjax = () => {
     document.querySelectorAll('[data-printing-link]').forEach(link => {
       if (link.dataset.ajaxBound) return;
@@ -118,7 +150,7 @@
     try {
       const saved = localStorage.getItem(tabKey);
       if (saved && tabs.some(tab => tab.dataset.guideTab === saved)) initial = saved;
-      if (localStorage.getItem(openKey) === '0') guide.open = false;
+      if (localStorage.getItem(openKey) === '0' && !guide.hasAttribute('data-guide-standalone')) guide.open = false;
     } catch (error) { /* armazenamento indisponível */ }
     select(initial);
     tabs.forEach((tab, index) => {
@@ -163,6 +195,15 @@
     trigger.addEventListener('click', () => dialog.showModal());
     dialog.querySelectorAll('[data-dialog-close]').forEach(button => button.addEventListener('click', () => dialog.close()));
     dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+  });
+  // Metas automáticas × personalizadas: editar um número passa para "Personalizadas"; voltar ao automático restaura os valores calculados.
+  document.querySelectorAll('[data-targets-mode]').forEach(fieldset => {
+    const form = fieldset.closest('form');
+    if (!form) return;
+    const inputs = [...form.querySelectorAll('input[data-auto-value]')];
+    const radio = value => fieldset.querySelector(`input[name="targets_mode"][value="${value}"]`);
+    inputs.forEach(input => input.addEventListener('input', () => { const manual = radio('manual'); if (manual) manual.checked = true; }));
+    radio('auto')?.addEventListener('change', () => inputs.forEach(input => { if (input.dataset.autoValue !== '') input.value = input.dataset.autoValue; }));
   });
   document.querySelectorAll('[data-fit-config]').forEach(form => {
     let presets = {};

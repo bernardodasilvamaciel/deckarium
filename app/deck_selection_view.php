@@ -12,7 +12,7 @@ foreach($items as $entry){
 }
 ksort($groups);
 // Relações e metas: sem nota, ranking ou aprovação automática.
-$scoreConfig = deckScoreConfig($deck['scoring_config'] ?? null);
+$scoreConfig = deckScoreConfigFor($deck, $commander ?: null);
 $scores = $commander ? deckScoreSelection($deck, $commander, $items, $scoreConfig) : null;
 $commanderEntry = null;
 if ($selectionStage==='deck' && $commander) {
@@ -46,13 +46,26 @@ $upgradeDetail=function(array $card,string $label): void { $src=cardImageUrl($ca
 <?php };
 ?>
 <?php
+// Lista de relações: cada linha diz o que esta carta dá ou recebe e mostra o trecho do texto dos dois lados.
+$relationshipList=function(array $relationships): void {
+    $groups=DECK_RELATION_GROUPS; ?>
+<ul class="relationship-list relationship-list-v2"><?php foreach($relationships as $relationship): ?><li>
+    <strong><?= h($relationship['name']) ?></strong>
+    <?php foreach([['gives','out','Esta carta'],['takes','in',$relationship['name']]] as [$side,$direction,$subject]): foreach(($relationship[$side]??[]) as $reason): $color=$groups[$reason['group']][1]??'#59625f'; ?>
+    <div class="relation-reason is-<?= $direction ?>" style="--relation-color:<?= h($color) ?>">
+        <span class="relation-reason-head"><b class="relation-chip"><?= h($reason['label']) ?></b><?= $direction==='out' ? 'Esta carta '.h($reason['give']).' <span aria-hidden="true">→</span> '.h(preg_replace('/ · comandante$/','',$relationship['name'])).' '.h($reason['take']) : h(preg_replace('/ · comandante$/','',$relationship['name'])).' '.h($reason['give']).' <span aria-hidden="true">→</span> esta carta '.h($reason['take']) ?><?php if(($reason['source']??'')==='tag'): ?> <small class="relation-source">Scryfall Tagger</small><?php endif; ?></span>
+        <span class="relation-quotes"><q><?= h($reason['from_text']) ?></q><q><?= h($reason['to_text']) ?></q></span>
+    </div>
+    <?php endforeach; endforeach; ?>
+</li><?php endforeach; ?></ul>
+<?php };
 $stageHints=[
     'candidate'=>'Cartas que você guardou para comparar. Abra um tipo, clique numa carta para anotar o que ela acrescenta e aprove as que entram no deck.',
     'deck'=>'A versão escolhida do seu deck, organizada por tipo. Clique em uma carta para ajustar ou devolvê-la às candidatas.',
 ];
 ?>
 <section id="selection" class="selection-workspace" data-selection-workspace="<?= (int)$id ?>-<?= h($selectionStage) ?>">
-<div class="section-heading"><div><h2>Minha seleção</h2><p><?= h($stageHints[$selectionStage]) ?></p></div><a href="?deck=<?= $id ?>&view=discover#explore">Descobrir cartas</a></div>
+<div class="section-heading"><div><h2>Minha seleção</h2><p><?= h($stageHints[$selectionStage]) ?></p></div><a href="?deck=<?= $id ?>&view=explore">Descobrir cartas</a></div>
 <nav class="tabs selection-tabs" aria-label="Etapas da seleção"><?php foreach($stages as $key=>$label): ?><a href="?deck=<?= $id ?>&view=selection&stage=<?= h($key) ?>" <?= $key===$selectionStage?'aria-current="page"':'' ?>><?= h($label) ?> <span><?= $stageCounts[$key] ?></span></a><?php endforeach; ?></nav>
 <?php if($pendingUpgrades): foreach($pendingUpgrades as $pendingUpgrade): $pendingOut=deckQuery('SELECT * FROM cards WHERE id=?',[$pendingUpgrade['remove_card_id']])->fetch(); $pendingIn=deckQuery('SELECT * FROM cards WHERE id=?',[$pendingUpgrade['add_card_id']])->fetch(); ?>
 <section class="upgrade-pending" id="upgrade-<?= (int)$pendingUpgrade['id'] ?>"><div class="upgrade-pending-copy"><span class="plan-status">100 + 1 upgrade pendente</span><h3><?= h($pendingUpgrade['add_name']) ?> sobre <?= h($pendingUpgrade['remove_name']) ?></h3><p>Compare os dois lados antes de confirmar. O deck físico continua com 100 cartas até a troca ser aprovada.</p><div class="selection-actions"><form method="post"><?php $tokenFields('apply_upgrade'); ?><input type="hidden" name="upgrade" value="<?= (int)$pendingUpgrade['id'] ?>"><button class="primary-link">Confirmar troca</button></form><form method="post"><?php $tokenFields('cancel_upgrade'); ?><input type="hidden" name="upgrade" value="<?= (int)$pendingUpgrade['id'] ?>"><button class="secondary-link">Cancelar upgrade</button></form></div></div><div class="upgrade-pending-cards"><?php if($pendingOut) $upgradeDetail($pendingOut,'Sai'); ?><span class="upgrade-arrow" aria-hidden="true">→</span><?php if($pendingIn) $upgradeDetail($pendingIn,'Entra'); ?></div></section>
@@ -68,7 +81,7 @@ $bulkMoves = ['candidate' => [['deck', 'Aprovar para o deck →', 'primary-link'
 ?>
 <?php if($scores && $groups): require __DIR__.'/deck_scoring_view.php'; elseif(!$commander && $groups): ?><p class="notice warning">Escolha a comandante para calcular o Índice de Encaixe das cartas.</p><?php endif; ?>
 <?php if(!$groups): ?>
-<p class="empty-state">Nenhuma carta nesta etapa. <a href="?deck=<?= $id ?>&view=discover#explore">Explore o catálogo</a> ou mova uma carta de outra etapa.</p>
+<p class="empty-state">Nenhuma carta nesta etapa. <a href="?deck=<?= $id ?>&view=explore">Explore o catálogo</a> ou mova uma carta de outra etapa.</p>
 <?php else: ?>
 <div class="selection-toolbar"><span><?= count($groups) ?> <?= count($groups)===1?'tipo':'tipos' ?> · <?= array_sum(array_map(fn($entries)=>array_sum(array_column($entries,'quantity')),$groups)) ?> cartas</span><div><?php if($bulkEntries): ?><button type="button" class="selection-toggle-all selection-bulk-toggle" data-bulk-toggle aria-pressed="false" aria-controls="bulk-move-form">Selecionar várias</button><?php endif; ?><button type="button" class="selection-toggle-all" data-selection-expand>Abrir todos</button><button type="button" class="selection-toggle-all" data-selection-collapse>Fechar todos</button></div></div>
 <?php endif; ?>
@@ -99,6 +112,7 @@ $bulkMoves = ['candidate' => [['deck', 'Aprovar para o deck →', 'primary-link'
         <?php echo $inventoryBadge($entry); ?></span>
         <span class="selection-tile-name"><?= h($entry['name']) ?></span>
         <span class="selection-tile-meta"><?php if($isCommander): ?>Comandante<?php else: ?><?= $entry['role']!==''&&$entry['role']!==null?h($entry['role']):($fit?h(implode(', ',array_slice($fit['roles'],0,2))):'Sem função') ?><?php if($hasNotes): ?> · <span class="selection-noted">avaliada</span><?php endif; ?><?php endif; ?></span>
+        <?php if(!$isCommander && $entry['synergy_score']!==null): ?><span class="selection-tile-synergy"><?= $entry['synergy_metric']==='lift'?'Lift EDHREC: '.number_format((float)$entry['synergy_score'],2,',','.').' · sinergia não percentual':'Sinergia EDHREC: '.sprintf('%+.0f',(float)$entry['synergy_score']*100).'%' ?></span><?php endif; ?>
 <?php if($isCommander): ?></a><?php else: ?></button><?php endif; ?>
 
 <?php if(!$isCommander): ?>
@@ -118,15 +132,16 @@ $bulkMoves = ['candidate' => [['deck', 'Aprovar para o deck →', 'primary-link'
             <?php if($fit): ?>
             <details class="fit-breakdown relationship-breakdown" <?= $selectionStage==='candidate'?'open':'' ?>>
                 <?php $relationshipCount=array_sum(array_map('count',$fit['relationships'])); ?>
-                <summary><span><span class="relationship-title"><strong><?= $entry['stage']==='candidate' ? 'Relações com candidatas' : 'Relações da carta' ?></strong><span class="relationship-question" tabindex="0" role="note" aria-label="Como as relações funcionam" data-help="Uma relação aparece quando esta carta produz algo que outra procura, ou recebe algo que a outra produz — como fichas, Tesouros, marcadores, sacrifícios ou efeitos de entrada. Isso descreve interação, não força.">?</span></span><small><?= $relationshipCount ? $relationshipCount.' conexão(ões) direta(s)' : 'Nenhuma relação direta nesta etapa' ?></small></span></summary>
+                <summary><span><span class="relationship-title"><strong><?= $entry['stage']==='candidate' ? 'Relações com candidatas' : 'Relações da carta' ?></strong><span class="relationship-question" tabindex="0" role="note" aria-label="Como as relações funcionam" data-help="Uma relação aparece quando uma carta fornece algo que outra aproveita — fichas, Tesouros, mortes, marcadores, terrenos entrando, uma tribo. Cada linha mostra o trecho do texto das duas cartas. Isso descreve interação, não força.">?</span></span><small><?= $relationshipCount ? $relationshipCount.' conexão(ões) direta(s)' : 'Nenhuma relação direta nesta etapa' ?></small></span></summary>
                 <?php if($fit['blocked']): ?><p class="fit-alert is-blocked"><?= h($fit['blocked']) ?></p><?php endif; ?>
                 <?php foreach($fit['notes'] as $fitNote): ?><p class="fit-alert"><?= h($fitNote) ?></p><?php endforeach; ?>
                 <?php if($entry['stage']==='candidate'): ?>
-                    <?php if($fit['relationships']['candidates']): ?><ul class="relationship-list"><?php foreach($fit['relationships']['candidates'] as $relationship): ?><li><strong><?= h($relationship['name']) ?></strong><?php if($relationship['offers']): ?><span>Esta carta oferece: <?= h(implode(', ',$relationship['offers'])) ?>.</span><?php endif; ?><?php if($relationship['receives']): ?><span>Recebe: <?= h(implode(', ',$relationship['receives'])) ?>.</span><?php endif; ?></li><?php endforeach; ?></ul><?php else: ?><p class="fit-alert">Ainda não há uma oferta ou necessidade textual que conecte esta carta às candidatas. Isso não é uma avaliação negativa.</p><?php endif; ?>
+                    <?php if($fit['relationships']['candidates']): ?><?php $relationshipList($fit['relationships']['candidates']); ?><?php else: ?><p class="fit-alert">Ainda não há uma oferta ou necessidade textual que conecte esta carta às candidatas. Isso não é uma avaliação negativa.</p><?php endif; ?>
                 <?php else: ?>
-                    <section class="relationship-group"><h4>Com o deck</h4><?php if($fit['relationships']['deck']): ?><ul class="relationship-list"><?php foreach($fit['relationships']['deck'] as $relationship): ?><li><strong><?= h($relationship['name']) ?></strong><?php if($relationship['offers']): ?><span>Esta carta oferece: <?= h(implode(', ',$relationship['offers'])) ?>.</span><?php endif; ?><?php if($relationship['receives']): ?><span>Recebe: <?= h(implode(', ',$relationship['receives'])) ?>.</span><?php endif; ?></li><?php endforeach; ?></ul><?php else: ?><p class="fit-alert">Nenhuma relação direta com as cartas já no deck.</p><?php endif; ?></section>
-                    <section class="relationship-group"><h4>Com as candidatas</h4><?php if($fit['relationships']['candidates']): ?><ul class="relationship-list"><?php foreach($fit['relationships']['candidates'] as $relationship): ?><li><strong><?= h($relationship['name']) ?></strong><?php if($relationship['offers']): ?><span>Esta carta oferece: <?= h(implode(', ',$relationship['offers'])) ?>.</span><?php endif; ?><?php if($relationship['receives']): ?><span>Recebe: <?= h(implode(', ',$relationship['receives'])) ?>.</span><?php endif; ?></li><?php endforeach; ?></ul><?php else: ?><p class="fit-alert">Nenhuma relação direta com as candidatas.</p><?php endif; ?></section>
+                    <section class="relationship-group"><h4>Com o deck</h4><?php if($fit['relationships']['deck']): ?><?php $relationshipList($fit['relationships']['deck']); ?><?php else: ?><p class="fit-alert">Nenhuma relação direta com as cartas já no deck.</p><?php endif; ?></section>
+                    <section class="relationship-group"><h4>Com as candidatas</h4><?php if($fit['relationships']['candidates']): ?><?php $relationshipList($fit['relationships']['candidates']); ?><?php else: ?><p class="fit-alert">Nenhuma relação direta com as candidatas.</p><?php endif; ?></section>
                 <?php endif; ?>
+                <p class="relationship-board-link"><a href="/deck_board.php?deck=<?= (int)$id ?>&amp;focus=<?= h($entry['id']) ?>">Ver esta carta no quadro de relações →</a></p>
                 <p class="fit-tags"><?php if($fit['roles']): ?><span><em>Função</em> <?= h(implode(', ',$fit['roles'])) ?></span><?php endif; ?><?php if($fit['produces']): ?><span><em>Produz</em> <?= h(implode(', ',array_slice($fit['produces'],0,5))) ?></span><?php endif; ?><?php if($fit['cares']): ?><span><em>Procura</em> <?= h(implode(', ',array_slice($fit['cares'],0,5))) ?></span><?php endif; ?></p>
             </details>
             <?php endif; ?>
@@ -172,6 +187,7 @@ $bulkMoves = ['candidate' => [['deck', 'Aprovar para o deck →', 'primary-link'
         <?php foreach($bulkMoves as [$destination,$label,$class]): ?>
         <button type="submit" name="stage" value="<?= h($destination) ?>" class="<?= h($class) ?>" data-bulk-submit="<?= h($destination) ?>" disabled><?= h($label) ?></button>
         <?php endforeach; ?>
+        <?php if($selectionStage==='candidate'): ?><button type="submit" name="action" value="bulk_remove" class="selection-bulk-remove" data-bulk-submit="remove" disabled>Remover das candidatas</button><?php endif; ?>
         <button type="button" class="selection-toggle-all" data-bulk-exit>Concluir</button>
     </div>
 </form>

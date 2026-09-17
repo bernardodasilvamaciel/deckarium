@@ -18,6 +18,11 @@ if (!preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$
 // Serve the deterministic cache before opening a database connection.
 $config = appConfig();
 $cached = $config['storage_dir'] . '/images/' . $size . '/' . $id . '-' . $face . '.jpg';
+// Miniatura ainda não baixada: a imagem normal local serve melhor que ir ao Scryfall.
+if ($size === 'small' && !(is_file($cached) && filesize($cached) > 0)) {
+    $normalCached = $config['storage_dir'] . '/images/normal/' . $id . '-' . $face . '.jpg';
+    if (is_file($normalCached) && filesize($normalCached) > 0) $cached = $normalCached;
+}
 if (is_file($cached) && filesize($cached) > 0) {
     header('Content-Type: image/jpeg');
     header('Cache-Control: public, max-age=31536000, immutable');

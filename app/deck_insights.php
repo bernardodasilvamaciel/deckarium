@@ -8,7 +8,7 @@ declare(strict_types=1);
  */
 
 const DECK_INSIGHTS_COMBO_LIMIT = 8;
-const DECK_INSIGHTS_VERSION = 2;
+const DECK_INSIGHTS_VERSION = 3;
 
 /** Converte listas do EDHREC (texto ou objetos com description/text/name) em lista de textos. */
 function deckInsightTextList(mixed $value): array
@@ -93,8 +93,15 @@ function deckStoreCommanderInsights(array $commander, array $data, string $sourc
     }
     ksort($curve);
 
+    // Composição média dos decks da comandante (campos numéricos no topo do JSON do EDHREC).
+    $averages = [];
+    foreach (['creature', 'instant', 'sorcery', 'artifact', 'enchantment', 'planeswalker', 'battle', 'land', 'basic', 'nonbasic'] as $field) {
+        if (isset($data[$field]) && is_numeric($data[$field])) $averages[$field] = (float)$data[$field];
+    }
+
     $payload = [
         'version' => DECK_INSIGHTS_VERSION,
+        'averages' => $averages,
         'deck_count' => $deckCount,
         'themes' => $themes,
         'combos' => $combos,
@@ -279,14 +286,15 @@ function deckGuidePlanCards(array $commander, array $patterns, string $stamp = '
         $identity = json_encode(json_decode((string)$commander['color_identity'], true) ?: []);
         return deckQuery("SELECT * FROM (
                 SELECT DISTINCT ON (COALESCE(c.oracle_id,c.id)) c.id, c.oracle_id, c.name, c.type_line, c.image_uri, c.local_image, c.raw->'image_uris' AS image_uris,
-                    c.raw->'card_faces' AS card_faces, COALESCE(ds.score,0) AS synergy_score
+                    c.raw->'card_faces' AS card_faces, COALESCE(ds.score,0) AS synergy_score, c.edhrec_rank_cached AS edhrec_rank
                 FROM cards c
                 LEFT JOIN deck_synergy ds ON ds.card_id=c.id AND ds.commander_id IN (SELECT id FROM cards WHERE COALESCE(oracle_id,id)=?::uuid)
-                WHERE c.color_identity <@ ?::jsonb AND COALESCE(c.oracle_id,c.id)<>?::uuid AND c.lang='en' AND (" . implode(' OR ', $where) . ")
+                WHERE c.color_identity <@ ?::jsonb AND COALESCE(c.oracle_id,c.id)<>?::uuid AND c.lang='en'
+                    AND c.legalities->>'commander'='legal' AND COALESCE(c.raw->>'digital','false')='false' AND (" . implode(' OR ', $where) . ")
                 ORDER BY COALESCE(c.oracle_id,c.id), (ds.score IS NULL), (c.local_image IS NULL), c.released_at DESC NULLS LAST
-            ) picked ORDER BY synergy_score DESC, name LIMIT 8", array_merge([$logical, $identity, $logical], $params))->fetchAll();
+            ) picked ORDER BY synergy_score DESC, edhrec_rank ASC NULLS LAST, name LIMIT 8", array_merge([$logical, $identity, $logical], $params))->fetchAll();
     };
-    $key = 'guide-plan-v2-' . $logical . '-' . md5(implode('|', $patterns) . '|' . $stamp);
+    $key = 'guide-plan-v3-' . $logical . '-' . md5(implode('|', $patterns) . '|' . $stamp);
     $cards = function_exists('catalogCached') ? catalogCached($key, $load, 604800) : $load();
     $owned = deckOwnedLogicalMap();
     foreach ($cards as &$card) {
