@@ -25,15 +25,15 @@ svg{width:23px;height:23px;flex-shrink:0}
 .skip-link{position:fixed;z-index:50;left:16px;top:-90px;background:var(--surface);padding:12px}
 .skip-link:focus{top:12px}
 .sidebar{position:fixed;inset:0 auto 0 0;width:var(--rail);background:var(--ink);color:#e9edeb;padding:30px 16px 22px;display:flex;flex-direction:column;z-index:40;transition:transform .2s ease}
-.sidebar-header{position:relative;display:flex;justify-content:center;min-height:184px}
-.brand{display:flex;align-items:center;justify-content:center;padding:0 0 28px;color:#fffefa;text-decoration:none;font-family:Spectral,Georgia,serif;font-size:1.75rem;font-weight:700;white-space:nowrap}
+.sidebar-header{position:relative;display:grid;justify-items:center;align-content:start;gap:12px;min-height:224px}
+.brand{display:flex;align-items:center;justify-content:center;padding:0;color:#fffefa;text-decoration:none;font-family:Spectral,Georgia,serif;font-size:1.75rem;font-weight:700;white-space:nowrap}
 .brand:hover{color:#fff}
 .brand svg{width:26px;height:30px}.brand-mark{display:block;width:156px;height:156px;object-fit:contain;flex:0 0 auto;border-radius:50%;background:#fffefa;padding:6px;box-shadow:0 0 0 3px rgba(255,254,250,.14),0 10px 24px rgba(0,0,0,.28);transition:transform .2s ease}.brand:hover .brand-mark{transform:rotate(-4deg) scale(1.03)}.brand:focus-visible{outline:none}.brand:focus-visible .brand-mark{box-shadow:0 0 0 3px #fffefa,0 0 0 6px var(--accent)}
 .sidebar nav{display:flex;flex-direction:column;gap:8px}
 .sidebar nav a{display:flex;align-items:center;gap:15px;padding:13px 14px;border-radius:6px;color:#c7d1ce;text-decoration:none;font-size:.98rem}
 .sidebar nav a:hover{background:#283630;color:#fff}
 .sidebar nav a[aria-current=page]{background:#3b5147;color:#fff}
-.sidebar-toggle{position:absolute;top:0;right:0;display:grid;place-items:center;width:40px;height:40px;padding:0;border:1px solid #53625d;border-radius:6px;background:#283630;color:#e9edeb;cursor:pointer;transition:background-color .16s ease,transform .2s ease}.sidebar-toggle:hover{background:#3b5147;color:#fff}.sidebar-toggle svg{width:20px;height:20px}.sidebar-toggle:focus-visible{outline-color:#fffefa;outline-offset:3px}
+.sidebar-toggle{display:grid;place-items:center;width:40px;height:40px;padding:0;border:1px solid #53625d;border-radius:6px;background:#283630;color:#e9edeb;cursor:pointer;transition:background-color .16s ease,transform .2s ease}.sidebar-toggle:hover{background:#3b5147;color:#fff}.sidebar-toggle svg{width:20px;height:20px}.sidebar-toggle:focus-visible{outline-color:#fffefa;outline-offset:3px}
 .sidebar-scrim{display:none}
 .sidebar-note{margin-top:auto;border-top:1px solid #42504e;padding:22px 10px 0}
 .sidebar-note span,.sidebar-note small{display:block}
@@ -415,9 +415,8 @@ button.is-busy::after{content:"";display:inline-block;width:.8em;height:.8em;mar
   body.sidebar-collapsed{--rail:76px}
   .sidebar.is-collapsed{padding-inline:12px;overflow:hidden}
   .sidebar.is-collapsed .sidebar-header{min-height:52px}
-  .sidebar.is-collapsed .brand{justify-content:flex-start;padding:0}
-  .sidebar.is-collapsed .brand-mark{width:40px;height:40px;padding:2px;box-shadow:none}
-  .sidebar.is-collapsed .sidebar-toggle{right:0;transform:rotate(180deg)}
+  .sidebar.is-collapsed .brand{display:none}
+  .sidebar.is-collapsed .sidebar-toggle{position:static;transform:rotate(180deg)}
   .sidebar.is-collapsed nav{align-items:center}
   .sidebar.is-collapsed nav a{width:48px;padding:13px;justify-content:center}
   .sidebar.is-collapsed nav a span,.sidebar.is-collapsed .account-names,.sidebar.is-collapsed .account-logout,.sidebar.is-collapsed .sidebar-account.is-guest{display:none}
@@ -427,21 +426,21 @@ button.is-busy::after{content:"";display:inline-block;width:.8em;height:.8em;mar
 
 @media(max-width:850px){
   .sidebar{position:fixed;width:min(320px,calc(100vw - 56px));padding:18px 16px;gap:14px;box-shadow:12px 0 30px #17241c38;transform:translateX(0)}
-  .sidebar-header{min-height:110px;justify-content:flex-start}
-  .sidebar .brand{padding:0;justify-content:flex-start}
+  .sidebar-header{min-height:122px;justify-items:center}
+  .sidebar .brand{padding:0;justify-content:center}
   .sidebar .brand-mark{width:92px;height:92px;padding:4px}
   .sidebar nav{flex:0 1 auto;flex-direction:column;align-items:stretch;gap:5px;overflow-y:auto;overflow-x:hidden}
   .sidebar nav a{flex:0 0 auto;min-height:44px;padding:10px 12px;font-size:.9rem}
   .sidebar .sidebar-account{margin-top:auto;padding:14px 4px 0}
   .sidebar.is-collapsed{transform:translateX(calc(-100% + 56px));box-shadow:none}
-  .sidebar.is-collapsed .sidebar-toggle{transform:rotate(180deg)}
+  .sidebar.is-collapsed .sidebar-toggle{position:absolute;top:0;right:0;transform:rotate(180deg)}
   body.sidebar-collapsed .app-content{padding-left:56px}
   .sidebar-scrim:not([hidden]){position:fixed;inset:0;z-index:30;display:block;border:0;background:#17241c80}
   .app-content{margin-left:0}
 }
 @media(max-width:600px){
   .sidebar{padding:14px;width:min(300px,calc(100vw - 56px))}
-  .sidebar-header{min-height:82px}
+  .sidebar-header{min-height:96px}
   .sidebar .brand-mark{width:66px;height:66px}
   .sidebar nav a{font-size:.86rem}
 }
