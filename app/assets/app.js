@@ -32,8 +32,9 @@
     mobileQuery.addEventListener('change', () => setCollapsed(readState(), false));
   }
 
-  document.querySelectorAll('select[data-auto-submit]').forEach(select => {
-    select.addEventListener('change', () => select.form?.requestSubmit());
+  // Listas, opções e caixas marcadas com data-auto-submit aplicam o filtro na hora.
+  document.querySelectorAll('[data-auto-submit]').forEach(field => {
+    field.addEventListener('change', () => field.form?.requestSubmit());
   });
 
   const bindPrintingAjax = () => {
@@ -449,7 +450,8 @@
   document.addEventListener('error', event => {
     const image = event.target;
     if (image instanceof HTMLImageElement && image.classList.contains('set-icon')) {
-      if (image.dataset.fallbackSrc || image.dataset.genericSrc) return;
+      // Imagens com onerror próprio (ex.: logo do Deckarium no lugar do símbolo) cuidam do próprio erro.
+      if (image.dataset.fallbackSrc || image.dataset.genericSrc || image.hasAttribute('onerror')) return;
       image.hidden = true;
       const fallback = image.nextElementSibling;
       if (fallback) fallback.hidden = false;

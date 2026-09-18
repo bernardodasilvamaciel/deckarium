@@ -198,7 +198,7 @@ pageHeader('Edições');
         $day = $release['date'] !== '' ? (int)substr($release['date'], 8, 2) . ' ' . $months[(int)substr($release['date'], 5, 2) - 1] : '—'; ?>
         <li class="release is-<?= $release['category'] ?><?= $release['future'] ? ' is-future' : '' ?>" data-category="<?= $release['category'] ?>" data-search="<?= h($release['search']) ?>">
             <time datetime="<?= h($release['date']) ?>"><?= h($day) ?></time>
-            <span class="release-mark"><?php if ($icon): ?><img class="set-icon" src="<?= h($icon) ?>" alt="" width="26" height="26" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='/assets/set-placeholder.svg'"><?php endif; ?></span>
+            <span class="release-mark"><img class="set-icon<?= $icon ? '' : ' is-logo' ?>" src="<?= h($icon ?: '/assets/deckarium-favicon.png') ?>" alt="" width="26" height="26" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='/assets/deckarium-favicon.png';this.classList.add('is-logo')"></span>
             <div class="release-body">
                 <a class="release-name" href="<?= h($url) ?>"><?= h($release['name']) ?></a>
                 <span class="release-code"><?= h(strtoupper($release['code'])) ?></span>

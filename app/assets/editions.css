@@ -119,3 +119,5 @@
 }
 @media(prefers-reduced-motion:reduce){.spectro-col{animation:none}.spectro-bars,.spectro-col,.spectro-legend{transition:none}}
 .spectro-bars a.is-filtered-out .spectro-col{opacity:.15}
+.release-mark img.is-logo{width:24px;height:24px;border-radius:50%;opacity:.9;filter:grayscale(.35)}
+.release.is-extras .release-mark img.is-logo,.release.is-special .release-mark img.is-logo{width:20px;height:20px}
