@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 /**
- * Quadro de relações: cartas do deck e das candidatas num quadro branco, com setas A → B
+ * Quadro de relações: comandante e cartas do deck (candidatas ficam de fora, para o quadro ficar leve), com setas A → B
  * explicando o que uma carta fornece e a outra aproveita. Os dados vêm de deck_relations.php;
  * o desenho, o layout e a interação ficam em assets/board.js.
  */
@@ -19,7 +19,7 @@ $deck = $id ? deckQuery('SELECT * FROM builder_decks WHERE id=? AND user_id=?', 
 if (!$deck) { http_response_code(404); pageHeader('Quadro de relações'); echo '<p class="empty-state">Deck não encontrado na sua conta. <a href="/decks.php">Voltar aos decks</a></p>'; pageFooter(); exit; }
 $commander = $deck['commander_id'] ? deckQuery('SELECT * FROM cards WHERE id=?', [$deck['commander_id']])->fetch() : null;
 $items = deckQuery(deckOwnedSql() . "SELECT c.*, i.stage, i.quantity, i.role, COALESCE(o.owned,0) owned FROM builder_items i JOIN cards c ON c.id=i.card_id
-    LEFT JOIN owned o ON o.logical_id=COALESCE(c.oracle_id,c.id) WHERE i.deck_id=? ORDER BY c.name", [$id])->fetchAll();
+    LEFT JOIN owned o ON o.logical_id=COALESCE(c.oracle_id,c.id) WHERE i.deck_id=? AND i.stage='deck' ORDER BY c.name", [$id])->fetchAll();
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     header('Content-Type: application/json; charset=utf-8');
@@ -112,21 +112,19 @@ pageHeader('Quadro de relações · ' . $deck['name']);
 <section class="board-hero">
     <div>
         <h1>Quadro de relações · <?= h($deck['name']) ?></h1>
-        <p>Cada seta vai da carta que <strong>fornece</strong> algo para a carta que <strong>aproveita</strong>. Clique numa carta para ver os motivos com o texto das duas.</p>
+        <p>As cartas do deck ficam agrupadas pelo tema em que mais se relacionam. Cada seta vai da carta que <strong>fornece</strong> algo para a que <strong>aproveita</strong>; clique numa carta para ver os motivos.</p>
     </div>
 
 </section>
 <?php if (!$commander): ?>
 <p class="notice warning">Escolha a comandante do deck para montar o quadro. <a href="/decks.php?deck=<?= $id ?>&amp;choose=1">Escolher comandante</a></p>
 <?php elseif (count($nodes) < 2): ?>
-<p class="empty-state">Adicione cartas às candidatas ou ao deck para ver as relações. <a href="/decks.php?deck=<?= $id ?>&amp;view=explore">Explorar cartas</a></p>
+<p class="empty-state">O quadro mostra só as cartas aprovadas no deck. Aprove candidatas em <a href="/decks.php?deck=<?= $id ?>&amp;view=selection&amp;stage=candidate">Minha seleção</a> para ver as relações.</p>
 <?php else: ?>
 <div class="board-app" data-board>
     <div class="board-toolbar" role="toolbar" aria-label="Controles do quadro">
-        <fieldset class="board-stage-filter"><legend class="sr-only">Mostrar</legend>
-            <label><input type="checkbox" data-board-stage="deck" checked> No deck <b data-board-count="deck"></b></label>
-            <label><input type="checkbox" data-board-stage="candidate" checked> Candidatas <b data-board-count="candidate"></b></label>
-        </fieldset>
+        <span class="board-deck-count" title="Candidatas não entram no quadro"><?= count($nodes) ?> cartas do deck</span>
+        <label class="board-toggle" title="Desligado: as setas aparecem ao passar o mouse ou ao selecionar uma carta."><input type="checkbox" data-board-all-edges> Mostrar todas as setas</label>
         <label class="board-toggle" title="Quando muitas cartas compartilham a mesma relação (ex.: todos os Merfolk), elas se ligam a um quadro do tema em vez de setas cruzadas."><input type="checkbox" data-board-hubs checked> Agrupar por tema</label>
         <label class="board-toggle"><input type="checkbox" data-board-lands checked> Agrupar terrenos</label>
         <label class="board-toggle"><input type="checkbox" data-board-isolated> Mostrar cartas sem relação</label>
@@ -146,7 +144,7 @@ pageHeader('Quadro de relações · ' . $deck['name']);
                 <g data-board-viewport><g data-board-edges></g><g data-board-nodes></g></g>
             </svg>
             <div class="board-tooltip" data-board-tooltip hidden></div>
-            <p class="board-hint" data-board-hint>Arraste o fundo para mover · roda do mouse para zoom · arraste as cartas para organizar</p>
+            <p class="board-hint" data-board-hint>Passe o mouse ou clique numa carta para ver as setas · arraste o fundo para mover · roda do mouse para zoom</p>
         </div>
         <aside class="board-panel" data-board-panel aria-live="polite"></aside>
     </div>

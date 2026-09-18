@@ -1,4 +1,4 @@
-/* Quadro de relações do Deckarium: layout por forças, setas A → B, foco, filtros e combos. */
+/* Quadro de relações do Deckarium: blocos por tema, setas A → B sob demanda, foco, filtros e combos. */
 (() => {
   'use strict';
   const root = document.querySelector('[data-board]');
@@ -16,7 +16,9 @@
   const canvas = $('[data-board-canvas]');
   const panel = $('[data-board-panel]');
   const tooltip = $('[data-board-tooltip]');
-  const storeKey = `deckarium-board-${data.deck.id}`;
+  const clusterLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  viewport.insertBefore(clusterLayer, viewport.firstChild);
+  const storeKey = `deckarium-board-v2-${data.deck.id}`;
   const LAND_GROUP = '__lands__';
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const store = {
@@ -27,7 +29,8 @@
 
   const nodesById = new Map(data.nodes.map((n) => [n.id, { ...n }]));
   const state = {
-    stages: new Set(saved.stages || ['deck', 'candidate']),
+    allEdges: !!saved.allEdges,
+    hover: null,
     groups: new Set(saved.groups || Object.keys(data.groups)),
     groupLands: saved.groupLands !== undefined ? saved.groupLands : true,
     hubs: saved.hubs !== undefined ? saved.hubs : true,
@@ -40,9 +43,9 @@
   const HUB_MIN = 7;
   const size = (node) => {
     if (node.stage === 'hub') return { w: Math.max(96, node.name.length * 7.2 + 34), h: 36 };
-    if (node.stage === 'commander') return { w: 104, h: 145 };
-    if (node.id === LAND_GROUP) return { w: 92, h: 92 };
-    return { w: 70, h: 98 };
+    if (node.stage === 'commander') return { w: 140, h: 196 };
+    if (node.id === LAND_GROUP) return { w: 116, h: 116 };
+    return { w: 100, h: 140 };
   };
   const primaryGroup = (edge) => {
     const totals = {};
@@ -56,7 +59,7 @@
   function computeVisible() {
     const allowed = new Set();
     [...nodesById.keys()].forEach((id) => { if (id === LAND_GROUP || id.startsWith('hub:')) nodesById.delete(id); });
-    nodesById.forEach((n) => { if (n.stage === 'commander' || state.stages.has(n.stage)) allowed.add(n.id); });
+    nodesById.forEach((n) => allowed.add(n.id));
     const real = data.edges
       .filter((e) => allowed.has(e.from) && allowed.has(e.to))
       .map((e) => ({ ...e, reasons: e.reasons.filter((r) => state.groups.has(r.group)) }))
@@ -151,101 +154,103 @@
     visible = { nodes, edges: edges.filter((e) => drawn.has(e.from) && drawn.has(e.to)), real, byId: new Map(nodes.map((n) => [n.id, n])), neighbors, partners };
   }
 
-  /* ---------- Layout por forças ---------- */
+  /* ---------- Layout em blocos por tema ---------- */
+  // Cada carta vai para o bloco do tema em que mais se relaciona; dentro do bloco, quem fornece vem antes de quem aproveita.
+  const CELL_W = 122;
+  const CELL_H = 186;
+  const PAD = 22;
+  const HEADER = 44;
+  const GAP = 56;
+  let clusters = [];
+
+  function clusterKeyOf(n) {
+    if (n.stage === 'commander') return 'commander';
+    if (n.stage === 'hub') return n.group;
+    if (!n.degree) return 'none';
+    const ids = n.id === LAND_GROUP ? new Set(n.members.map((m) => m.id)) : new Set([n.id]);
+    const totals = {};
+    visible.real.forEach((e) => {
+      if (!ids.has(e.from) && !ids.has(e.to)) return;
+      e.reasons.forEach((r) => { totals[r.group] = (totals[r.group] || 0) + r.weight; });
+    });
+    const best = Object.keys(totals).sort((a, b) => totals[b] - totals[a])[0];
+    return best || 'none';
+  }
+
+  function flowOf(n) {
+    // Positivo = mais fornece do que aproveita.
+    const ids = n.id === LAND_GROUP ? new Set(n.members.map((m) => m.id)) : new Set([n.id]);
+    let out = 0; let inc = 0;
+    visible.real.forEach((e) => { if (ids.has(e.from) && !ids.has(e.to)) out += 1; else if (ids.has(e.to) && !ids.has(e.from)) inc += 1; });
+    return out - inc;
+  }
+
   function layout(reset = false) {
-    const nodes = visible.nodes;
-    const connected = nodes.filter((n) => n.degree > 0 || n.stage === 'commander');
-    const isolated = nodes.filter((n) => n.degree === 0 && n.stage !== 'commander');
-    const golden = Math.PI * (3 - Math.sqrt(5));
-    connected
-      .slice()
-      .sort((a, b) => (b.stage === 'commander') - (a.stage === 'commander') || b.degree - a.degree)
-      .forEach((n, i) => {
-        const p = !reset && state.positions[n.id];
-        if (p) { n.x = p.x; n.y = p.y; n.fixed = true; return; }
-        n.fixed = false;
-        if (n.stage === 'commander') { n.x = 0; n.y = 0; return; }
-        const r = (n.stage === 'hub' ? 90 : 170) + 58 * Math.sqrt(i);
-        n.x = Math.cos(i * golden) * r;
-        n.y = Math.sin(i * golden) * r * 0.8;
+    const buckets = new Map();
+    visible.nodes.forEach((n) => {
+      const key = clusterKeyOf(n);
+      if (!buckets.has(key)) buckets.set(key, { key, hubs: [], cards: [] });
+      (n.stage === 'hub' ? buckets.get(key).hubs : buckets.get(key).cards).push(n);
+    });
+    const order = Object.keys(data.groups);
+    const rank = (b) => (b.key === 'commander' ? -1 : b.key === 'none' ? 1e6 : 0);
+    const list = [...buckets.values()].sort((a, b) => rank(a) - rank(b) || (b.cards.length + b.hubs.length) - (a.cards.length + a.hubs.length) || order.indexOf(a.key) - order.indexOf(b.key));
+
+    // Tamanho de cada bloco.
+    list.forEach((b) => {
+      b.cards.forEach((n) => { n.flow = flowOf(n); });
+      b.cards.sort((a, c) => (c.stage === 'commander') - (a.stage === 'commander') || c.flow - a.flow || c.degree - a.degree || a.name.localeCompare(c.name));
+      b.hubs.sort((a, c) => (c.providers.size + c.consumers.size) - (a.providers.size + a.consumers.size));
+      const big = b.key === 'commander';
+      b.cols = big ? 1 : Math.max(1, Math.min(7, Math.ceil(Math.sqrt(b.cards.length * 1.5))));
+      b.rows = Math.ceil(b.cards.length / b.cols);
+      const cellW = big ? 186 : CELL_W; const cellH = big ? 246 : CELL_H;
+      b.cellW = cellW; b.cellH = cellH;
+      const hubWidths = b.hubs.map((h) => size(h).w);
+      b.hubRows = [];
+      let row = []; let rowW = 0;
+      const maxHubRow = Math.max(b.cols * cellW, 300);
+      hubWidths.forEach((w, i) => {
+        if (row.length && rowW + w + 12 > maxHubRow) { b.hubRows.push(row); row = []; rowW = 0; }
+        row.push(b.hubs[i]); rowW += w + 12;
       });
-    const free = connected.filter((n) => !n.fixed);
-    if (free.length) {
-      const index = new Map(connected.map((n, i) => [n.id, i]));
-      const links = visible.edges.filter((e) => index.has(e.from) && index.has(e.to));
-      const ticks = 420;
-      for (let t = 0; t < ticks; t++) {
-        const cool = 1 - t / ticks;
-        connected.forEach((n) => { n.vx = 0; n.vy = 0; });
-        for (let i = 0; i < connected.length; i++) {
-          const a = connected[i];
-          for (let j = i + 1; j < connected.length; j++) {
-            const b = connected[j];
-            let dx = a.x - b.x; let dy = a.y - b.y;
-            let d2 = dx * dx + dy * dy;
-            if (d2 < 1) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d2 = 1; }
-            const d = Math.sqrt(d2);
-            const f = 42000 / d2;
-            const sa = size(a); const sb = size(b);
-            const minX = (sa.w + sb.w) / 2 + 26; const minY = (sa.h + sb.h) / 2 + 34;
-            let push = f;
-            if (Math.abs(dx) < minX && Math.abs(dy) < minY) push += 40;
-            a.vx += (dx / d) * push; a.vy += (dy / d) * push;
-            b.vx -= (dx / d) * push; b.vy -= (dy / d) * push;
-          }
-        }
-        links.forEach((e) => {
-          const a = connected[index.get(e.from)]; const b = connected[index.get(e.to)];
-          const dx = b.x - a.x; const dy = b.y - a.y;
-          const d = Math.sqrt(dx * dx + dy * dy) || 1;
-          const hubLink = e.from.startsWith('hub:') || e.to.startsWith('hub:');
-          const rest = hubLink ? 150 : 210;
-          const f = (d - rest) * 0.045 * Math.min(2, 0.6 + e.weight * 0.3);
-          a.vx += (dx / d) * f; a.vy += (dy / d) * f;
-          b.vx -= (dx / d) * f; b.vy -= (dy / d) * f;
-        });
-        connected.forEach((n) => {
-          if (n.fixed || n.stage === 'commander') return;
-          n.vx -= n.x * 0.012; n.vy -= n.y * 0.016;
-          const step = 9 * cool + 0.4;
-          const len = Math.sqrt(n.vx * n.vx + n.vy * n.vy) || 1;
-          n.x += (n.vx / len) * Math.min(len, step * 6);
-          n.y += (n.vy / len) * Math.min(len, step * 6);
-        });
-      }
-    }
-    // Remove sobreposições que as forças deixaram (cartas, rótulos e quadros de tema).
-    for (let pass = 0; pass < 80; pass++) {
-      let moved = false;
-      for (let i = 0; i < connected.length; i++) {
-        for (let j = i + 1; j < connected.length; j++) {
-          const a = connected[i]; const b = connected[j];
-          const sa = size(a); const sb = size(b);
-          const needX = (sa.w + sb.w) / 2 + 34; const needY = (sa.h + sb.h) / 2 + 30;
-          const dx = b.x - a.x; const dy = b.y - a.y;
-          const ox = needX - Math.abs(dx); const oy = needY - Math.abs(dy);
-          if (ox <= 0 || oy <= 0) continue;
-          moved = true;
-          const aFixed = a.fixed || a.stage === 'commander'; const bFixed = b.fixed || b.stage === 'commander';
-          const share = aFixed && !bFixed ? [0, 1] : bFixed && !aFixed ? [1, 0] : [0.5, 0.5];
-          if (ox < oy) { const sgn = dx >= 0 ? 1 : -1; if (!aFixed) a.x -= sgn * ox * share[0]; if (!bFixed) b.x += sgn * ox * share[1]; }
-          else { const sgn = dy >= 0 ? 1 : -1; if (!aFixed) a.y -= sgn * oy * share[0]; if (!bFixed) b.y += sgn * oy * share[1]; }
-        }
-      }
-      if (!moved) break;
-    }
-    // Cartas sem relação ficam numa prateleira abaixo do grafo.
-    if (isolated.length) {
-      const bottom = Math.max(0, ...connected.map((n) => n.y + size(n).h / 2)) + 110;
-      const left = Math.min(0, ...connected.map((n) => n.x - size(n).w / 2));
-      const cols = Math.max(6, Math.ceil(Math.sqrt(isolated.length * 2.5)));
-      isolated.forEach((n, i) => {
-        const p = !reset && state.positions[n.id];
-        if (p) { n.x = p.x; n.y = p.y; return; }
-        n.x = left + (i % cols) * 92 + 35;
-        n.y = bottom + Math.floor(i / cols) * 130;
+      if (row.length) b.hubRows.push(row);
+      const hubsW = Math.max(0, ...b.hubRows.map((r) => r.reduce((sum, h) => sum + size(h).w + 12, -12)));
+      b.w = Math.max(b.cols * cellW, hubsW, 170) + PAD * 2;
+      b.h = HEADER + b.hubRows.length * 52 + b.rows * cellH + PAD;
+    });
+
+    // Blocos em prateleiras, com largura máxima proporcional à área total.
+    const area = list.reduce((sum, b) => sum + (b.w + GAP) * (b.h + GAP), 0);
+    const maxRow = Math.max(1400, Math.sqrt(area) * 1.5);
+    let x = 0; let y = 0; let rowH = 0;
+    list.forEach((b) => {
+      if (x > 0 && x + b.w > maxRow) { x = 0; y += rowH + GAP; rowH = 0; }
+      b.x = x; b.y = y;
+      x += b.w + GAP; rowH = Math.max(rowH, b.h);
+    });
+
+    // Posição de cada item dentro do bloco (posições arrastadas pelo usuário têm prioridade).
+    list.forEach((b) => {
+      let top = b.y + HEADER;
+      b.hubRows.forEach((row) => {
+        const width = row.reduce((sum, h) => sum + size(h).w + 12, -12);
+        let left = b.x + (b.w - width) / 2;
+        row.forEach((h) => { h.x = left + size(h).w / 2; h.y = top + 18; left += size(h).w + 12; });
+        top += 52;
       });
-    }
+      const gridW = b.cols * b.cellW;
+      const left = b.x + (b.w - gridW) / 2;
+      b.cards.forEach((n, i) => {
+        n.x = left + (i % b.cols) * b.cellW + b.cellW / 2;
+        n.y = top + Math.floor(i / b.cols) * b.cellH + size(n).h / 2 + 4;
+      });
+      [...b.hubs, ...b.cards].forEach((n) => {
+        const p = !reset && state.positions[n.id];
+        if (p) { n.x = p.x; n.y = p.y; }
+      });
+    });
+    clusters = list;
   }
 
   /* ---------- Desenho ---------- */
@@ -293,6 +298,14 @@
   function render() {
     edgeLayer.innerHTML = '';
     nodeLayer.innerHTML = '';
+    clusterLayer.innerHTML = clusters.map((b) => {
+      const g = data.groups[b.key];
+      const label = b.key === 'commander' ? 'Comandante' : b.key === 'none' ? 'Sem relação' : g?.label || b.key;
+      const color = g?.color || '#59625f';
+      const count = b.cards.reduce((sum, n) => sum + (n.id === LAND_GROUP ? n.members.length : 1), 0);
+      const parts = [count ? `${count} ${count === 1 ? 'carta' : 'cartas'}` : '', b.hubs.length ? `${b.hubs.length} ${b.hubs.length === 1 ? 'tema' : 'temas'}` : ''].filter(Boolean).join(' · ');
+      return `<g class="board-cluster" style="--c:${color}"><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="16"></rect><text class="board-cluster-label" x="${b.x + PAD}" y="${b.y + 28}">${escapeHtml(label)}<tspan class="board-cluster-count" dx="8">${parts}</tspan></text></g>`;
+    }).join('');
     visible.edges.forEach((e, i) => {
       const group = primaryGroup(e) || 'combo';
       const color = data.groups[group]?.color || '#59625f';
@@ -335,8 +348,8 @@
         inner += `<text class="board-node-fallback" x="0" y="0" text-anchor="middle">${escapeHtml(n.name.slice(0, 12))}</text>`;
         if (n.image) inner += `<image href="${escapeHtml(n.image)}" x="${x}" y="${y}" width="${s.w}" height="${s.h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#board-card-clip)"></image>`;
       }
-      const label = n.name.length > 18 ? `${n.name.slice(0, 17)}…` : n.name;
-      inner += `<text class="board-node-label" x="0" y="${s.h / 2 + 15}" text-anchor="middle">${escapeHtml(label)}</text>`;
+      const label = n.name.length > 20 ? `${n.name.slice(0, 19)}…` : n.name;
+      inner += `<text class="board-node-label" x="0" y="${s.h / 2 + 17}" text-anchor="middle">${escapeHtml(label)}</text>`;
       if (n.degree) inner += `<g class="board-node-degree" transform="translate(${s.w / 2 - 2},${y + 2})"><circle r="10"></circle><text text-anchor="middle" y="4">${n.degree}</text></g>`;
       if (n.stage === 'candidate') inner += `<text class="board-node-stage" x="${x + 4}" y="${y + 13}">cand.</text>`;
       g.innerHTML = inner;
@@ -348,21 +361,32 @@
     updateCounts();
   }
 
+  // Com as setas sob demanda, passar o mouse numa carta mostra só as setas dela.
+  function applyHover() {
+    const id = state.hover;
+    $$('.board-edge, .board-edge-hit', edgeLayer).forEach((p) => {
+      const e = visible.edges[Number(p.dataset.edge)];
+      p.classList.toggle('is-hover', !!id && (e.from === id || e.to === id));
+    });
+    root.classList.toggle('edges-all', state.allEdges);
+  }
+
   function refreshEdges() {
     $$('.board-edge, .board-edge-hit', edgeLayer).forEach((p) => p.setAttribute('d', edgePath(visible.edges[Number(p.dataset.edge)])));
   }
 
   function applyView() {
     viewport.setAttribute('transform', `translate(${state.view.x.toFixed(1)},${state.view.y.toFixed(1)}) scale(${state.view.k.toFixed(3)})`);
-    root.classList.toggle('is-zoomed-out', state.view.k < 0.55);
+    root.classList.toggle('is-zoomed-out', state.view.k < 0.42);
   }
 
   function fit(ids = null) {
     const nodes = ids ? visible.nodes.filter((n) => ids.has(n.id)) : visible.nodes;
     if (!nodes.length) return;
     const rect = canvas.getBoundingClientRect();
-    const xs = nodes.flatMap((n) => [n.x - size(n).w / 2, n.x + size(n).w / 2]);
-    const ys = nodes.flatMap((n) => [n.y - size(n).h / 2, n.y + size(n).h / 2 + 22]);
+    const boxes = ids ? [] : clusters;
+    const xs = [...nodes.flatMap((n) => [n.x - size(n).w / 2, n.x + size(n).w / 2]), ...boxes.flatMap((b) => [b.x, b.x + b.w])];
+    const ys = [...nodes.flatMap((n) => [n.y - size(n).h / 2, n.y + size(n).h / 2 + 22]), ...boxes.flatMap((b) => [b.y, b.y + b.h])];
     const minX = Math.min(...xs); const maxX = Math.max(...xs); const minY = Math.min(...ys); const maxY = Math.max(...ys);
     const k = Math.max(0.2, Math.min(1.4, Math.min((rect.width - 60) / (maxX - minX || 1), (rect.height - 60) / (maxY - minY || 1))));
     state.view = { k, x: rect.width / 2 - ((minX + maxX) / 2) * k, y: rect.height / 2 - ((minY + maxY) / 2) * k };
@@ -380,12 +404,13 @@
       g.classList.toggle('is-near', !!near && near.has(g.dataset.node) && g.dataset.node !== focus);
       g.classList.toggle('is-dim', !!near && !near.has(g.dataset.node));
     });
-    $$('.board-edge', edgeLayer).forEach((p) => {
+    $$('.board-edge, .board-edge-hit', edgeLayer).forEach((p) => {
       const e = visible.edges[Number(p.dataset.edge)];
       const on = focus && (e.from === focus || e.to === focus);
       p.classList.toggle('is-on', !!on);
       p.classList.toggle('is-dim', !!focus && !on);
     });
+    applyHover();
     renderPanel(focus);
   }
 
@@ -478,9 +503,6 @@
   }
 
   function updateCounts() {
-    const count = { deck: 0, candidate: 0 };
-    nodesById.forEach((n) => { if (count[n.stage] !== undefined) count[n.stage] += 1; });
-    Object.entries(count).forEach(([stage, value]) => { const el = $(`[data-board-count="${stage}"]`); if (el) el.textContent = value; });
     const totals = {};
     data.edges.forEach((e) => e.reasons.forEach((r) => { totals[r.group] = (totals[r.group] || 0) + 1; }));
     const chips = $('[data-board-chips]');
@@ -501,7 +523,7 @@
   }
 
   function persist() {
-    store.write({ stages: [...state.stages], groups: [...state.groups], groupLands: state.groupLands, hubs: state.hubs, showIsolated: state.showIsolated, positions: state.positions });
+    store.write({ allEdges: state.allEdges, groups: [...state.groups], groupLands: state.groupLands, hubs: state.hubs, showIsolated: state.showIsolated, positions: state.positions });
   }
 
   function rebuild(reset = false) {
@@ -524,7 +546,12 @@
     }
   });
   svg.addEventListener('pointermove', (event) => {
-    if (!drag) { hoverEdge(event); return; }
+    if (!drag) {
+      const over = event.target.closest('.board-node')?.dataset.node || null;
+      if (over !== state.hover) { state.hover = over; applyHover(); }
+      hoverEdge(event);
+      return;
+    }
     const dx = event.clientX - drag.startX; const dy = event.clientY - drag.startY;
     if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
     if (drag.type === 'pan') {
@@ -574,7 +601,7 @@
     tooltip.style.left = `${Math.min(rect.width - 280, event.clientX - rect.left + 14)}px`;
     tooltip.style.top = `${Math.min(rect.height - 120, event.clientY - rect.top + 14)}px`;
   }
-  svg.addEventListener('pointerleave', () => { tooltip.hidden = true; });
+  svg.addEventListener('pointerleave', () => { tooltip.hidden = true; if (state.hover) { state.hover = null; applyHover(); } });
 
   svg.addEventListener('keydown', (event) => {
     const nodeEl = event.target.closest('.board-node');
@@ -629,13 +656,9 @@
     }
   });
 
-  $$('[data-board-stage]').forEach((input) => {
-    input.checked = state.stages.has(input.dataset.boardStage);
-    input.addEventListener('change', () => {
-      if (input.checked) state.stages.add(input.dataset.boardStage); else state.stages.delete(input.dataset.boardStage);
-      persist(); rebuild(); fit();
-    });
-  });
+  const allEdgesToggle = $('[data-board-all-edges]');
+  allEdgesToggle.checked = state.allEdges;
+  allEdgesToggle.addEventListener('change', () => { state.allEdges = allEdgesToggle.checked; persist(); applyHover(); });
   const hubsToggle = $('[data-board-hubs]');
   hubsToggle.checked = state.hubs;
   hubsToggle.addEventListener('change', () => { state.hubs = hubsToggle.checked; persist(); rebuild(true); fit(); });
@@ -651,7 +674,7 @@
     const wanted = search.value.trim().toLowerCase();
     const match = data.nodes.find((n) => n.name.toLowerCase() === wanted) || data.nodes.find((n) => n.name.toLowerCase().includes(wanted));
     if (!match) return;
-    if (!visible.byId.has(match.id)) { state.showIsolated = true; isolatedToggle.checked = true; if (match.stage !== 'commander') state.stages.add(match.stage); rebuild(); }
+    if (!visible.byId.has(match.id)) { state.showIsolated = true; isolatedToggle.checked = true; rebuild(); }
     focusNode(match.id);
   });
 

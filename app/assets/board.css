@@ -43,13 +43,13 @@
 .board-node image{filter:drop-shadow(0 2px 3px rgba(23,30,38,.25))}
 .board-node-fallback{font-size:9px;font-weight:700;fill:#59625f}
 .board-node-fallback.is-small{font-weight:500}
-.board-node-label{font-size:10px;font-weight:600;fill:#2a3036;paint-order:stroke;stroke:#fdfcf8;stroke-width:3px;stroke-linejoin:round}
+.board-node-label{font-size:12px;font-weight:600;fill:#2a3036;paint-order:stroke;stroke:#fdfcf8;stroke-width:3px;stroke-linejoin:round}
 .board-node-degree circle{fill:#171e26;stroke:#fdfcf8;stroke-width:2}
 .board-node-degree text{font-size:9.5px;font-weight:700;fill:#fff}
 .board-node-stage{font-size:8.5px;font-weight:700;fill:#fff;paint-order:stroke;stroke:#171e26;stroke-width:2.5px}
 .board-node.stage-candidate .board-node-frame{stroke:#8a8f88;stroke-dasharray:4 3}
 .board-node.stage-commander .board-node-frame{stroke:#3b594d;stroke-width:3.5}
-.board-node.stage-commander .board-node-label{font-size:12px;font-weight:700}
+.board-node.stage-commander .board-node-label{font-size:14px;font-weight:700}
 .board-node.stage-group .board-node-bg{fill:#efe6d3;stroke:#7b5e2a}
 .board-node:hover .board-node-frame,.board-node:focus-visible .board-node-frame{stroke:#171e26;stroke-dasharray:none}
 .board-node.is-focus .board-node-frame{stroke:#171e26;stroke-width:4;stroke-dasharray:none}
@@ -126,3 +126,15 @@
 .board-node.stage-hub.is-focus .board-hub{stroke-width:3.5}
 .board-node.stage-hub:hover .board-hub{stroke-width:3}
 .board-origin{font-size:.68rem;color:var(--muted);margin-top:-4px}
+
+/* Blocos por tema e setas sob demanda. */
+.board-deck-count{font-size:.8rem;font-weight:700;color:var(--accent);padding:6px 11px;border-radius:999px;background:var(--soft)}
+.board-cluster rect{fill:color-mix(in srgb,var(--c) 6%,#fffefa);stroke:color-mix(in srgb,var(--c) 38%,#fffefa);stroke-width:1.5}
+.board-cluster-label{font:700 15px 'Segoe UI',system-ui,sans-serif;fill:var(--c)}
+.board-cluster-count{font-weight:500;font-size:12px;fill:#59625f}
+/* Sem "todas as setas": só aparecem as da carta sob o mouse ou selecionada. */
+.board-app:not(.edges-all) .board-edge:not(.is-on):not(.is-hover),.board-app:not(.edges-all) .board-edge-hit:not(.is-on):not(.is-hover){display:none}
+.board-edge.is-hover{opacity:.9}
+.board-app:not(.edges-all):not(.has-focus) .board-edge.is-hover{opacity:.85}
+.board-app.edges-all:not(.has-focus) .board-edge{opacity:.22}
+.board-app.edges-all:not(.has-focus) .board-edge.is-hover{opacity:.95}
