@@ -26,6 +26,15 @@ Projeto local para pesquisar cartas, planejar decks de Commander a partir da sua
 
 A navegação lateral pode ser recolhida; o botão fica sempre no topo. Em telas de até 850px ela vira uma barra superior com menu suspenso.
 
+## Edições
+
+`/editions.php` é uma linha do tempo de todos os lançamentos, em página única e sem paginação.
+
+- **Espectrograma no topo:** uma coluna por ano; a altura é o número de cartas **inéditas** daquele ano (cada carta conta uma vez, no ano da primeira impressão; sem fichas e sem cartas só digitais) e as faixas mostram a proporção de cada cor de mana entre elas. Ao rolar, ele vira uma régua fina presa no topo, destaca o ano visível e leva a qualquer ano com um clique.
+- **Uma linha por lançamento:** os códigos de edição são agrupados pela coleção que as pessoas reconhecem (`editionUmbrella()`); subedições como Commander, fichas, promos e série de arte aparecem como marcas na linha da coleção-mãe (ex.: Duskmourn com ADSK, DSC, PDSK e TDSK). Cada linha traz data, símbolo da edição sobre a linha do tempo, tipo, faixa de cores das cartas da edição e total de cartas; lançamentos futuros aparecem como “Em breve”.
+- **Busca e filtros instantâneos** por nome ou código e por categoria (Expansões, Draft e Masters, Commander, Produtos especiais, Promos e fichas). Promos e fichas soltos começam ocultos; a escolha fica lembrada no navegador.
+- Os dados vêm de duas consultas agregadas sobre `cards`, guardadas por `catalogCached` por até 24 horas e renovadas a cada sincronização do catálogo. Estilos e script próprios: `assets/editions.css` e `assets/editions.js`.
+
 ## Comandantes
 
 `/commanders.php` lista **todos** os comandantes do catálogo, 24 por página, sem repetir reimpressões. A ordem padrão é **Mais novos**, pela data da **primeira** impressão de cada carta (uma reimpressão não torna um comandante antigo “novo”). Também há **Mais populares** (posição no EDHREC), **Nome (A–Z)** e **Adicionados recentemente**. A busca por nome percorre o catálogo inteiro. Cartas só digitais (Alchemy/Arena) ficam de fora. A coluna lateral mostra os mais populares.
@@ -184,7 +193,7 @@ A página inicial agora possui duas áreas novas:
 
 Também foram adicionadas:
 
-- `http://localhost:8080/editions.php` — edições agrupadas por ano de lançamento, com busca por nome/código.
+- `http://localhost:8080/editions.php` — linha do tempo de todas as edições (veja a seção **Edições** acima).
 - `http://localhost:8080/edition.php?set=eoc` — cartas de uma edição específica.
 
 Na página de uma edição, o modo padrão agrupa variantes/reprints internos pelo `oracle_id`. Use **Todas as versões** para ver showcase, borderless e outras impressões separadamente.

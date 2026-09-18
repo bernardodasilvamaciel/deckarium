@@ -31,6 +31,7 @@ function pageHeader(string $title): void
     echo '<link rel="stylesheet" href="/assets/style.css?v=' . h($version) . '">';
     if ($section === 'home') echo '<link rel="stylesheet" href="/assets/home.css?v=' . filemtime(__DIR__ . '/assets/home.css') . '">';
     if ($section === 'commanders') echo '<link rel="stylesheet" href="/assets/commanders.css?v=' . filemtime(__DIR__ . '/assets/commanders.css') . '">';
+    if ($route === 'editions.php') echo '<link rel="stylesheet" href="/assets/editions.css?v=' . filemtime(__DIR__ . '/assets/editions.css') . '">';
     if ($section==='decks') echo '<link rel="stylesheet" href="/assets/decks.css?v=' . filemtime(__DIR__ . '/assets/decks.css') . '">';
     echo '<script src="/assets/app.js?v=' . h((string)filemtime(__DIR__ . '/assets/app.js')) . '" defer></script></head><body>';
     echo '<a class="skip-link" href="#main">Pular para o conteúdo</a>';

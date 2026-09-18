@@ -1,0 +1,121 @@
+/* Edições: linha do tempo em página única com espectrograma de mana. */
+.timeline-page{
+  --m-W:#d8c07a;--m-U:#2e6ba6;--m-B:#2b2430;--m-R:#b5432a;--m-G:#3d7b4a;--m-C:#a8a397;
+  --spine:#c9cbc2;--spectro-h:150px;--spectro-stuck:30px;
+  --mono:ui-monospace,'Cascadia Mono',Consolas,'SFMono-Regular',monospace;
+}
+.m-W{background:var(--m-W)}.m-U{background:var(--m-U)}.m-B{background:var(--m-B)}.m-R{background:var(--m-R)}.m-G{background:var(--m-G)}.m-C{background:var(--m-C)}
+
+.timeline-intro{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 40px;align-items:end;margin-bottom:26px}
+.timeline-intro h1{margin:0;font-size:3.4rem;line-height:1}
+.timeline-intro p{margin:0;max-width:66ch;color:var(--muted);font-size:.92rem;line-height:1.55}
+
+/* Espectrograma: um ano por coluna; fica preso no topo como régua de navegação. */
+.spectro-sentinel{height:1px}
+.spectro{position:sticky;top:var(--topbar,0px);z-index:20;margin:0 0 22px;padding:14px 0 10px;background:var(--paper);border-bottom:1px solid var(--line)}
+.spectro-bars{list-style:none;margin:0;padding:0;display:flex;align-items:stretch;gap:3px;height:calc(var(--spectro-h) + 22px);transition:height .28s ease}
+.spectro-bars li{flex:1 1 0;min-width:0}
+.spectro-bars a{position:relative;display:flex;flex-direction:column;justify-content:flex-end;height:100%;padding-bottom:22px;color:var(--muted);text-decoration:none;border-radius:3px}
+.spectro-bars a[aria-disabled=true]{pointer-events:none}
+.spectro-col{display:flex;flex-direction:column;width:100%;min-height:0;border-radius:3px 3px 1px 1px;overflow:hidden;transform-origin:bottom;animation:spectro-rise .7s cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--i) * 22ms);transition:opacity .2s ease}
+.spectro-col i{display:block;min-height:1px}
+.spectro-year{position:absolute;left:50%;bottom:2px;transform:translateX(-50%);font:600 .66rem/1 var(--mono);letter-spacing:-.02em;white-space:nowrap;visibility:hidden}
+.spectro-year.is-labeled{visibility:visible}
+.spectro-bars a:hover .spectro-year,.spectro-bars a:focus-visible .spectro-year,.spectro-bars a[aria-current=true] .spectro-year{visibility:visible;color:var(--ink)}
+.spectro-bars a:hover .spectro-col,.spectro-bars a:focus-visible .spectro-col{box-shadow:0 0 0 2px var(--paper),0 0 0 3.5px var(--ink)}
+.spectro-bars a:focus-visible{outline:none}
+.spectro:has(a[aria-current=true]) .spectro-col{opacity:.38}
+.spectro a[aria-current=true] .spectro-col{opacity:1}
+.spectro-legend{display:flex;flex-wrap:wrap;gap:4px 16px;margin:10px 0 0;font-size:.72rem;color:var(--muted);transition:opacity .2s ease}
+.spectro-legend span{display:inline-flex;align-items:center;gap:6px}
+.spectro-legend i{width:10px;height:10px;border-radius:2px}
+/* Presa no topo: vira uma régua fina; só o ano atual e os marcos ficam rotulados. */
+.spectro.is-stuck{padding:8px 0 6px;box-shadow:0 8px 18px -14px #17241c66}
+.spectro.is-stuck .spectro-bars{height:calc(var(--spectro-stuck) + 16px)}
+.spectro.is-stuck .spectro-bars a{padding-bottom:16px}
+.spectro.is-stuck .spectro-year{font-size:.6rem;bottom:0}
+.spectro.is-stuck .spectro-year.is-labeled{visibility:hidden}
+.spectro.is-stuck a[aria-current=true] .spectro-year,.spectro.is-stuck a:hover .spectro-year{visibility:visible}
+.spectro.is-stuck .spectro-legend{display:none}
+@keyframes spectro-rise{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+
+/* Controles */
+.timeline-controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px 26px;margin:0 0 30px}
+.timeline-search{display:grid;gap:6px;flex:0 1 340px;font-size:.78rem;font-weight:600}
+.timeline-search input{min-height:42px;padding:9px 12px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit;font-weight:400}
+.timeline-filters{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;border:0}
+.timeline-filters legend{float:left;margin:0 8px 0 0;padding:9px 0;font-size:.78rem;font-weight:600}
+.timeline-filters label{display:inline-flex;align-items:center;gap:7px;min-height:36px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);font-size:.8rem;cursor:pointer;user-select:none}
+.timeline-filters label:has(input:checked){border-color:var(--ink);background:var(--ink);color:var(--paper)}
+.timeline-filters label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+.timeline-filters input{position:absolute;opacity:0;pointer-events:none}
+.timeline-filters b{font:600 .72rem var(--mono);opacity:.7}
+.timeline-count{margin:0 0 0 auto;font:500 .76rem var(--mono);color:var(--muted)}
+
+/* Anos */
+.timeline-year{display:grid;grid-template-columns:150px minmax(0,1fr);gap:0 20px;scroll-margin-top:calc(var(--topbar,0px) + 70px)}
+.timeline-year+.timeline-year{border-top:1px solid var(--line)}
+.timeline-year-label{position:sticky;top:calc(var(--topbar,0px) + 66px);align-self:start;display:grid;gap:4px;margin:0;padding:18px 0}
+.timeline-year-label span{font:700 3.1rem/0.9 Spectral,Georgia,serif;letter-spacing:-.02em;font-variant-numeric:lining-nums tabular-nums}
+.timeline-year-label small{font:500 .72rem var(--mono);color:var(--muted)}
+
+/* Lançamentos: o símbolo da edição é o nó sobre a linha do tempo. */
+.timeline-releases{position:relative;list-style:none;margin:0;padding:14px 0 18px}
+.timeline-releases::before{content:"";position:absolute;top:0;bottom:0;left:calc(56px + 14px + 15px);width:2px;background:var(--spine)}
+.release{position:relative;display:grid;grid-template-columns:56px 30px minmax(0,1fr) 128px 118px 82px;gap:0 14px;align-items:center;min-height:46px;padding:5px 8px 5px 0;border-radius:8px}
+.release:hover{background:color-mix(in srgb,var(--surface) 70%,transparent)}
+.release time{font:500 .74rem var(--mono);color:var(--muted);text-align:right;white-space:nowrap}
+.release-mark{position:relative;z-index:1;display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--paper);box-shadow:0 0 0 2px var(--paper)}
+.release-mark img{display:block;width:24px;height:24px;object-fit:contain}
+.release.is-extras .release-mark img,.release.is-special .release-mark img{width:18px;height:18px;opacity:.75}
+.release.is-future .release-mark{border:1.5px dashed var(--ink)}
+.release-body{display:flex;flex-wrap:wrap;align-items:baseline;gap:3px 10px;min-width:0}
+.release-name{font-weight:650;font-size:.95rem;color:var(--ink);text-decoration:none;overflow-wrap:anywhere}
+.release.is-main .release-name{font-size:1.02rem}
+.release.is-extras .release-name,.release.is-special .release-name{font-weight:500}
+.release-name:hover{text-decoration:underline;text-underline-offset:3px}
+.release-code{font:600 .7rem var(--mono);color:var(--muted);letter-spacing:.04em}
+.release-soon{padding:1px 8px;border-radius:999px;background:var(--ink);color:var(--paper);font-size:.66rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase}
+.release-children{display:flex;flex-wrap:wrap;gap:4px;flex-basis:100%}
+.release-children a{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:1px 8px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--muted);font-size:.7rem;text-decoration:none;white-space:nowrap}
+.release-children a:hover{border-color:var(--ink);color:var(--ink)}
+.release-children b{font:600 .64rem var(--mono);color:var(--ink);opacity:.7}
+.release-type{font-size:.74rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.spectrum{display:flex;height:8px;border-radius:2px;overflow:hidden;background:var(--line)}
+.spectrum i{display:block;min-width:1px}
+.spectrum.is-empty{background:repeating-linear-gradient(90deg,var(--line) 0 4px,transparent 4px 7px)}
+.release-cards{font:600 .8rem var(--mono);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.release-cards small{font:400 .66rem 'Segoe UI',system-ui,sans-serif;color:var(--muted)}
+.release :is(a):focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+.timeline-empty{padding:40px 0;text-align:center;color:var(--muted)}
+
+@media(max-width:1100px){
+  .release{grid-template-columns:52px 30px minmax(0,1fr) 100px 70px}
+  .release-type{display:none}
+  .timeline-releases::before{left:calc(52px + 14px + 15px)}
+  .timeline-year{grid-template-columns:110px minmax(0,1fr)}
+  .timeline-year-label span{font-size:2.5rem}
+}
+@media(max-width:700px){
+  .timeline-page{--spectro-h:96px;--spectro-stuck:24px}
+  .timeline-intro{grid-template-columns:1fr}
+  .timeline-intro h1{font-size:2.4rem}
+  .spectro-bars{gap:1px}
+  .spectro-year.is-labeled{visibility:hidden}
+  .spectro-bars li:first-child .spectro-year,.spectro-bars li:last-child .spectro-year{visibility:visible}
+  .timeline-search{flex-basis:100%}
+  .timeline-search input{font-size:16px}
+  .timeline-count{margin-left:0}
+  .timeline-year{grid-template-columns:1fr}
+  .timeline-year-label{grid-template-columns:auto 1fr;align-items:baseline;gap:10px;top:calc(var(--topbar,0px) + 52px);z-index:5;padding:10px 0 8px;background:var(--paper)}
+  .timeline-year-label span{font-size:1.8rem}
+  .release{grid-template-columns:44px 28px minmax(0,1fr) 56px;gap:0 10px;align-items:start;padding-block:7px}
+  .timeline-releases::before{left:calc(44px + 10px + 14px)}
+  .release time{padding-top:6px}
+  .release-body{grid-column:3}
+  .release .spectrum{grid-column:3;grid-row:2;margin-top:6px}
+  .release-cards{grid-column:4;grid-row:1;padding-top:4px}
+  .release-cards small{display:none}
+}
+@media(prefers-reduced-motion:reduce){.spectro-col{animation:none}.spectro-bars,.spectro-col,.spectro-legend{transition:none}}
+.spectro-bars a.is-filtered-out .spectro-col{opacity:.15}
