@@ -3,26 +3,56 @@ declare(strict_types=1);
 require __DIR__ . '/db.php';
 require __DIR__ . '/functions.php';
 require __DIR__ . '/partials.php';
+require __DIR__ . '/card_filters.php';
 
 $query = is_string($_GET['q'] ?? null) ? mb_substr(trim($_GET['q']), 0, 120) : '';
+$sortOptions = ['new' => 'Mais novos', 'popular' => 'Mais populares', 'name' => 'Nome (A–Z)', 'added' => 'Adicionados recentemente'];
+$sort = is_string($_GET['sort'] ?? null) && isset($sortOptions[$_GET['sort']]) ? $_GET['sort'] : 'new';
+$perPage = 24;
+$page = max(1, (int)($_GET['page'] ?? 1));
 $parameters = [];
-$where = "c.commander_eligible AND c.layout NOT IN ('art_series', 'token', 'double_faced_token', 'emblem')";
+// Cartas só digitais (Alchemy/Arena) não entram: não existem para Commander de papel.
+$where = "c.commander_eligible AND c.layout NOT IN ('art_series', 'token', 'double_faced_token', 'emblem') AND COALESCE(c.raw->>'digital', 'false') <> 'true'";
 if ($query !== '') {
     $where .= ' AND c.name ILIKE :name';
     $parameters['name'] = '%' . strtr($query, ['\\' => '\\\\', '%' => '\\%', '_' => '\\_']) . '%';
 }
-$statement = db()->prepare(<<<SQL
-    SELECT c.* FROM (
-        SELECT DISTINCT ON (COALESCE(c.oracle_id::text,c.card_faces->0->>'oracle_id',c.id::text)) c.*
-        FROM cards c
-        WHERE {$where}
-        ORDER BY COALESCE(c.oracle_id::text,c.card_faces->0->>'oracle_id',c.id::text), (c.layout = 'reversible_card'), c.imported_at DESC, c.released_at DESC NULLS LAST, c.id
-    ) c
-    ORDER BY c.imported_at DESC, c.released_at DESC NULLS LAST, c.name
-    LIMIT 12
-SQL);
-$statement->execute($parameters);
-$latest = $statement->fetchAll();
+// "Mais novos" usa a primeira impressão do comandante: reimpressões não o tornam novo.
+$order = match ($sort) {
+    'popular' => 'best_rank ASC NULLS LAST, name',
+    'name' => 'name, first_released DESC NULLS LAST',
+    'added' => 'last_imported DESC, first_released DESC NULLS LAST, name',
+    default => 'first_released DESC NULLS LAST, name',
+};
+$fetchCommanders = static function (int $offset) use ($where, $parameters, $order, $perPage): array {
+    $statement = db()->prepare(<<<SQL
+        WITH printings AS (
+            SELECT c.*, COALESCE(c.oracle_id::text,c.card_faces->0->>'oracle_id',c.id::text) AS oracle_key
+            FROM cards c
+            WHERE {$where}
+        ), commanders AS (
+            SELECT DISTINCT ON (oracle_key) p.*,
+                MIN(p.released_at) OVER (PARTITION BY oracle_key) AS first_released,
+                MIN(p.edhrec_rank_cached) OVER (PARTITION BY oracle_key) AS best_rank,
+                MAX(p.imported_at) OVER (PARTITION BY oracle_key) AS last_imported
+            FROM printings p
+            ORDER BY oracle_key, (p.layout = 'reversible_card'), (p.lang <> 'en'), COALESCE(p.raw->>'promo', 'false') = 'true', p.released_at DESC NULLS LAST, p.id
+        )
+        SELECT c.*, COUNT(*) OVER () AS total_commanders
+        FROM commanders c
+        ORDER BY {$order}
+        LIMIT {$perPage} OFFSET {$offset}
+    SQL);
+    $statement->execute($parameters);
+    return $statement->fetchAll();
+};
+$commanders = $fetchCommanders(($page - 1) * $perPage);
+if (!$commanders && $page > 1) {
+    $page = 1;
+    $commanders = $fetchCommanders(0);
+}
+$total = (int)($commanders[0]['total_commanders'] ?? 0);
+$totalPages = max(1, (int)ceil($total / $perPage));
 
 $popular = db()->query(<<<'SQL'
     SELECT c.* FROM (
@@ -49,23 +79,29 @@ pageHeader('Comandantes');
     </header>
 
     <form class="commander-search" action="/commanders.php" method="get" role="search" aria-label="Buscar comandantes">
-        <label for="commander-query">Buscar comandante por nome</label>
         <div class="commander-search-controls">
-            <input id="commander-query" name="q" type="search" maxlength="120" placeholder="Nome do comandante…" value="<?= h($query) ?>">
+            <label class="commander-field commander-field-name">Buscar comandante por nome
+                <input id="commander-query" name="q" type="search" maxlength="120" placeholder="Nome do comandante…" value="<?= h($query) ?>">
+            </label>
+            <label class="commander-field">Ordenar por
+                <select name="sort" data-auto-submit>
+                    <?php foreach ($sortOptions as $value => $label): ?><option value="<?= h($value) ?>"<?= $sort === $value ? ' selected' : '' ?>><?= h($label) ?></option><?php endforeach; ?>
+                </select>
+            </label>
             <button class="primary-link" type="submit">Buscar</button>
-            <?php if ($query !== ''): ?><a href="/commanders.php" class="commander-clear">Limpar busca</a><?php endif; ?>
+            <?php if ($query !== '' || $sort !== 'new'): ?><a href="/commanders.php" class="commander-clear">Limpar</a><?php endif; ?>
         </div>
     </form>
 
     <div class="commander-layout">
         <section class="commander-gallery" aria-labelledby="latest-commanders">
             <div class="commander-section-heading">
-                <h2 id="latest-commanders"><?= $query !== '' ? 'Resultado da busca' : 'Últimos adicionados' ?></h2>
-                <p><?= $query !== '' ? 'Até 12 comandantes para “' . h($query) . '”. Refine o nome para encontrar outros.' : 'Novidades do catálogo local, sem repetir reimpressões.' ?></p>
+                <h2 id="latest-commanders"><?= $query !== '' ? 'Resultado da busca' : 'Todos os comandantes' ?></h2>
+                <p><?= number_format($total, 0, ',', '.') ?> <?= $total === 1 ? 'comandante' : 'comandantes' ?><?= $query !== '' ? ' para “' . h($query) . '”' : ' no catálogo' ?>, sem repetir reimpressões.</p>
             </div>
-            <?php if ($latest): ?>
+            <?php if ($commanders): ?>
                 <div class="commander-grid">
-                    <?php foreach ($latest as $index => $card): $image = $commanderImage($card); ?>
+                    <?php foreach ($commanders as $index => $card): $image = $commanderImage($card); ?>
                         <article class="commander-tile">
                             <a href="/card.php?id=<?= h(rawurlencode((string)$card['id'])) ?>">
                                 <span class="commander-art">
@@ -73,16 +109,16 @@ pageHeader('Comandantes');
                                 </span>
                                 <h3><?= h($card['name']) ?></h3>
                             </a>
-                            <p><?= h($card['set_name']) ?></p>
+                            <p><?= h($card['set_name']) ?><?php if ($sort === 'new' && $card['first_released']): ?> · desde <?= h(substr((string)$card['first_released'], 0, 4)) ?><?php elseif ($sort === 'popular' && $card['best_rank'] !== null): ?> · EDHREC #<?= number_format((int)$card['best_rank'], 0, ',', '.') ?><?php endif; ?></p>
                         </article>
                     <?php endforeach; ?>
                 </div>
-                <a class="commander-catalog-link" href="/?catalog=1#catalogo">Explorar o catálogo completo <span aria-hidden="true">&rarr;</span></a>
+                <?php if ($totalPages > 1) numberedPager($page, $totalPages, array_filter(['q' => $query, 'sort' => $sort === 'new' ? '' : $sort], 'strlen'), '#latest-commanders'); ?>
             <?php else: ?>
                 <div class="commander-empty">
                     <h3><?= $query !== '' ? 'Nenhum comandante encontrado' : 'Seu catálogo ainda não tem comandantes' ?></h3>
                     <p><?= $query !== '' ? 'Tente parte do nome ou use o nome original da carta.' : 'Os comandantes aparecem aqui conforme as cartas são importadas.' ?></p>
-                    <a href="<?= $query !== '' ? '/commanders.php' : '/?catalog=1#catalogo' ?>"><?= $query !== '' ? 'Ver últimos adicionados' : 'Ver catálogo' ?></a>
+                    <a href="<?= $query !== '' ? '/commanders.php' : '/?catalog=1#catalogo' ?>"><?= $query !== '' ? 'Ver todos os comandantes' : 'Ver catálogo' ?></a>
                 </div>
             <?php endif; ?>
         </section>
