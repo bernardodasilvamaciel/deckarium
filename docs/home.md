@@ -1,5 +1,7 @@
 # Página inicial
 
+> **Situação atual:** `/` sem filtros redireciona para `/commanders.php`, que é a entrada do site; o item **Início** saiu do menu e a marca do Deckarium também leva a Comandantes. O conteúdo abaixo descreve a página inicial anterior (escultura 3D, prévia de seis cartas) e fica como referência. `tests/home-smoke.cjs` ainda espera essa página e precisa ser atualizado antes de ser usado. Veja a seção **Comandantes** no [README](../README.md).
+
 ## Entrada e navegação
 
 `app/index.php` apresenta a página inicial em `/` quando não há filtros ativos nem parâmetros `catalog`, `view` ou `page`. A navegação marca **Início** como página atual. A busca envia `q` para a mesma rota; os atalhos para Dragões, Lendárias e catálogo completo levam à listagem existente. `/?catalog=1#catalogo` abre o catálogo com paginação de 36 cartas.

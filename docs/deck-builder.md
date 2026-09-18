@@ -5,12 +5,12 @@ Acesse `http://localhost:8080/decks.php` ou **Meus decks** no menu. O módulo fu
 ## Fluxo
 
 1. Em **Minha coleção**, envie um CSV (`Name`, `Scryfall ID`, `Quantity` e, opcional, `Foil`) para **substituir**, **somar** ou **subtrair** cópias (vendas e trocas). Ao substituir, qualquer linha com erro cancela tudo; ao somar ou subtrair, as linhas corretas são aplicadas. Em todos os casos a página lista cada linha que não entrou com número, carta, motivo e conteúdo, e oferece essas linhas em CSV para corrigir e reenviar. Subtrair mais cópias do que a coleção tem, ou uma impressão/acabamento que não está nela, é erro daquela linha. Impressões desconhecidas do catálogo continuam aceitas ao importar e são sinalizadas.
-2. Planeje um deck do zero ou cole uma exportação textual do Moxfield. Cabeçalhos `Commander` e `Deck` são reconhecidos; listas simples no formato `1 Nome da carta` também funcionam. A importação escolhe primeiro a impressão exata presente na coleção.
+2. Em **Meus decks**, a lista dos seus decks ocupa a página; **Novo deck** e **Importar lista** abrem em janelas. A importação tem um campo próprio para a **comandante** (aceita `Nome`, `1 Nome` ou `1 Nome (SET) 123`) e outro para o **restante do deck**. Se o campo da comandante ficar vazio, vale a carta sob o cabeçalho `Commander` da lista (exportações do Moxfield funcionam como estão); se a comandante aparecer também na lista, ela não é duplicada. Uma comandante inexistente ou inelegível gera erro antes de criar o deck, e a janela reabre com o que foi colado. A importação escolhe primeiro a impressão exata presente na coleção.
 3. Ao criar um deck, escolha imediatamente uma comandante na lista. A mesma busca e os mesmos filtros usados depois para explorar o catálogo já funcionam nessa etapa; apenas a ordenação por sinergia fica indisponível até existir uma comandante de referência.
 4. Depois da escolha, registre a estratégia e busque palavras ou frases literais do Oracle em inglês, separadas por ponto e vírgula: `sacrifice; land; graveyard`. **Todos os termos** usa AND; **Qualquer termo** usa OR. Ambas as faces são pesquisadas. Combine nome, tipo, disponibilidade, identidade de cor, raridade, edição e custo no mesmo painel.
 5. Adicione cartas às candidatas e aprove-as para o deck (ou devolva-as às candidatas). Você define quantidade, função e observações. A edição expandida mostra imagem, tipo, custo e texto Oracle.
 6. A lista é finalizada automaticamente quando comandante + cartas aprovadas chegam a 100 cartas. Cada troca é planejada dentro da seleção, relacionando uma carta do deck com qualquer impressão do catálogo e indicando quando ela está disponível na coleção.
-7. Consulte a composição e o valor estimado. Exporte o deck em texto, as cópias faltantes ou um CSV no padrão da Liga para pesquisar preços do deck completo ou somente do que falta.
+7. Em **Minha seleção › No deck**, a seção **Análise do deck** (abaixo das cartas) mostra cartas/100, terrenos, valor estimado, símbolos de mana, alertas, curva de mana, cores dos custos, funções informadas, sugestão de terrenos e as exportações: texto, JSON completo e CSV no padrão da Liga (deck completo ou só o que falta).
 
 ## Subpáginas do deck
 
@@ -18,11 +18,11 @@ Cada deck tem abas curtas em vez de uma página longa (`decks.php?deck=ID&view=�
 
 | Aba | `view` | Conteúdo |
 |---|---|---|
-| Visão geral | `overview` (padrão) | Comandante, Minha intenção, atalhos para as outras abas, análise (composição, exportações, disponibilidade), curva e mana |
+| Visão geral | `overview` (padrão) | Comandante, Minha intenção, compartilhamento (público/privado) e atalhos para as outras abas, inclusive **Análise do deck** |
 | Guia da comandante | `guide` | Planos, combos, mecânicas e novidades |
 | O que falta | `needs` | Metas por função e sugestões |
 | Explorar | `explore` | Filtros e resultados, inclusive “Encaixa no deck” |
-| Minha seleção | `selection` | Candidatas e deck |
+| Minha seleção | `selection` | Candidatas e deck; em **No deck**, a Análise do deck (`#deck-analysis`) |
 | Quadro de relações | `deck_board.php` | Setas entre as cartas |
 
 Links antigos com `view=discover` abrem a Visão geral, ou o Explorar quando trazem parâmetros de busca (`q`, `oracle`, `sort`, `page`…). Sem comandante, o deck mostra só a escolha da comandante e a seleção. As abas vêm de `deckSectionNav()`.
@@ -31,9 +31,9 @@ Links antigos com `view=discover` abrem a Visão geral, ou o Explorar quando tra
 
 O módulo é dividido em **Biblioteca**, **Comandante e descobertas** e **Minha seleção**. Na biblioteca, cada deck tem exclusão com confirmação, sem apagar cartas da coleção. A seleção tem duas abas: **Candidatas** (as cartas guardadas para comparar, com notas e aprovação — a antiga etapa “Em avaliação” foi unificada a ela e os itens antigos migram sozinhos) e **No deck**, ambas agrupadas por tipo. Mover uma carta entre etapas preserva quantidade, função e observações. Em qualquer aba, **Selecionar várias** ativa a seleção múltipla: clicar numa carta passa a marcá-la, cada tipo ganha “Marcar …” e a barra fixa oferece marcar todas, marcar as de nota Avançar e mover tudo de uma vez (candidatas → deck ou de volta). O servidor aplica as mesmas regras do mover individual na ordem da tela: cartas não básicas com mais de 1 cópia não entram no deck e, quando as vagas acabam, o restante fica onde estava com um aviso.
 
-O painel de exploração combina todos os filtros e usa **Ordenar resultados** para alternar entre sinergia, relevância, nome, novidade e disponibilidade. **Disponibilidade** permite mostrar tudo, somente a coleção ou somente o que falta. Os resultados são paginados em grupos de 24 e deduplicados pela identidade Oracle. Outra impressão da mesma carta conta como propriedade e como seleção já existente. Quando possível, a impressão da coleção é mostrada; fora dela, uma impressão física tem preferência. Cada resultado permite adicionar a carta às candidatas.
+O painel de exploração combina todos os filtros e usa **Ordenar resultados** para alternar entre sinergia, relevância, nome, novidade e disponibilidade. **Disponibilidade** permite mostrar tudo, somente a coleção, **somente a coleção com cópia livre** (sobra ao menos uma cópia depois do que os outros decks usam) ou somente o que falta. Cada resultado mostra a situação da cópia: todas livres, quantas livres e em quais decks as outras estão (com link), ou que todas já estão em outros decks. Os resultados são paginados em grupos de 24 e deduplicados pela identidade Oracle. Outra impressão da mesma carta conta como propriedade e como seleção já existente. Quando possível, a impressão da coleção é mostrada; fora dela, uma impressão física tem preferência. Cada resultado permite adicionar a carta às candidatas.
 
-Com um comandante definido, **Atualizar do EDHREC** busca recomendações sob demanda e grava métrica, fonte e data no cache local. O sistema preserva se o valor recebido é `synergy` ou `lift`, pois as escalas não são equivalentes. Esses números representam associação e popularidade entre listas, não uma avaliação objetiva de força. Se a rede ou o EDHREC estiver indisponível, a cache anterior é preservada e o restante do construtor continua funcionando.
+Com um comandante definido, as recomendações do EDHREC são buscadas **automaticamente** na primeira visita ao deck quando ainda não há nenhuma para aquela comandante (depois de escolhê-la, importar uma lista ou abrir um deck antigo; leva cerca de 3 s, uma única vez). Se o EDHREC falhar, a página abre normalmente e uma nova tentativa só acontece após 6 horas (marcador em `storage/edhrec-misses/`). O botão **Atualizar** do guia continua disponível e grava métrica, fonte e data no cache local. O sistema preserva se o valor recebido é `synergy` ou `lift`, pois as escalas não são equivalentes. Esses números representam associação e popularidade entre listas, não uma avaliação objetiva de força. Se a rede ou o EDHREC estiver indisponível, a cache anterior é preservada e o restante do construtor continua funcionando.
 
 Além da ordenação por sinergia, o painel apresenta planos prováveis para o comandante (sacrifício, fichas, cemitério, ramp, blink, Voltron, controle e tribal), com cartas específicas filtradas pela identidade e pela coleção. Combos compatíveis conhecidos são mostrados quando todas as peças existem no catálogo, com indicação de quais estão disponíveis. O selo **GC** identifica a lista curada local de Game Changers e aparece na exploração, nos pacotes, nos combos e na seleção.
 
@@ -45,7 +45,7 @@ Além da ordenação por sinergia, o painel apresenta planos prováveis para o c
 - A busca local é textual e explicada pelos termos encontrados. As recomendações externas não interpretam a estratégia escrita.
 - Funções são classificações manuais. A contagem de símbolos de mana é descritiva, não determina uma base de terrenos ideal.
 - Há alertas básicos de identidade e duplicidade, sem validação completa de legalidade ou banimentos.
-- Cópias usadas em outros decks não são reservadas; preços do CSV não são usados como cotação atual.
+- Cópias usadas em outros decks são **mostradas** (Explorar, Minha coleção, indicadores da seleção), mas não bloqueiam a adição; candidatas não reservam cópias. Preços do CSV não são usados como cotação atual.
 - Preços são os valores USD/EUR da impressão no Scryfall convertidos para BRL. A conversão usa \`USD_BRL_RATE\` (padrão 5,50) ou \`EUR_BRL_RATE\` (padrão 6,00), configuráveis no ambiente do app; “Preço indisponível” significa que aquela impressão não possui cotação.
 
 A seleção de comandantes considera a face frontal e inclui as criaturas lendárias, permissões explícitas no Oracle e veículos/espaçonaves lendários com poder e resistência, conforme o [boletim oficial de Edge of Eternities](https://magic.wizards.com/en/news/announcements/edge-of-eternities-update-bulletin).
@@ -96,11 +96,12 @@ Na Minha seleção, o diálogo de cada carta lista as relações com o deck e co
 
 ## Quadro de relações
 
-`deck_board.php?deck=ID` (aba **Quadro de relações** do deck) desenha comandante, deck e candidatas num quadro branco com setas coloridas por grupo.
+`deck_board.php?deck=ID` (aba **Quadro de relações** do deck) mostra **só a comandante e as cartas aprovadas no deck**; candidatas ficam de fora para o quadro continuar leve.
 
-- Clique numa carta para ver no painel o que ela **fornece para** e **aproveita de** cada carta, com os trechos. Clique no nome do parceiro para ir até ele. `?focus=<id>` abre com a carta em foco (link no diálogo da seleção).
-- **Agrupar por tema:** quando uma mesma relação aparece 7 vezes ou mais (ex.: todos os Merfolk → lordes), as cartas se ligam a um quadro do tema em vez de dezenas de setas cruzadas. **Agrupar terrenos:** terrenos que só fornecem “terrenos entrando” viram um bloco.
-- Filtros por etapa e por grupo de relação, busca de carta, zoom, arrastar cartas (posições lembradas no navegador) e “Reorganizar”.
+- **Blocos por tema:** cada carta vai para o bloco do grupo de relação em que mais se liga (Criaturas e mortes, Marcadores, Cemitério, Terrenos…). Cada bloco é um painel com a cor do grupo, nome e contagem; dentro dele as cartas ficam em grade, primeiro as que mais **fornecem** e depois as que mais **aproveitam**. A comandante tem bloco próprio; com “Mostrar cartas sem relação”, surge o bloco “Sem relação”.
+- **Setas sob demanda:** passe o mouse numa carta para ver as setas dela; clique para fixar e ver no painel o que ela **fornece para** e **aproveita de** cada carta, com os trechos. **Mostrar todas as setas** exibe todas, em tom suave. `?focus=<id>` abre com a carta em foco (link no diálogo da seleção, só para cartas do deck).
+- **Agrupar por tema:** quando uma relação se repete 7 vezes ou mais, as cartas se ligam a um quadro do tema no topo do bloco. **Agrupar terrenos:** terrenos que só fornecem “terrenos entrando” viram um bloco.
+- Filtros por grupo de relação, busca de carta, zoom, arrastar cartas (posições lembradas no navegador; chave `deckarium-board-v2-<deck>`) e **Reorganizar**.
 - **Combos no Commander Spellbook:** botão no painel consulta o *Find My Combos* (`SPELLBOOK_API_BASE`, padrão `https://backend.commanderspellbook.com`) e guarda o resultado em `deck_spellbook_cache`. Combos completos viram setas; os que “faltam 1 carta” mostram se você tem a peça na coleção.
 - Assets próprios: `assets/board.js` e `assets/board.css`.
 
@@ -122,9 +123,23 @@ Em “Ajustar metas e regras”, **Automáticas** é o padrão (`scoring_config.
 
 “Exportar deck em JSON (completo)” (`?export=json`) baixa `deckarium-<deck>-<id>.json` com o deck (estratégia, contagens, curva, símbolos, alertas, lista de compras), a fórmula e as metas, a comandante e todas as cartas do deck e das candidatas. Cada carta traz etapa, quantidade, função e notas; coleção (total, esta impressão, normal/foil, uso em outros decks, faltando); preço em R$; Game Changer; imagens; sinergia EDHREC; Índice de Encaixe com a decomposição; e o registro completo do Scryfall (`scryfall.raw`). Upgrades pendentes vão em `upgrades`.
 
+## Minha coleção: uso em decks e exportação
+
+- **Filtro de uso:** “Usadas em decks”, “Fora de qualquer deck” e “Com cópia livre”. O cálculo considera todas as impressões da mesma carta lógica e as cópias usadas por cartas aprovadas e comandantes de todos os seus decks.
+- Cada carta da coleção mostra “Fora de decks” ou quantas cópias estão livres e em quais decks as outras estão.
+- **Exportar (CSV)** baixa o resultado com os filtros ativos (busca, acabamento, uso, ordenação). As quatro primeiras colunas (`Name`, `Scryfall ID`, `Quantity`, `Foil`) são as da importação, então o arquivo pode ser reimportado; seguem edição, código, número, idioma, raridade, cópias da carta na coleção, cópias em decks e os nomes dos decks.
+
+## Compartilhamento público
+
+- **Deck:** na Visão geral, o painel **Compartilhar** torna o deck público ou privado e oferece o link (`/public_deck.php?id=ID`). Decks públicos ganham o selo “Público” na lista.
+- **Coleção:** em Minha coleção, **Tornar pública** libera `/public_collection.php?u=<usuario>`.
+- **Comunidade** (`/public.php`, no menu) lista os decks e coleções públicos, com busca por nome do deck ou da comandante; `?u=<usuario>` filtra por usuário.
+- As páginas públicas são somente leitura e abrem sem login. O deck mostra comandante, intenção, curva e as cartas aprovadas por tipo, com download da lista em `.txt`. A coleção mostra cartas, quantidades, edição, idioma e foil, com busca.
+- Nunca são expostos: nome completo, email, candidatas, funções e notas das cartas, preços e em quais decks as cartas estão. Decks e coleções privados (ou de contas desativadas) respondem 404; o próprio dono vê uma pré-visualização marcada.
+
 ## Persistência e teste
 
-As tabelas `builder_decks`, `builder_items`, `builder_collection`, `deck_upgrades`, `deck_synergy` e `deck_commander_insights` são criadas automaticamente na primeira abertura. Faça backup delas junto com o banco. Importar a coleção não modifica o catálogo Scryfall.
+As tabelas `builder_decks`, `builder_items`, `builder_collection`, `deck_upgrades`, `deck_synergy` e `deck_commander_insights` (e as colunas `builder_decks.is_public` e `users.collection_public`) são criadas automaticamente na primeira abertura. A descrição de cada tabela e coluna está no [dicionário de dados](banco-de-dados.md). Faça backup delas junto com o banco. Importar a coleção não modifica o catálogo Scryfall.
 
 Com o app em execução e a coleção de exemplo importada:
 

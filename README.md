@@ -1,6 +1,34 @@
 # Deckarium — coleção de Magic e oficina de decks
 
-Projeto local para pesquisar cartas, comparar upgrades e manter um cache de imagens sem precisar baixar todas as impressões do Scryfall.
+Projeto local para pesquisar cartas, planejar decks de Commander a partir da sua coleção, compartilhar decks e coleções e manter um cache de imagens sem precisar baixar todas as impressões do Scryfall.
+
+## Documentação
+
+- [Oficina de decks](docs/deck-builder.md) — decks, coleção, EDHREC, quadro de relações e compartilhamento.
+- [Dicionário de dados](docs/banco-de-dados.md) — todas as tabelas e colunas do PostgreSQL.
+- [Página inicial](docs/home.md) e [deploy](docs/deploy.md).
+
+## Páginas
+
+| Página | Rota | Acesso |
+|---|---|---|
+| Comandantes | `/commanders.php` | Todos |
+| Catálogo | `/?catalog=1` | Todos |
+| Edições | `/editions.php` | Todos |
+| Comunidade | `/public.php` | Todos |
+| Deck público | `/public_deck.php?id=ID` | Todos, se o deck for público |
+| Coleção pública | `/public_collection.php?u=usuario` | Todos, se a coleção for pública |
+| Minha coleção | `/collection.php` | Login |
+| Meus decks | `/decks.php` | Login |
+| Status do acervo | `/status.php` | Administrador |
+| Histórico de atualizações | `/sync_history.php` | Administrador |
+| Usuários | `/users.php` | Administrador |
+
+A navegação lateral pode ser recolhida; o botão fica sempre no topo. Em telas de até 850px ela vira uma barra superior com menu suspenso.
+
+## Comandantes
+
+`/commanders.php` lista **todos** os comandantes do catálogo, 24 por página, sem repetir reimpressões. A ordem padrão é **Mais novos**, pela data da **primeira** impressão de cada carta (uma reimpressão não torna um comandante antigo “novo”). Também há **Mais populares** (posição no EDHREC), **Nome (A–Z)** e **Adicionados recentemente**. A busca por nome percorre o catálogo inteiro. Cartas só digitais (Alchemy/Arena) ficam de fora. A coluna lateral mostra os mais populares.
 
 ## Mudança principal da v4
 
@@ -172,7 +200,7 @@ Novo módulo em http://localhost:8080/decks.php. Importação de coleção, busc
 
 ## Contas e acesso
 
-O Deckarium tem contas de usuário. Qualquer visitante consulta o **catálogo** e as **edições**; **Minha coleção**, **Meus decks** e **Upgrades** exigem login, e cada conta enxerga apenas os próprios dados. **Status** e **Usuários** são exclusivos de administradores (inclusive os endpoints de download e sincronização).
+O Deckarium tem contas de usuário. Qualquer visitante consulta o **catálogo**, as **edições**, os **comandantes** e a **Comunidade** (decks e coleções que os donos tornaram públicos); **Minha coleção**, **Meus decks** e **Upgrades** exigem login, e cada conta enxerga apenas os próprios dados. **Status** e **Usuários** são exclusivos de administradores (inclusive os endpoints de download e sincronização).
 
 - **Criar conta:** `/register.php` — nome completo, nome de usuário, email e senha (mínimo de 10 caracteres).
 - **Entrar:** `/login.php` — aceita usuário ou email; "Manter conectado" guarda a sessão por 30 dias (sem ele, 12 horas de inatividade).
@@ -197,13 +225,15 @@ docker compose up -d --build
 
 Abra http://localhost:8080. O PostgreSQL fica disponível em localhost:5435 para ferramentas externas; dentro do Compose, o host do banco é db.
 
-Para importar ou atualizar o catálogo Scryfall, abra **Status → Catálogo do Scryfall** e clique em **Baixar atualização**. O download e a importação rodam em segundo plano, com progresso na própria página (log em `storage/sync.log`). Pelo terminal, o comando continua disponível e aparece no mesmo painel:
+Para importar ou atualizar o catálogo Scryfall, abra **Status → Catálogo do Scryfall** e clique em **Baixar atualização**. O download e a importação rodam em segundo plano, com progresso na própria página (log em `storage/sync.log`).
+
+Cada sincronização registra as cartas que entraram no banco pela primeira vez (tabelas `sync_runs` e `sync_run_cards`). Em **Status → Cartas adicionadas → Ver histórico completo** (`/sync_history.php`) há, para cada execução, o total de cartas novas, o resumo por edição, busca, paginação de 100 em 100, a situação da imagem local de cada carta e a exportação da lista completa em CSV — pensada para atualizações com centenas de cartas. Execuções interrompidas mantêm o registro do que já foi importado. Pelo terminal, o comando continua disponível e aparece no mesmo painel:
 
 ~~~powershell
 docker compose exec app php bin/sync_scryfall.php default_cards
 ~~~
 
-Depois, em Minha coleção, importe um CSV com as colunas Name,Scryfall ID,Quantity. Em Meus decks, crie um planejamento ou importe uma lista do Moxfield. Escolha a comandante antes de adicionar cartas às candidatas; a seleção segue candidatas → deck e finaliza automaticamente em 100 cartas.
+Depois, em Minha coleção, importe um CSV com as colunas Name,Scryfall ID,Quantity. A coleção pode ser filtrada por uso em decks e exportada em CSV com os filtros ativos. Em Meus decks, crie um planejamento ou importe uma lista (com campo próprio para a comandante). Escolha a comandante antes de adicionar cartas às candidatas; a seleção segue candidatas → deck e finaliza automaticamente em 100 cartas.
 
 Comandos úteis:
 
