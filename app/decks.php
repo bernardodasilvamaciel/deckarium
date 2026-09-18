@@ -38,8 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $id = (int)deckQuery('INSERT INTO builder_decks(user_id,name) VALUES (?,?) RETURNING id',[$userId,$name])->fetchColumn();
             $message = 'Deck criado. Escolha o comandante ou comece explorando cartas.';
         } elseif ($action === 'import_deck') {
-            $result=deckImportList((string)($_POST['name']??''),(string)($_POST['decklist']??''));
+            $result=deckImportList((string)($_POST['name']??''),(string)($_POST['decklist']??''),(string)($_POST['commander']??''));
             $id=(int)$result['id']; $message=$result['matched'].' linhas importadas com as impressões disponíveis na coleção.';
+            if(!$result['commander']) $message.=' Nenhuma comandante definida: escolha uma no deck.';
             if($result['unmatched']) $message.=' Não localizadas: '.implode(', ',array_slice($result['unmatched'],0,8)).(count($result['unmatched'])>8?'…':'').'.';
         } elseif ($action === 'import') {
             if (($_FILES['collection']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) throw new RuntimeException('Selecione um CSV válido dentro do limite de upload do servidor.');
@@ -51,6 +52,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$deck) throw new RuntimeException('Deck não encontrado.');
             if ($action === 'delete_deck') {
                 deckQuery('DELETE FROM builder_decks WHERE id=? AND user_id=?',[$id,$userId]); $id=0; $message='Deck excluído. Sua coleção foi preservada.';
+            } elseif ($action === 'visibility') {
+                $public=($_POST['public']??'')==='1';
+                deckQuery('UPDATE builder_decks SET is_public=? WHERE id=? AND user_id=?',[$public?'true':'false',$id,$userId]);
+                $message=$public ? 'Deck público: qualquer pessoa com o link pode ver a lista.' : 'Deck privado: só você pode ver.';
             } elseif ($action === 'strategy') {
                 deckQuery('UPDATE builder_decks SET strategy=?,terms=? WHERE id=? AND user_id=?',[substr(trim((string)$_POST['strategy']),0,5000),substr(trim((string)$_POST['terms']),0,1000),$id,$userId]);
                 $message = 'Estratégia e termos salvos.';
@@ -213,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $return.=$action==='prepare_upgrade' ? '&upgrade_card='.rawurlencode((string)($_POST['card']??'')).'#upgrade' : '#selection';
         }
         if($id && $action==='sync_edhrec') $return='/decks.php?deck='.$id.'&view=guide';
-        if($id && in_array($action,['strategy','commander'],true)) $return='/decks.php?deck='.$id.'&view=overview';
+        if($id && in_array($action,['strategy','commander','visibility'],true)) $return='/decks.php?deck='.$id.'&view=overview';
         header('Location: '.$return, true,303); exit;
     } catch (Throwable $e) {
         $error = $e instanceof RuntimeException && !($e instanceof PDOException) ? $e->getMessage() : 'Não foi possível salvar. Nenhuma seleção foi descartada; tente novamente.';
@@ -242,6 +247,8 @@ $identityMana = implode('', array_map(fn($color)=>'{'.$color.'}', $identity));
 $collection = deckQuery('SELECT COALESCE(SUM(quantity),0) total,COUNT(*) printings,COUNT(*) FILTER(WHERE c.id IS NULL) unmatched FROM builder_collection o LEFT JOIN cards c ON c.id=o.scryfall_id WHERE o.user_id=?',[$userId])->fetch();
 $q = substr(trim((string)($_GET['q']??'')),0,200);
 $choosingCommander = (bool)$deck && (!$commander || isset($_GET['choose']));
+// Sinergia do EDHREC chega sozinha na primeira visita após escolher ou importar a comandante.
+if($commander && !$choosingCommander && deckEnsureEdhrec($commander) && !$message) $message='Recomendações e sinergias do EDHREC carregadas para '.$commander['name'].'.';
 $guideInsights=null;$guidePlans=[];$guideCombos=[];$guideMechanics=['own'=>[],'new'=>[]];$guideNewCards=[];$guideSimilar=[];
 // Sem comandante (ou trocando), o deck só tem a escolha da comandante no Explorar.
 if($deck && $choosingCommander && $view!=='selection') $view='explore';
@@ -271,9 +278,9 @@ $cmcMax = is_numeric($_GET['cmc_max'] ?? null) ? max(0,(float)$_GET['cmc_max']):
 $availability=(string)($_GET['availability']??'');
 if($availability==='' && ($_GET['owned']??'')==='1') $availability='owned';
 if($availability==='' && ($_GET['exclude_owned']??'')==='1') $availability='missing';
-if(!in_array($availability,['all','owned','missing'],true)) $availability=$choosingCommander?'owned':'all';
+if(!in_array($availability,['all','owned','free','missing'],true)) $availability=$choosingCommander?'owned':'all';
 if($fitMode) $availability='owned';
-$ownedOnly = $availability==='owned';
+$ownedOnly = in_array($availability,['owned','free'],true);
 $excludeOwned = $availability==='missing';
 // Com comandante escolhida, a busca começa limitada à identidade dela; o formulário envia colors_set para respeitar a escolha do usuário.
 $colorsOnly = $fitMode || (array_key_exists('colors',$_GET) ? ($_GET['colors']==='1') : (isset($_GET['colors_set']) ? false : (bool)$commander));
@@ -467,6 +474,8 @@ if ($catalogVisible) {
     // Só a coleção: parte das cartas lógicas da coleção (índice cards_logical_idx) em vez de varrer o catálogo.
     // No modo "Encaixa no deck" a consulta já parte da coleção (builder_collection).
     if($ownedOnly && !$fitMode)$where[]='COALESCE(c.oracle_id,c.id) IN (SELECT logical_id FROM owned)';
+    // Cópia livre: sobra ao menos uma cópia depois do que outros decks já usam.
+    if($availability==='free' && !$fitMode)$where[]='GREATEST(COALESCE(o.owned,0)-COALESCE(u.used,0),0)>0';
     if($excludeOwned)$where[]='COALESCE(o.owned,0)=0';
     if($colorsOnly && $commander){$where[]='c.color_identity <@ ?::jsonb';$params[]=json_encode($identity);}
     if($hideSelected && $commander){
@@ -535,23 +544,52 @@ if ($catalogVisible) {
     $resultTotal=(int)($results[0]['total_count']??0); $totalPages=max(1,(int)ceil($resultTotal/24));
     $hasMore=$page<$totalPages; $results=array_slice($results,0,24);
      }
+    // Uso das cópias em outros decks, para mostrar se a cópia da coleção está livre.
+    if(!$choosingCommander && $results){
+        $usageElsewhere=deckUsageElsewhere($id,array_map(fn($row)=>(string)($row['oracle_id']?:$row['id']),$results));
+        foreach($results as &$resultRow){
+            $resultUsage=$usageElsewhere[(string)($resultRow['oracle_id']?:$resultRow['id'])]??['used'=>0,'decks'=>[]];
+            $resultRow['used_elsewhere']=$resultUsage['used']; $resultRow['used_decks']=$resultUsage['decks'];
+        }
+        unset($resultRow);
+    }
 }
 pageHeader('Meus decks');
 ?>
-<section class="hero"><div><h1><?= h($deck?$deck['name']:'Criar ou planejar decks') ?></h1><p><?= $deck?'Escolha a impressão certa, organize a lista e registre a intenção de cada carta.':'Comece do zero ou importe uma lista pronta. O Deckarium cruza cada carta com as impressões da sua coleção.' ?></p></div><?php if($deck): ?><a class="text-link" href="/decks.php">Voltar aos decks</a><?php endif; ?></section>
+<section class="hero"><div><h1><?= h($deck?$deck['name']:'Meus decks') ?></h1><p><?= $deck?'Escolha a impressão certa, organize a lista e registre a intenção de cada carta.':'Continue um planejamento ou abra um deck pronto. Cada carta é cruzada com as impressões da sua coleção.' ?></p></div><?php if($deck): ?><a class="text-link" href="/decks.php">Voltar aos decks</a><?php endif; ?></section>
 <?php if($message): ?><p class="notice ok" role="status"><?= h($message) ?></p><?php endif; ?>
-<?php if($error): ?><p class="notice error" role="alert"><?= h($error) ?></p><?php endif; ?>
-<?php if(!$deck): ?>
-<section class="deck-start-grid"><form method="post" class="panel builder-form deck-start-create"><?php $tokenFields('create'); ?><h2>Planejar do zero</h2><p>Monte aos poucos, filtre pela identidade do comandante e acompanhe o que já existe na coleção.</p><label>Nome do deck<input name="name" required maxlength="160" placeholder="Ex.: Dina — ganho e dreno"></label><button class="primary-link">Criar planejamento</button></form>
-<form method="post" class="panel builder-form deck-import-form"><?php $tokenFields('import_deck'); ?><h2>Importar uma lista</h2><p>Cole uma exportação do Moxfield ou uma lista no formato “1 Nome da carta”. Cabeçalhos como Commander e Deck são reconhecidos.</p><label>Nome do deck<input name="name" required maxlength="160" placeholder="Ex.: Hakbal — lista atual"></label><label>Lista de cartas<textarea name="decklist" rows="9" required maxlength="200000" placeholder="Commander&#10;1 Hakbal of the Surging Soul&#10;&#10;Deck&#10;1 Sol Ring&#10;1 Rejuvenating Springs"></textarea></label><button class="primary-link">Importar como finalizado</button></form></section>
-<section class="collection-strip"><div><h2>Sua coleção</h2><p><?= number_format((int)$collection['total'],0,',','.') ?> cartas em <?= (int)$collection['printings'] ?> versões de impressão e acabamento.</p></div><a class="secondary-link" href="/collection.php">Gerenciar coleção</a></section>
-<section><div class="section-heading"><div><h2>Meus decks</h2><p class="muted">Escolha um deck para continuar.</p></div></div>
-<?php if(!$decks): ?><p class="empty-state">Crie ou importe seu primeiro deck acima.</p><?php endif; ?>
+<?php if($error && ($deck || !in_array($_POST['action']??'',['create','import_deck'],true))): ?><p class="notice error" role="alert"><?= h($error) ?></p><?php endif; ?>
+<?php if(!$deck): $failedForm=$error!=='' && in_array($_POST['action']??'',['create','import_deck'],true) ? (string)$_POST['action'] : ''; ?>
+<section class="deck-library">
+<div class="deck-library-heading"><p class="muted"><?= count($decks) ?> <?= count($decks)===1?'deck':'decks' ?> · <a href="/collection.php"><?= number_format((int)$collection['total'],0,',','.') ?> cartas na coleção</a></p><div class="deck-library-actions"><button type="button" class="secondary-link" data-dialog-open="deck-import-dialog">Importar lista</button><button type="button" class="primary-link" data-dialog-open="deck-create-dialog">Novo deck</button></div></div>
+<?php if(!$decks): ?><div class="empty-state"><h2>Nenhum deck ainda</h2><p>Planeje do zero, escolhendo a comandante e as cartas aos poucos, ou importe uma lista pronta do Moxfield.</p><p class="deck-empty-actions"><button type="button" class="primary-link" data-dialog-open="deck-create-dialog">Planejar do zero</button><button type="button" class="secondary-link" data-dialog-open="deck-import-dialog">Importar uma lista</button></p></div><?php endif; ?>
 <div class="deck-library-rows"><?php foreach($decks as $d): ?>
 <article class="deck-library-row" <?php if($d['commander_card_id']): ?>style="--deck-art:url('/image.php?id=<?= h($d['commander_card_id']) ?>')"<?php endif; ?>><a href="?deck=<?= $d['id'] ?>"><?php if($d['commander_card_id']): ?><img class="deck-library-commander" src="/image.php?id=<?= h($d['commander_card_id']) ?>" alt="" loading="lazy"><?php endif; ?><span class="deck-library-copy"><strong><?= h($d['name']) ?></strong><span><?= h($d['commander']?:'Comandante a escolher') ?></span></span></a>
-<?php $listedValue=$deckValues[(int)$d['id']]??['total'=>0.0,'unpriced'=>0]; ?><span class="deck-library-meta"><span class="deck-library-count"><?= (int)$d['card_count'] ?> cartas</span><strong class="deck-library-value">R$ <?= number_format((float)$listedValue['total'],2,',','.') ?></strong><?php if($listedValue['unpriced']): ?><small><?= (int)$listedValue['unpriced'] ?> sem cotação</small><?php endif; ?></span><span class="deck-state <?= $d['status']==='ready'?'is-ready':'' ?>"><?= $d['status']==='ready'?'Finalizado':'Em planejamento' ?></span>
+<?php $listedValue=$deckValues[(int)$d['id']]??['total'=>0.0,'unpriced'=>0]; ?><span class="deck-library-meta"><span class="deck-library-count"><?= (int)$d['card_count'] ?> cartas</span><strong class="deck-library-value">R$ <?= number_format((float)$listedValue['total'],2,',','.') ?></strong><?php if($listedValue['unpriced']): ?><small><?= (int)$listedValue['unpriced'] ?> sem cotação</small><?php endif; ?></span><span class="deck-state <?= $d['status']==='ready'?'is-ready':'' ?>"><?= $d['status']==='ready'?'Finalizado':'Em planejamento' ?></span><?php if(in_array($d['is_public']??false,[true,'t',1,'1'],true)): ?><a class="deck-public-badge" href="/public_deck.php?id=<?= (int)$d['id'] ?>" title="Qualquer pessoa com o link pode ver">Público</a><?php endif; ?>
 <button type="button" class="deck-delete-trigger" data-deck-delete="deck-delete-<?= $d['id'] ?>" aria-haspopup="dialog">Excluir</button><dialog class="deck-delete-dialog" id="deck-delete-<?= $d['id'] ?>" aria-labelledby="deck-delete-title-<?= $d['id'] ?>"><form method="dialog" class="deck-delete-cancel"><button type="submit" aria-label="Fechar confirmação">×</button></form><h3 id="deck-delete-title-<?= $d['id'] ?>">Excluir “<?= h($d['name']) ?>”?</h3><p>O deck e seus registros de upgrade serão excluídos. Sua coleção permanecerá salva.</p><div class="deck-delete-actions"><button type="button" class="secondary-link" data-dialog-close>Cancelar</button><form method="post"><input type="hidden" name="csrf" value="<?= h($csrf) ?>"><input type="hidden" name="deck" value="<?= $d['id'] ?>"><input type="hidden" name="action" value="delete_deck"><button class="deck-delete-confirm">Excluir deck</button></form></div></dialog></article>
 <?php endforeach; ?></div></section>
+<dialog class="deck-form-dialog" id="deck-create-dialog" aria-labelledby="deck-create-title"<?= $failedForm==='create'?' data-open-on-load':'' ?>>
+<form method="dialog" class="deck-form-dialog-close"><button type="submit" aria-label="Fechar">×</button></form>
+<form method="post" class="builder-form"><?php $tokenFields('create'); ?>
+    <h2 id="deck-create-title">Planejar do zero</h2>
+    <p class="muted">Monte aos poucos: escolha a comandante, filtre pela identidade de cor e acompanhe o que já existe na coleção.</p>
+    <?php if($failedForm==='create'): ?><p class="notice error" role="alert"><?= h($error) ?></p><?php endif; ?>
+    <label>Nome do deck<input name="name" required maxlength="160" placeholder="Ex.: Dina — ganho e dreno" value="<?= $failedForm==='create'?h((string)($_POST['name']??'')):'' ?>"></label>
+    <div class="deck-form-actions"><button type="button" class="secondary-link" data-dialog-close>Cancelar</button><button class="primary-link">Criar planejamento</button></div>
+</form>
+</dialog>
+<dialog class="deck-form-dialog is-wide" id="deck-import-dialog" aria-labelledby="deck-import-title"<?= $failedForm==='import_deck'?' data-open-on-load':'' ?>>
+<form method="dialog" class="deck-form-dialog-close"><button type="submit" aria-label="Fechar">×</button></form>
+<form method="post" class="builder-form deck-import-form"><?php $tokenFields('import_deck'); ?>
+    <h2 id="deck-import-title">Importar uma lista</h2>
+    <p class="muted">O deck é criado como finalizado, com a impressão da sua coleção sempre que houver.</p>
+    <?php if($failedForm==='import_deck'): ?><p class="notice error" role="alert"><?= h($error) ?></p><?php endif; ?>
+    <label>Nome do deck<input name="name" required maxlength="160" placeholder="Ex.: Hakbal — lista atual" value="<?= $failedForm==='import_deck'?h((string)($_POST['name']??'')):'' ?>"></label>
+    <label>Comandante<input name="commander" maxlength="200" placeholder="Ex.: Hakbal of the Surging Soul" autocomplete="off" spellcheck="false" value="<?= $failedForm==='import_deck'?h((string)($_POST['commander']??'')):'' ?>"><small>Nome da carta em inglês ou português. Se ficar em branco, usamos a carta sob o cabeçalho “Commander” da lista, ou você escolhe depois.</small></label>
+    <label>Restante do deck<textarea name="decklist" rows="12" required maxlength="200000" placeholder="1 Sol Ring&#10;1 Command Tower&#10;1 Rejuvenating Springs&#10;33 Forest"><?= $failedForm==='import_deck'?h((string)($_POST['decklist']??'')):'' ?></textarea><small>Uma carta por linha, no formato “1 Nome da carta”. Exportações do Moxfield funcionam como estão; se a comandante aparecer aqui também, ela não é duplicada.</small></label>
+    <div class="deck-form-actions"><button type="button" class="secondary-link" data-dialog-close>Cancelar</button><button class="primary-link">Importar como finalizado</button></div>
+</form>
+</dialog>
 <?php else: ?>
 <?php
 $needMissingCount = $needPanel ? count(array_filter($needPanel, fn($need) => $need['missing'] > 0)) : 0;
@@ -564,11 +602,18 @@ $candidateCount = array_sum(array_map(fn($row) => $row['stage']==='candidate' ? 
 <div class="panel"><div class="panel-heading"><h2>Comandante</h2><a href="?deck=<?= $id ?>&choose=1#explore">Trocar</a></div><div class="builder-commander"><?php if($src=cardImageUrl($commander)): ?><img src="<?= h($src) ?>" alt="<?= h($commander['name']) ?>" width="146" height="204"><?php endif; ?><div><h3><?= h($commander['name']) ?></h3><p class="commander-identity"><strong>Identidade:</strong> <?= $identity?manaSymbols($identityMana):'<span class="muted">Incolor</span>' ?></p><p><?= nl2br(h(deckText($commander))) ?></p></div></div></div>
 <form method="post" class="panel builder-form"><?php $tokenFields('strategy'); ?><h2>Minha intenção</h2><label>Estratégia e mecânicas<textarea name="strategy" rows="4" placeholder="Plano principal, temas secundários e o que quero evitar"><?= h($deck['strategy']) ?></textarea></label><label>Termos Oracle para explorar<input name="terms" value="<?= h($deck['terms']) ?>" placeholder="sacrifice; land; graveyard"></label><small>Separe palavras ou frases por ponto e vírgula. Estes termos são filtros escolhidos por você, não uma avaliação automática de sinergia.</small><button class="primary-link">Salvar intenção</button></form>
 </section>
+<?php $deckPublic=in_array($deck['is_public']??false,[true,'t',1,'1'],true); $publicUrl='/public_deck.php?id='.$id; ?>
+<section class="panel deck-share <?= $deckPublic?'is-public':'' ?>" aria-labelledby="deck-share-title">
+    <div><h2 id="deck-share-title">Compartilhar</h2><p class="muted"><?= $deckPublic ? 'Público: qualquer pessoa com o link vê a lista, a comandante e a intenção. Sua coleção, preços e anotações das cartas continuam privados.' : 'Privado: só você vê este deck. Ao tornar público, ele aparece em Comunidade e pode ser aberto por link.' ?></p>
+    <?php if($deckPublic): ?><p class="deck-share-link"><input type="text" readonly value="<?= h($publicUrl) ?>" data-share-url aria-label="Link público do deck"><button type="button" class="secondary-link" data-copy-share>Copiar link</button><a href="<?= h($publicUrl) ?>">Ver página pública</a></p><?php endif; ?></div>
+    <form method="post"><?php $tokenFields('visibility'); ?><input type="hidden" name="public" value="<?= $deckPublic?'0':'1' ?>"><button class="<?= $deckPublic?'secondary-link':'primary-link' ?>"><?= $deckPublic?'Tornar privado':'Tornar público' ?></button></form>
+</section>
 <section class="deck-overview-links" aria-label="Próximos passos">
     <a class="deck-overview-card" href="?deck=<?= $id ?>&amp;view=guide"><span>Guia da comandante</span><strong><?= count($guidePlans) ?> planos · <?= count($guideCombos) ?> combos</strong><small>Temas do EDHREC, combos, mecânicas e novidades.</small></a>
     <a class="deck-overview-card" href="?deck=<?= $id ?>&amp;view=needs"><span>O que falta</span><strong><?= $needMissingCount ? $needMissingCount.($needMissingCount===1?' função abaixo da meta':' funções abaixo da meta') : 'Metas atingidas' ?></strong><small>Metas por função calculadas para a comandante, com sugestões.</small></a>
     <a class="deck-overview-card" href="?deck=<?= $id ?>&amp;view=explore&amp;sort=fit"><span>Explorar</span><strong>Encaixa no deck</strong><small>Cartas da sua coleção que se ligam ao deck.</small></a>
     <a class="deck-overview-card" href="?deck=<?= $id ?>&amp;view=selection&amp;stage=candidate"><span>Minha seleção</span><strong><?= $finalCount ?>/100 no deck · <?= $candidateCount ?> candidata<?= $candidateCount===1?'':'s' ?></strong><small>Aprove candidatas e ajuste metas e regras.</small></a>
+    <a class="deck-overview-card" href="?deck=<?= $id ?>&amp;view=selection&amp;stage=deck#deck-analysis"><span>Análise do deck</span><strong><?= $landCount ?> terrenos · R$ <?= number_format($deckPriceTotal,0,',','.') ?></strong><small>Curva de mana, cores, funções, alertas e exportação.</small></a>
     <a class="deck-overview-card" href="/deck_board.php?deck=<?= $id ?>"><span>Quadro de relações</span><strong>Setas entre as cartas</strong><small>Quem fornece e quem aproveita cada recurso.</small></a>
 </section>
 <?php elseif($view==='guide'): ?>
@@ -578,13 +623,7 @@ $candidateCount = array_sum(array_map(fn($row) => $row['stage']==='candidate' ? 
 <?php elseif($view==='explore'): ?>
 <?php require __DIR__.'/deck_discovery_view.php'; ?>
 <?php else: require __DIR__.'/deck_selection_view.php'; endif; ?>
-<?php if($view==='overview'): ?>
-<section id="balance" class="section-block"><h2>Análise e próximos passos</h2><div class="builder-intro"><div class="panel"><h3>Composição escolhida</h3><p><strong><?= $finalCount ?></strong> cartas contando o comandante · <strong><?= $landCount ?></strong> terrenos</p><p class="deck-value"><span>Valor estimado das cartas aprovadas</span><strong>R$ <?= number_format($deckPriceTotal,2,',','.') ?></strong><?php if($deckUnpriced): ?><small><?= $deckUnpriced ?> carta(s) sem cotação</small><?php endif; ?></p><p>Referência para o formato: 100 cartas. <?= max(0,100-$finalCount) ?> espaços restantes<?= $finalCount>100?' · '.($finalCount-100).' acima da referência':'' ?>.</p><?php foreach($roles as $role=>$count): ?><p><?= h($role) ?>: <?= $count ?></p><?php endforeach; ?><p class="muted">As funções só contam as cartas aprovadas, com a classificação que você informou.</p><h3>Demanda de mana colorida</h3><p><?= h(implode(' · ',array_map(fn($c)=>$c.': '.$pipCounts[$c],array_keys($pipCounts)))) ?></p><p class="muted">Contagem de símbolos nos custos. Híbridos contam em ambas as cores. Não é uma recomendação de terrenos: custos alternativos, faces, aceleração e turnos de jogo exigem avaliação adicional.</p><?php foreach($warnings as $warning): ?><p class="notice warning"><?= h($warning) ?></p><?php endforeach; ?><p class="muted">Alertas básicos, não uma validação completa de legalidade ou força do deck.</p><span class="deck-export-links"><a href="?deck=<?= $id ?>&export=deck">Exportar deck em texto</a><a href="?deck=<?= $id ?>&export=json" title="Deck, candidatas e comandante com todos os dados de cada carta: Scryfall completo, coleção, preços, notas e Índice de Encaixe">Exportar deck em JSON (completo)</a></span><form method="get" class="liga-export"><input type="hidden" name="deck" value="<?= $id ?>"><input type="hidden" name="export" value="liga"><label>Exportação para Liga<select name="liga_scope"><option value="missing">Somente cartas que faltam</option><option value="all">Deck completo, inclusive minha coleção</option></select></label><button class="secondary-link">Baixar CSV padrão Liga</button></form></div>
-<div class="panel"><h3>Disponibilidade das cartas</h3><p>Os indicadores aparecem sobre cada carta aprovada e consideram todas as impressões da mesma carta.</p><div class="inventory-legend"><span><i class="inventory-dot is-available"></i> Disponível na coleção</span><span><i class="inventory-dot is-limited"></i> Quantidade limitada</span><span><i class="inventory-dot is-reserved"></i> Usada em outros decks</span></div><p class="muted">Uma cópia física só pode ser comprometida uma vez. Se você possui duas cópias, a carta pode aparecer em até dois decks. Cartas candidatas não reservam cópias.</p></div></div></section>
-<?php endif; endif; if ($deck && $commander && !$choosingCommander): ?><?php if($view==='overview'): ?>
-<section id="mana-analysis" class="section-block mana-analysis"><div class="section-heading"><div><h2>Leitura do deck</h2><p class="muted">Uma visão rápida da curva e dos símbolos de mana das cartas aprovadas.</p></div><span class="analysis-total"><?= $finalCount ?>/100 cartas</span></div><div class="analysis-grid"><div class="panel"><h3>Curva de mana</h3><div class="mana-curve" aria-label="Curva de mana"><?php for($cost=0;$cost<=10;$cost++): $count=(int)($curveCounts[$cost]??0); ?><button type="button" class="mana-column" data-mana-cost="<?= $cost ?>" aria-controls="mana-list-<?= $cost ?>" aria-expanded="false"><span><?= $count ?></span><i class="mana-bar" style="height:<?= $maxCurve?max(4,round($count/$maxCurve*110)):4 ?>px"></i><small><?= $cost===10?'10+':$cost ?></small></button><?php endfor; ?></div><?php for($cost=0;$cost<=10;$cost++): ?><div class="mana-card-list" id="mana-list-<?= $cost ?>" data-mana-list="<?= $cost ?>" hidden><h4>Cartas de custo <?= $cost===10?'10 ou mais':$cost ?></h4><?php if(!$curveCards[$cost]): ?><p class="muted">Nenhuma carta final nesse valor.</p><?php else: foreach($curveCards[$cost] as $curveCard): ?><a class="mana-card-item" href="/card.php?id=<?= h($curveCard['id']) ?>"><?php if($src=cardImageUrl($curveCard,'front','small')): ?><img src="<?= h($src) ?>" alt="" loading="lazy"><?php endif; ?><span><strong><?= (int)($curveCard['quantity']??1) ?>× <?= h($curveCard['name']) ?></strong><small><?= h($curveCard['type_line']??'') ?></small></span></a><?php endforeach; endif; ?></div><?php endfor; ?><p class="muted">Cartas não-terreno aprovadas no deck final. Clique em uma barra para ver as cartas daquele valor. Upgrades planejados não entram até serem confirmados.</p></div><div class="panel"><h3>Porcentagem de mana escolhida</h3><div class="mana-distribution"><?php foreach($pipCounts as $color=>$count): $percent=$manaTotal?round($count/$manaTotal*100):0; ?><div><div class="mana-label"><strong><?= $color ?></strong><span><?= $percent ?>% · <?= $count ?> símbolos</span></div><div class="mana-track"><i class="mana-fill mana-<?= $color ?>" style="width:<?= $percent ?>%"></i></div></div><?php endforeach; ?></div><p class="muted">Baseado nos custos das cartas aprovadas e da comandante. Terrenos básicos não entram nesta porcentagem.</p></div></div></section>
-<?php if($recommendedLandTotal!==null): ?><section class="section-block land-recommendation"><div class="panel"><h3>Sugestão inicial de terrenos</h3><p>Para este deck finalizado, uma base de aproximadamente <strong><?= $recommendedLandTotal ?> terrenos</strong> é um ponto de partida. A divisão abaixo usa a proporção de símbolos coloridos das cartas aprovadas; revise conforme sua curva, ramp e terrenos não básicos.</p><div class="land-recommendation-grid"><?php foreach($landRecommendation as $color=>$amount): ?><span><strong><?= h($colorNames[$color]) ?></strong><b><?= $amount ?></b></span><?php endforeach; ?></div><p class="muted">Isto é uma recomendação estatística, não uma alteração automática do deck.</p></div></section><?php endif; ?>
-<?php endif; ?>
+<?php endif; if ($deck && $commander && !$choosingCommander): ?>
 <?php $selectionMap=[]; foreach($items as $selected){$selectionMap[(string)$selected['id']]=['stage'=>$selected['stage'],'label'=>deckStageLabel($selected['stage']),'image'=>cardImageUrl($selected,'front','small')];} ?>
 <script>window.builderSelection=<?= json_encode($selectionMap,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
 <script>window.builderHasCommander=<?= $commander?'true':'false' ?>;</script>

@@ -31,6 +31,8 @@ function deckSchema(): void {
         ALTER TABLE builder_collection ADD COLUMN IF NOT EXISTS foil boolean NOT NULL DEFAULT false;
         ALTER TABLE builder_decks ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'planning';
         ALTER TABLE builder_decks ADD COLUMN IF NOT EXISTS scoring_config jsonb NULL;
+        ALTER TABLE builder_decks ADD COLUMN IF NOT EXISTS is_public boolean NOT NULL DEFAULT false;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS collection_public boolean NOT NULL DEFAULT false;
         CREATE TABLE IF NOT EXISTS deck_upgrades (
             id bigserial PRIMARY KEY, deck_id bigint NOT NULL REFERENCES builder_decks(id) ON DELETE CASCADE,
             remove_card_id uuid NOT NULL REFERENCES cards(id), add_card_id uuid NOT NULL REFERENCES cards(id),
@@ -75,10 +77,23 @@ function deckFindPrinting(string $name): ?array {
         ORDER BY (o.quantity IS NOT NULL) DESC,".deckCheapestPriceSql('c')." ASC NULLS LAST,(c.lang='en') DESC,(c.local_image IS NOT NULL) DESC,c.released_at DESC NULLS LAST LIMIT 1",[$name,$name])->fetch() ?: null;
 }
 
-function deckImportList(string $name, string $text): array {
-    $name=trim($name); $text=trim($text);
+/**
+ * Importa uma lista como deck finalizado. A comandante pode vir no campo próprio ($commanderName)
+ * ou, como no Moxfield, sob o cabeçalho "Commander" da lista; o campo próprio tem prioridade.
+ */
+function deckImportList(string $name, string $text, string $commanderName = ''): array {
+    $name=trim($name); $text=trim($text); $commanderName=trim($commanderName);
     if ($name==='' || strlen($name)>160) throw new RuntimeException('Informe um nome de até 160 caracteres.');
     if ($text==='' || strlen($text)>200000) throw new RuntimeException('Cole uma lista de até 200.000 caracteres.');
+    $chosenCommander=null;
+    if ($commanderName!=='') {
+        // Aceita "Nome", "1 Nome" ou "1 Nome (SET) 123", como numa linha exportada.
+        $commanderName=preg_replace('/^\d+\s+(?:x\s+)?/iu','',$commanderName) ?? $commanderName;
+        $commanderName=trim(preg_replace('/\s+\([A-Z0-9]{2,8}\)\s+[^\s]+(?:\s+\*F\*)?$/i','',$commanderName) ?? $commanderName);
+        $chosenCommander=deckFindPrinting($commanderName);
+        if(!$chosenCommander) throw new RuntimeException('Comandante “'.$commanderName.'” não encontrada no catálogo local. Confira o nome em inglês ou em português.');
+        if(!deckQuery('SELECT 1 FROM cards c WHERE c.id=? AND '.deckCommanderSql(),[$chosenCommander['id']])->fetchColumn()) throw new RuntimeException('“'.$chosenCommander['name'].'” não pode ser comandante: precisa ser uma criatura lendária ou dizer que pode ser sua comandante.');
+    }
     $entries=[]; $section='deck'; $unmatched=[];
     foreach (preg_split('/\R/u',preg_replace('/^\xEF\xBB\xBF/','',$text)) ?: [] as $line) {
         $line=trim($line); if($line==='' || str_starts_with($line,'//')) continue;
@@ -92,14 +107,17 @@ function deckImportList(string $name, string $text): array {
         $entries[]=['section'=>$section,'quantity'=>$qty,'card'=>$card];
         if($section==='commander') $section='deck';
     }
-    if(!$entries) throw new RuntimeException('Nenhuma carta da lista foi encontrada no catálogo local. Use o formato “1 Nome da carta”.');
+    if(!$entries && !$chosenCommander) throw new RuntimeException('Nenhuma carta da lista foi encontrada no catálogo local. Use o formato “1 Nome da carta”.');
+    $chosenLogical=$chosenCommander ? (string)($chosenCommander['oracle_id'] ?: $chosenCommander['id']) : null;
     db()->beginTransaction();
     try {
         if(deckOwnerId()<1) throw new RuntimeException('Entre na sua conta para importar um deck.');
         $deckId=(int)deckQuery("INSERT INTO builder_decks(user_id,name,status) VALUES (?,?,'ready') RETURNING id",[deckOwnerId(),$name])->fetchColumn();
-        $commander=null; $logical=[];
+        $commander=$chosenCommander['id'] ?? null; $logical=[];
         foreach($entries as $entry){
             $card=$entry['card']; $logicalId=(string)($card['oracle_id'] ?: $card['id']);
+            // A comandante informada no campo próprio não entra de novo como carta do deck.
+            if($logicalId===$chosenLogical) continue;
             if(!str_contains((string)$card['type_line'],'Basic')) $entry['quantity']=1;
             if($entry['section']==='commander' && $commander===null && deckQuery('SELECT 1 FROM cards c WHERE c.id=? AND '.deckCommanderSql(),[$card['id']])->fetchColumn()){$commander=$card['id'];continue;}
             if(isset($logical[$logicalId])){$logical[$logicalId]['quantity']=min(1000,$logical[$logicalId]['quantity']+$entry['quantity']);continue;}
@@ -109,7 +127,7 @@ function deckImportList(string $name, string $text): array {
         foreach($logical as $entry) deckQuery("INSERT INTO builder_items(deck_id,card_id,stage,quantity) VALUES (?,?,'deck',?)",[$deckId,$entry['card_id'],$entry['quantity']]);
         db()->commit();
     } catch(Throwable $e){db()->rollBack();throw $e;}
-    return ['id'=>$deckId,'matched'=>count($entries),'unmatched'=>array_values(array_unique($unmatched))];
+    return ['id'=>$deckId,'matched'=>count($entries),'unmatched'=>array_values(array_unique($unmatched)),'commander'=>$commander];
 }
 
 function deckEdhrecSlug(string $name): string {
@@ -170,6 +188,32 @@ function deckSyncEdhrec(array $commander): int {
     if(!$saved) throw new RuntimeException('Nenhuma recomendação compatível com o catálogo local foi encontrada.');
     try { deckStoreRoleEstimates($commander, $best, $data); } catch (Throwable) { /* metas voltam para a leitura do texto */ }
     return $saved;
+}
+
+/**
+ * Busca a sinergia do EDHREC automaticamente quando a comandante ainda não tem nenhuma
+ * (deck recém-criado, importado ou comandante trocada). Uma falha não bloqueia a página
+ * e só é tentada de novo depois de algumas horas, para não atrasar cada carregamento.
+ */
+function deckEnsureEdhrec(array $commander): bool {
+    $logical=(string)($commander['oracle_id'] ?: $commander['id']);
+    $has=deckQuery('SELECT EXISTS (SELECT 1 FROM deck_synergy s JOIN cards leader ON leader.id=s.commander_id WHERE COALESCE(leader.oracle_id,leader.id)=?::uuid)',[$logical])->fetchColumn();
+    if($has) return false;
+    $config=require __DIR__.'/config.php';
+    $dir=rtrim((string)$config['storage_dir'],'/').'/edhrec-misses';
+    $marker=$dir.'/'.preg_replace('/[^a-f0-9-]/i','',$logical);
+    if(is_file($marker) && time()-(int)filemtime($marker)<6*3600) return false;
+    try {
+        deckSyncEdhrec($commander);
+        if(is_file($marker)) @unlink($marker);
+        if(function_exists('deckWarmGuide')) deckWarmGuide($commander);
+        return true;
+    } catch (Throwable $e) {
+        @mkdir($dir,0775,true);
+        @touch($marker);
+        error_log('EDHREC automático ('.$commander['name'].'): '.$e->getMessage());
+        return false;
+    }
 }
 
 /**
@@ -265,6 +309,37 @@ function deckOwnedSql(?int $excludeDeckId=null): string {
         ) reservations GROUP BY logical_id)";
     }
     return $sql.' ';
+}
+/**
+ * Para cada carta lógica (oracle), quantas cópias outros decks do usuário já usam e quais são eles.
+ * Conta cartas aprovadas no deck e comandantes; candidatas não reservam cópias.
+ * @return array<string,array{used:int,decks:list<array{id:int,name:string,quantity:int}>}>
+ */
+function deckUsageElsewhere(int $deckId, array $logicalIds): array {
+    $logicalIds=array_values(array_unique(array_filter(array_map('strval',$logicalIds))));
+    if(!$logicalIds) return [];
+    $userId=deckOwnerId();
+    $rows=deckQuery("SELECT x.logical_id::text logical_id,d.id,d.name,SUM(x.quantity)::int quantity FROM (
+            SELECT i.deck_id,COALESCE(c.oracle_id,c.id) logical_id,i.quantity FROM builder_items i JOIN cards c ON c.id=i.card_id WHERE i.stage='deck'
+            UNION ALL SELECT d.id,COALESCE(c.oracle_id,c.id),1 FROM builder_decks d JOIN cards c ON c.id=d.commander_id
+        ) x JOIN builder_decks d ON d.id=x.deck_id
+        WHERE d.user_id=? AND d.id<>? AND x.logical_id::text = ANY(?::text[])
+        GROUP BY x.logical_id,d.id,d.name ORDER BY d.name",[$userId,$deckId,'{'.implode(',',$logicalIds).'}'])->fetchAll();
+    $usage=[];
+    foreach($rows as $row){
+        $usage[$row['logical_id']]??=['used'=>0,'decks'=>[]];
+        $usage[$row['logical_id']]['used']+=(int)$row['quantity'];
+        $usage[$row['logical_id']]['decks'][]=['id'=>(int)$row['id'],'name'=>(string)$row['name'],'quantity'=>(int)$row['quantity']];
+    }
+    return $usage;
+}
+/** Subconsulta: cópias usadas por carta lógica em todos os decks do usuário (aprovadas + comandantes). */
+function deckUsageSql(?int $userId = null): string {
+    $userId=$userId ?? deckOwnerId();
+    return "(SELECT x.logical_id,SUM(x.quantity)::int used,COUNT(DISTINCT x.deck_id)::int decks FROM (
+            SELECT i.deck_id,COALESCE(c.oracle_id,c.id) logical_id,i.quantity FROM builder_items i JOIN builder_decks d ON d.id=i.deck_id AND d.user_id={$userId} JOIN cards c ON c.id=i.card_id WHERE i.stage='deck'
+            UNION ALL SELECT d.id,COALESCE(c.oracle_id,c.id),1 FROM builder_decks d JOIN cards c ON c.id=d.commander_id WHERE d.user_id={$userId}
+        ) x GROUP BY x.logical_id)";
 }
 function deckCollectionPrintingSql(): string {
     $userId=deckOwnerId();

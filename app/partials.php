@@ -12,6 +12,7 @@ function uiIcon(string $name): string
         'status'=>'<path d="M8 5h12M8 12h12M8 19h12M3 5h1M3 12h1M3 19h1"/>',
         'users'=>'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.4 3-5.2 6-5.2s5.4 1.8 6 5.2M16 5.2a3 3 0 0 1 0 5.6M18 14.8c1.6.6 2.7 2.3 3 5.2"/>',
         'account'=>'<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5c.8-4 3.7-6.2 7.5-6.2s6.7 2.2 7.5 6.2"/>',
+        'community'=>'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.7 5.6 3.7 9s-1.2 6.4-3.7 9c-2.5-2.6-3.7-5.6-3.7-9S9.5 5.6 12 3Z"/>',
         'menu'=>'<path d="M4 7h16M4 12h16M4 17h16"/>',
         'close'=>'<path d="M6 6l12 12M18 6 6 18"/>',
     ];
@@ -20,7 +21,7 @@ function uiIcon(string $name): string
 function pageHeader(string $title): void
 {
     $route = basename($_SERVER['SCRIPT_NAME'] ?? 'index.php');
-    $section = !empty($GLOBALS['isHome']) ? 'home' : match ($route) { 'editions.php','edition.php'=>'sets', 'commanders.php'=>'commanders', 'collection.php'=>'collection', 'decks.php','upgrades.php','deck_board.php'=>'decks','status.php'=>'status','users.php'=>'users','account.php'=>'account','login.php','register.php'=>'auth',default=>'cards' };
+    $section = !empty($GLOBALS['isHome']) ? 'home' : match ($route) { 'editions.php','edition.php'=>'sets', 'commanders.php'=>'commanders', 'collection.php'=>'collection', 'decks.php','upgrades.php','deck_board.php'=>'decks','status.php','sync_history.php'=>'status','public.php','public_deck.php','public_collection.php'=>'community','users.php'=>'users','account.php'=>'account','login.php','register.php'=>'auth',default=>'cards' };
     $user = authUser();
     $version = (string)filemtime(__DIR__ . '/assets/style.css');
     echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
@@ -35,7 +36,7 @@ function pageHeader(string $title): void
     echo '<a class="skip-link" href="#main">Pular para o conteúdo</a>';
     echo '<header class="sidebar" data-sidebar><div class="sidebar-header"><a class="brand" href="/commanders.php" aria-label="Deckarium — início"><img class="brand-mark" src="/assets/deckarium-logo.png" alt="Deckarium" width="512" height="512"></a><button type="button" class="sidebar-toggle" data-sidebar-toggle aria-expanded="true"><span class="sr-only" data-sidebar-toggle-label>Recolher navegação</span><span class="sidebar-toggle-open">' . uiIcon('menu') . '</span><span class="sidebar-toggle-close">' . uiIcon('close') . '</span></button></div>';
     echo '<nav aria-label="Navegação principal">';
-    $links = [['commanders','/commanders.php','Comandantes'],['cards','/?catalog=1#catalogo','Catálogo'],['sets','/editions.php','Edições'],['collection','/collection.php','Minha coleção'],['decks','/decks.php','Meus decks']];
+    $links = [['commanders','/commanders.php','Comandantes'],['cards','/?catalog=1#catalogo','Catálogo'],['sets','/editions.php','Edições'],['collection','/collection.php','Minha coleção'],['decks','/decks.php','Meus decks'],['community','/public.php','Comunidade']];
     if (($user['role'] ?? '') === 'admin') {
         $links[] = ['status','/status.php','Status'];
         $links[] = ['users','/users.php','Usuários'];

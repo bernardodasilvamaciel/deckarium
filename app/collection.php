@@ -42,6 +42,10 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
                 $_SESSION['collection_failed']=['lines'=>$result['failed'],'headers'=>$result['headers'],'mode'=>$mode,'summary'=>count($result['failed']).(count($result['failed'])===1?' linha não foi aplicada':' linhas não foram aplicadas').'; as demais foram processadas.'];
                 $message.=' Atenção: '.$_SESSION['collection_failed']['summary'];
             }
+        }elseif($action==='visibility'){
+            $public=($_POST['public']??'')==='1';
+            deckQuery('UPDATE users SET collection_public=? WHERE id=?',[$public?'true':'false',$userId]);
+            $message=$public?'Coleção pública: qualquer pessoa com o link pode ver suas cartas.':'Coleção privada: só você pode ver.';
         }elseif($action==='delete'){
             $cardId=(string)($_POST['card']??'');
             if(!preg_match('/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i',$cardId)) throw new RuntimeException('Impressão inválida.');
@@ -81,11 +85,40 @@ $page = max(1, (int)($_GET['page'] ?? 1));
 [$whereSql,$params]=cardFilterSql($f);
 $finish=in_array(($_GET['finish']??''),['foil','normal'],true)?(string)$_GET['finish']:'';
 if($finish!==''){$whereSql.=($whereSql?' AND ':'WHERE ').'o.foil=?';$params[]=$finish==='foil'?'true':'false';}
+// Uso em decks: conta todas as impressões da mesma carta (oracle), como nas reservas dos decks.
+$usage=in_array(($_GET['usage']??''),['in_decks','not_in_decks','free'],true)?(string)$_GET['usage']:'';
+$usageFilter=['in_decks'=>'COALESCE(u.used,0)>0','not_in_decks'=>'COALESCE(u.used,0)=0','free'=>'COALESCE(ol.owned,0)>COALESCE(u.used,0)'][$usage]??'';
+if($usageFilter!==''){$whereSql.=($whereSql?' AND ':'WHERE ').$usageFilter;}
 $whereSql.=($whereSql?' AND ':'WHERE ').'o.user_id=?';$params[]=$userId;
-$from = ' FROM builder_collection o JOIN cards c ON c.id=o.scryfall_id ' . $whereSql;
+$from = ' FROM builder_collection o JOIN cards c ON c.id=o.scryfall_id LEFT JOIN '.deckUsageSql($userId).' u ON u.logical_id=COALESCE(c.oracle_id,c.id)'
+    .' LEFT JOIN (SELECT COALESCE(oc.oracle_id,oc.id) logical_id,SUM(oo.quantity)::int owned FROM builder_collection oo JOIN cards oc ON oc.id=oo.scryfall_id WHERE oo.user_id='.$userId.' GROUP BY 1) ol ON ol.logical_id=COALESCE(c.oracle_id,c.id) ' . $whereSql;
+// Exportação em CSV com os mesmos filtros; as 4 primeiras colunas podem ser reimportadas.
+if(($_GET['export']??'')==='csv'){
+    $rows=deckQuery('SELECT c.id,c.name,c.set_name,c.set_code,c.collector_number,c.lang,c.rarity,o.quantity,o.foil,COALESCE(u.used,0) used,COALESCE(ol.owned,0) owned'.$from." ORDER BY {$sortSql},o.foil",$params);
+    $suffix=['in_decks'=>'-em-decks','not_in_decks'=>'-fora-de-decks','free'=>'-com-copia-livre'][$usage]??'';
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="colecao'.$suffix.'-'.date('Y-m-d').'.csv"');
+    $out=fopen('php://output','w');
+    fwrite($out,"\xEF\xBB\xBF");
+    fputcsv($out,['Name','Scryfall ID','Quantity','Foil','Edição','Código','Número','Idioma','Raridade','Cópias da carta na coleção','Cópias em decks','Decks'],',','"','');
+    $batch=[];
+    $flush=function() use(&$batch,$out): void {
+        if(!$batch) return;
+        $usageByLogical=deckUsageElsewhere(0,array_map(fn($r)=>$r['logical'],$batch));
+        foreach($batch as $r){
+            $names=implode(' | ',array_map(fn($d)=>$d['name'],$usageByLogical[$r['logical']]['decks']??[]));
+            fputcsv($out,[$r['name'],$r['id'],$r['quantity'],deckIsFoil($r['foil'])?'foil':'normal',$r['set_name'],strtoupper((string)$r['set_code']),$r['collector_number'],$r['lang'],$r['rarity'],$r['owned'],$r['used'],$names],',','"','');
+        }
+        $batch=[];
+    };
+    $logicalOf=deckQuery('SELECT o.scryfall_id::text id,COALESCE(c.oracle_id,c.id)::text logical'.$from,$params)->fetchAll(PDO::FETCH_KEY_PAIR);
+    while($r=$rows->fetch()){ $r['logical']=$logicalOf[$r['id']]??$r['id']; $batch[]=$r; if(count($batch)>=500) $flush(); }
+    $flush(); fclose($out); exit;
+}
 $count = (int)deckQuery('SELECT COUNT(*)'.$from, $params)->fetchColumn();
 $pages = max(1, (int)ceil($count / 36)); $page = min($page, $pages); $offset = ($page-1)*36;
-$cards = deckQuery('SELECT c.*,o.quantity,o.foil'.$from." ORDER BY {$sortSql},o.foil LIMIT 36 OFFSET {$offset}", $params)->fetchAll();
+$cards = deckQuery('SELECT c.*,o.quantity,o.foil,COALESCE(u.used,0) used_in_decks,COALESCE(ol.owned,0) owned_logical'.$from." ORDER BY {$sortSql},o.foil LIMIT 36 OFFSET {$offset}", $params)->fetchAll();
+$cardUsage=deckUsageElsewhere(0,array_map(fn($row)=>(string)($row['oracle_id']?:$row['id']),$cards));
 $sortParams=$_GET; unset($sortParams['page'],$sortParams['template'],$sortParams['sort']);
 $summary = deckQuery("SELECT COALESCE(SUM(o.quantity),0) total,COUNT(*) finishes,
     COALESCE(SUM(o.quantity*({$finishPrice})),0) total_value,
@@ -101,9 +134,12 @@ $summary = deckQuery("SELECT COALESCE(SUM(o.quantity),0) total,COUNT(*) finishes
     COALESCE(SUM(o.quantity) FILTER(WHERE c.type_line ILIKE '%Planeswalker%'),0) planeswalkers,
     COALESCE(SUM(o.quantity) FILTER(WHERE ({$finishPrice}) IS NULL),0) unpriced
     FROM builder_collection o LEFT JOIN cards c ON c.id=o.scryfall_id WHERE o.user_id=?",[$userId])->fetch();
+$collectionPublic=(bool)deckQuery('SELECT collection_public FROM users WHERE id=?',[$userId])->fetchColumn();
+$publicCollectionUrl='/public_collection.php?u='.rawurlencode((string)$authUser['username']);
 pageHeader('Minha coleção');
 ?>
 <section class="hero"><div><h1>Minha coleção</h1><p><?= number_format((int)$summary['total'],0,',','.') ?> cartas em <?= number_format((int)$summary['finishes'],0,',','.') ?> versões de impressão e acabamento. Gerencie as cópias físicas usadas nos seus decks.</p></div><a href="/decks.php">Criar ou planejar decks</a></section>
+<section class="collection-share <?= $collectionPublic?'is-public':'' ?>" aria-label="Compartilhar coleção"><p><strong><?= $collectionPublic?'Coleção pública':'Coleção privada' ?></strong> <?= $collectionPublic?'Qualquer pessoa com o link vê suas cartas e quantidades, sem os decks em que estão.':'Só você vê suas cartas.' ?><?php if($collectionPublic): ?> <a href="<?= h($publicCollectionUrl) ?>">Ver página pública</a> · <button type="button" class="text-button" data-copy-share="<?= h($publicCollectionUrl) ?>">Copiar link</button><?php endif; ?></p><form method="post"><input type="hidden" name="csrf" value="<?= h($csrf) ?>"><input type="hidden" name="action" value="visibility"><input type="hidden" name="public" value="<?= $collectionPublic?'0':'1' ?>"><button class="<?= $collectionPublic?'secondary-link':'primary-link' ?>"><?= $collectionPublic?'Tornar privada':'Tornar pública' ?></button></form></section>
 <?php if($message):?><p class="notice ok" role="status"><?=h($message)?></p><?php endif;if($error):?><p class="notice error" role="alert"><?=h($error)?></p><?php endif;?>
 <?php if(is_array($failedImport) && $failedImport['lines']): $failedShown=array_slice($failedImport['lines'],0,300); ?>
 <section class="import-failures" aria-labelledby="import-failures-title">
@@ -118,10 +154,11 @@ pageHeader('Minha coleção');
 </section>
 <?php endif; ?>
 <details class="collection-manage" <?= is_array($failedImport)?'open':'' ?>><summary>Gerenciar coleção: importar ou subtrair por CSV e filtros</summary><section class="collection-import-panel"><div><h2>Importar ou subtrair cartas por CSV</h2><p>Use uma exportação do ManaBox ou um arquivo com estas colunas:</p><code>Name,Scryfall ID,Quantity,Foil</code><p class="muted">Foil aceita “foil” e “normal”. Sem essa coluna, as cartas são tratadas como normais. Ao <strong>substituir</strong>, qualquer linha com erro cancela tudo; ao <strong>somar</strong> ou <strong>subtrair</strong>, as linhas corretas são aplicadas e as com erro aparecem numa lista com o número da linha.</p><a href="?template=csv">Baixar modelo CSV</a></div><form method="post" enctype="multipart/form-data" class="collection-manage-form"><input type="hidden" name="csrf" value="<?=h($csrf)?>"><input type="hidden" name="action" value="import"><label>Arquivo CSV<input type="file" name="collection" accept=".csv,text/csv" required></label><fieldset><legend>Como importar</legend><label><input type="radio" name="mode" value="replace" checked> Substituir pela coleção completa</label><label><input type="radio" name="mode" value="add"> Somar estas quantidades ao acervo atual</label><label><input type="radio" name="mode" value="subtract"> Subtrair estas quantidades da coleção (vendas, trocas, cartas perdidas)</label></fieldset><button class="primary-link">Enviar CSV</button></form></section><?php cardFilterForm($f,deckQuery('SELECT c.set_code,MAX(c.set_name) set_name FROM builder_collection o JOIN cards c ON c.id=o.scryfall_id GROUP BY c.set_code ORDER BY MAX(c.set_name)')->fetchAll(),'/collection.php'); ?></details>
-<div class="collection-toolbar"><span>Organizar coleção</span><form method="get"><?php foreach($sortParams as $key=>$value): if($key==='finish')continue; foreach(is_array($value)?$value:[$value] as $v): ?><input type="hidden" name="<?= h($key.(is_array($value)?'[]':'')) ?>" value="<?= h($v) ?>"><?php endforeach; endforeach; ?><select name="finish" aria-label="Filtrar acabamento"><option value="" <?= $finish===''?'selected':'' ?>>Todos os acabamentos</option><option value="normal" <?= $finish==='normal'?'selected':'' ?>>Somente normais</option><option value="foil" <?= $finish==='foil'?'selected':'' ?>>Somente foil</option></select><select name="sort" aria-label="Ordenar coleção"><option value="name" <?= $sort==='name'?'selected':'' ?>>Nome</option><option value="color" <?= $sort==='color'?'selected':'' ?>>Cor</option><option value="price" <?= $sort==='price'?'selected':'' ?>>Preço</option></select><button class="secondary-link">Aplicar</button></form></div>
-<p class="muted"><?= number_format($count,0,',','.') ?> <?= $count===1?'versão encontrada':'versões encontradas' ?>. <a href="/collection.php">Limpar filtros</a></p>
+<div class="collection-toolbar"><span>Organizar coleção</span><form method="get"><?php foreach($sortParams as $key=>$value): if(in_array($key,['finish','usage','export'],true))continue; foreach(is_array($value)?$value:[$value] as $v): ?><input type="hidden" name="<?= h($key.(is_array($value)?'[]':'')) ?>" value="<?= h($v) ?>"><?php endforeach; endforeach; ?><select name="finish" aria-label="Filtrar acabamento"><option value="" <?= $finish===''?'selected':'' ?>>Todos os acabamentos</option><option value="normal" <?= $finish==='normal'?'selected':'' ?>>Somente normais</option><option value="foil" <?= $finish==='foil'?'selected':'' ?>>Somente foil</option></select><select name="usage" aria-label="Filtrar por uso em decks"><option value="" <?= $usage===''?'selected':'' ?>>Em decks ou não</option><option value="in_decks" <?= $usage==='in_decks'?'selected':'' ?>>Usadas em decks</option><option value="not_in_decks" <?= $usage==='not_in_decks'?'selected':'' ?>>Fora de qualquer deck</option><option value="free" <?= $usage==='free'?'selected':'' ?>>Com cópia livre</option></select><select name="sort" aria-label="Ordenar coleção"><option value="name" <?= $sort==='name'?'selected':'' ?>>Nome</option><option value="color" <?= $sort==='color'?'selected':'' ?>>Cor</option><option value="price" <?= $sort==='price'?'selected':'' ?>>Preço</option></select><button class="secondary-link">Aplicar</button></form></div>
+<?php $exportParams=array_filter(array_merge($f,['sort'=>$sort,'finish'=>$finish,'usage'=>$usage,'export'=>'csv']),fn($v)=>$v!==''&&$v!==[]); ?>
+<div class="collection-results-bar"><p class="muted"><?= number_format($count,0,',','.') ?> <?= $count===1?'versão encontrada':'versões encontradas' ?>. <a href="/collection.php">Limpar filtros</a></p><?php if($count): ?><a class="secondary-link" href="/collection.php?<?= h(http_build_query($exportParams)) ?>" download>Exportar <?= $count===(int)$summary['finishes']?'coleção':'resultado' ?> (CSV)</a><?php endif; ?></div>
 <?php if (!$cards): ?><p class="empty-state"><?= $summary['finishes'] ? 'Nenhuma carta corresponde à busca. Altere os termos ou limpe os filtros.' : 'Sua coleção ainda está vazia. Importe um CSV acima para começar.' ?></p><?php endif; ?>
-<div class="grid collection-grid"><?php foreach ($cards as $card): $isFoil=deckIsFoil($card['foil']); ?><div class="collection-item <?= $isFoil?'is-foil':'' ?>"><?php if($isFoil): ?><span class="foil-label">Foil</span><?php endif; ?><?php cardTile($card); ?><div class="collection-item-footer"><p class="collection-quantity"><?= (int)$card['quantity'] ?> cópia(s) · <?= $isFoil?'FOIL':'NORMAL' ?> · <?= h(strtoupper($card['lang'])) ?></p><form method="post" onsubmit="return confirm('Remover todas as cópias desta versão da coleção?')"><input type="hidden" name="csrf" value="<?=h($csrf)?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="card" value="<?=h($card['id'])?>"><input type="hidden" name="foil" value="<?= $isFoil?'1':'0' ?>"><button class="collection-delete" aria-label="Remover <?=h($card['name'])?> <?= $isFoil?'foil':'normal' ?> da coleção">Remover versão</button></form></div></div><?php endforeach; ?></div>
-<?php numberedPager($page,$pages,array_merge($f,['sort'=>$sort,'finish'=>$finish])); ?>
+<div class="grid collection-grid"><?php foreach ($cards as $card): $isFoil=deckIsFoil($card['foil']); ?><div class="collection-item <?= $isFoil?'is-foil':'' ?>"><?php if($isFoil): ?><span class="foil-label">Foil</span><?php endif; ?><?php cardTile($card); ?><div class="collection-item-footer"><p class="collection-quantity"><?= (int)$card['quantity'] ?> cópia(s) · <?= $isFoil?'FOIL':'NORMAL' ?> · <?= h(strtoupper($card['lang'])) ?></p><?php $itemUsage=$cardUsage[(string)($card['oracle_id']?:$card['id'])]['decks']??[]; $itemFree=max(0,(int)$card['owned_logical']-(int)$card['used_in_decks']); ?><p class="collection-usage <?= !$itemUsage?'is-free':($itemFree?'is-partial':'is-used') ?>"><?php if(!$itemUsage): ?>Fora de decks<?php else: ?><?= $itemFree?$itemFree.' livre'.($itemFree===1?'':'s').' · ':'Sem cópia livre · ' ?>em <?= implode(', ',array_map(fn($d)=>'<a href="/decks.php?deck='.$d['id'].'&amp;view=selection&amp;stage=deck">'.h($d['name']).'</a>',$itemUsage)) ?><?php endif; ?></p><form method="post" onsubmit="return confirm('Remover todas as cópias desta versão da coleção?')"><input type="hidden" name="csrf" value="<?=h($csrf)?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="card" value="<?=h($card['id'])?>"><input type="hidden" name="foil" value="<?= $isFoil?'1':'0' ?>"><button class="collection-delete" aria-label="Remover <?=h($card['name'])?> <?= $isFoil?'foil':'normal' ?> da coleção">Remover versão</button></form></div></div><?php endforeach; ?></div>
+<?php numberedPager($page,$pages,array_merge($f,['sort'=>$sort,'finish'=>$finish,'usage'=>$usage])); ?>
 <div class="collection-summary-spacer" aria-hidden="true"></div><aside class="collection-summary-bar" aria-label="Resumo da coleção"><div class="collection-summary-value"><span>Valor estimado</span><strong>R$ <?= number_format((float)$summary['total_value'],2,',','.') ?></strong><?php if((int)$summary['unpriced']): ?><small><?= number_format((int)$summary['unpriced'],0,',','.') ?> sem cotação</small><?php endif; ?></div><div class="collection-summary-stats"><?php foreach(['Cartas'=>'total','Foil'=>'foils','Normais'=>'normals','Míticas'=>'mythics','Raras'=>'rares','Incomuns'=>'uncommons','Comuns'=>'commons','Criaturas'=>'creatures','Feitiços'=>'sorceries','Instantâneas'=>'instants','Terrenos'=>'lands','Artefatos'=>'artifacts','Encantamentos'=>'enchantments','Planeswalkers'=>'planeswalkers'] as $label=>$key): ?><span><b><?= number_format((int)$summary[$key],0,',','.') ?></b><?= h($label) ?></span><?php endforeach; ?></div></aside>
 <?php pageFooter(); ?>

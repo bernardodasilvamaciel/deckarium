@@ -65,7 +65,7 @@ $stageHints=[
 ];
 ?>
 <section id="selection" class="selection-workspace" data-selection-workspace="<?= (int)$id ?>-<?= h($selectionStage) ?>">
-<div class="section-heading"><div><h2>Minha seleção</h2><p><?= h($stageHints[$selectionStage]) ?></p></div><a href="?deck=<?= $id ?>&view=explore">Descobrir cartas</a></div>
+<div class="section-heading"><div><h2>Minha seleção</h2><p><?= h($stageHints[$selectionStage]) ?></p></div><span class="selection-heading-links"><?php if($selectionStage==='deck'): ?><a href="#deck-analysis">Ver análise do deck</a><?php endif; ?><a href="?deck=<?= $id ?>&view=explore">Descobrir cartas</a></span></div>
 <nav class="tabs selection-tabs" aria-label="Etapas da seleção"><?php foreach($stages as $key=>$label): ?><a href="?deck=<?= $id ?>&view=selection&stage=<?= h($key) ?>" <?= $key===$selectionStage?'aria-current="page"':'' ?>><?= h($label) ?> <span><?= $stageCounts[$key] ?></span></a><?php endforeach; ?></nav>
 <?php if($pendingUpgrades): foreach($pendingUpgrades as $pendingUpgrade): $pendingOut=deckQuery('SELECT * FROM cards WHERE id=?',[$pendingUpgrade['remove_card_id']])->fetch(); $pendingIn=deckQuery('SELECT * FROM cards WHERE id=?',[$pendingUpgrade['add_card_id']])->fetch(); ?>
 <section class="upgrade-pending" id="upgrade-<?= (int)$pendingUpgrade['id'] ?>"><div class="upgrade-pending-copy"><span class="plan-status">100 + 1 upgrade pendente</span><h3><?= h($pendingUpgrade['add_name']) ?> sobre <?= h($pendingUpgrade['remove_name']) ?></h3><p>Compare os dois lados antes de confirmar. O deck físico continua com 100 cartas até a troca ser aprovada.</p><div class="selection-actions"><form method="post"><?php $tokenFields('apply_upgrade'); ?><input type="hidden" name="upgrade" value="<?= (int)$pendingUpgrade['id'] ?>"><button class="primary-link">Confirmar troca</button></form><form method="post"><?php $tokenFields('cancel_upgrade'); ?><input type="hidden" name="upgrade" value="<?= (int)$pendingUpgrade['id'] ?>"><button class="secondary-link">Cancelar upgrade</button></form></div></div><div class="upgrade-pending-cards"><?php if($pendingOut) $upgradeDetail($pendingOut,'Sai'); ?><span class="upgrade-arrow" aria-hidden="true">→</span><?php if($pendingIn) $upgradeDetail($pendingIn,'Entra'); ?></div></section>
@@ -141,7 +141,7 @@ $bulkMoves = ['candidate' => [['deck', 'Aprovar para o deck →', 'primary-link'
                     <section class="relationship-group"><h4>Com o deck</h4><?php if($fit['relationships']['deck']): ?><?php $relationshipList($fit['relationships']['deck']); ?><?php else: ?><p class="fit-alert">Nenhuma relação direta com as cartas já no deck.</p><?php endif; ?></section>
                     <section class="relationship-group"><h4>Com as candidatas</h4><?php if($fit['relationships']['candidates']): ?><?php $relationshipList($fit['relationships']['candidates']); ?><?php else: ?><p class="fit-alert">Nenhuma relação direta com as candidatas.</p><?php endif; ?></section>
                 <?php endif; ?>
-                <p class="relationship-board-link"><a href="/deck_board.php?deck=<?= (int)$id ?>&amp;focus=<?= h($entry['id']) ?>">Ver esta carta no quadro de relações →</a></p>
+                <?php if($entry['stage']==='deck'): ?><p class="relationship-board-link"><a href="/deck_board.php?deck=<?= (int)$id ?>&amp;focus=<?= h($entry['id']) ?>">Ver esta carta no quadro de relações →</a></p><?php endif; ?>
                 <p class="fit-tags"><?php if($fit['roles']): ?><span><em>Função</em> <?= h(implode(', ',$fit['roles'])) ?></span><?php endif; ?><?php if($fit['produces']): ?><span><em>Produz</em> <?= h(implode(', ',array_slice($fit['produces'],0,5))) ?></span><?php endif; ?><?php if($fit['cares']): ?><span><em>Procura</em> <?= h(implode(', ',array_slice($fit['cares'],0,5))) ?></span><?php endif; ?></p>
             </details>
             <?php endif; ?>
@@ -193,3 +193,4 @@ $bulkMoves = ['candidate' => [['deck', 'Aprovar para o deck →', 'primary-link'
 </form>
 <?php endif; ?>
 </section>
+<?php if($selectionStage==='deck') require __DIR__.'/deck_analysis_view.php'; ?>

@@ -616,3 +616,53 @@ body:has(.selection-dialog[open]){overflow:hidden}
 .deck-overview-card span{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent)}
 .deck-overview-card strong{font-size:.98rem}
 .deck-overview-card small{font-size:.78rem;color:var(--muted);line-height:1.4}
+
+/* Lista de decks: ações de criação em janelas, espaço para os decks existentes. */
+.deck-library-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:4px 0 18px}
+.deck-library-heading p{margin:0}
+.deck-library-actions,.deck-empty-actions{display:flex;flex-wrap:wrap;gap:10px}
+.deck-empty-actions{justify-content:center;margin-top:18px}
+.deck-form-dialog{width:min(480px,calc(100vw - 32px));max-height:calc(100dvh - 32px);padding:28px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);box-shadow:0 24px 70px #17241c45}
+.deck-form-dialog.is-wide{width:min(680px,calc(100vw - 32px))}
+.deck-form-dialog::backdrop{background:#17241c85}
+.deck-form-dialog h2{margin:0 36px 4px 0;font-size:1.6rem}
+.deck-form-dialog>form.builder-form>p.muted{margin:0 0 6px;font-size:.86rem}
+.deck-form-dialog label small{display:block;margin-top:2px;font-weight:400;color:var(--muted);font-size:.76rem;line-height:1.45}
+.deck-form-dialog textarea{font-family:ui-monospace,Consolas,monospace;font-size:.84rem;line-height:1.5}
+.deck-form-dialog-close{position:absolute;right:14px;top:12px}
+.deck-form-dialog-close button{width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:var(--muted);font:400 1.45rem/1 sans-serif;cursor:pointer}
+.deck-form-dialog-close button:hover{background:var(--soft);color:var(--ink)}
+.deck-form-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:6px}
+@media(max-width:600px){.deck-form-dialog{padding:22px 18px}.deck-form-dialog input,.deck-form-dialog textarea{font-size:16px}.deck-library-actions{width:100%}.deck-library-actions>*{flex:1}}
+
+/* Minha seleção › No deck: análise do deck abaixo das cartas. */
+.selection-heading-links{display:flex;flex-wrap:wrap;gap:6px 18px}
+.deck-analysis{margin-top:48px;padding-top:32px;border-top:1px solid var(--line);scroll-margin-top:24px}
+.deck-analysis .section-heading{margin-bottom:18px}
+.deck-analysis-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;margin:0 0 24px;border:1px solid var(--line);border-radius:12px;background:var(--line);overflow:hidden}
+.deck-analysis-summary>div{display:grid;gap:4px;align-content:start;padding:16px 18px;background:var(--surface);min-width:0}
+.deck-analysis-summary dt{font-size:.74rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.deck-analysis-summary dd{margin:0;font:700 1.6rem/1.15 Spectral,Georgia,serif;font-variant-numeric:tabular-nums}
+.deck-analysis-summary dd small{font-size:.9rem;color:var(--muted);font-weight:400}
+.deck-analysis-summary span{font-size:.78rem;color:var(--muted);overflow-wrap:anywhere}
+.deck-analysis-warnings{margin:0 0 24px}
+.deck-analysis-warnings summary{cursor:pointer;font-weight:600;color:#72551d;min-height:36px;display:flex;align-items:center}
+.deck-analysis .analysis-grid{margin-bottom:24px}
+.deck-analysis-roles{list-style:none;margin:12px 0;padding:0;display:grid;gap:2px}
+.deck-analysis-roles li{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--line);font-size:.88rem}
+.deck-analysis-roles b{font-variant-numeric:tabular-nums}
+.land-recommendation-panel{background:linear-gradient(135deg,#edf3eb,#fbfaf4)}
+.deck-analysis-export{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px 28px;padding:18px 20px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.deck-analysis-export h3{margin:0;flex-basis:100%;font-size:1rem}
+.deck-analysis-export .liga-export{margin:0}
+@media(max-width:900px){.deck-analysis-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Explorar: situação da cópia da coleção. */
+.builder-stock{display:block;padding-left:14px;position:relative;line-height:1.45}
+.builder-stock::before{content:"";position:absolute;left:0;top:.42em;width:8px;height:8px;border-radius:50%;background:currentColor}
+.builder-stock.is-available{color:#2f6954}
+.builder-stock.is-limited{color:#8a5f16}
+.builder-stock.is-reserved{color:#a84843}
+.builder-stock.is-missing{color:var(--muted);font-weight:500}
+.builder-stock.is-missing::before{background:transparent;border:1px solid currentColor}
+.builder-stock a{color:inherit;text-decoration:underline;text-underline-offset:2px}

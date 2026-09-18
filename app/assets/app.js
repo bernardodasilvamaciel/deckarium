@@ -32,6 +32,10 @@
     mobileQuery.addEventListener('change', () => setCollapsed(readState(), false));
   }
 
+  document.querySelectorAll('select[data-auto-submit]').forEach(select => {
+    select.addEventListener('change', () => select.form?.requestSubmit());
+  });
+
   const bindPrintingAjax = () => {
     document.querySelectorAll('[data-printing-link]').forEach(link => {
       if (link.dataset.ajaxBound) return;
@@ -115,6 +119,31 @@
     trigger.addEventListener('click', () => dialog.showModal());
     dialog.querySelectorAll('[data-dialog-close]').forEach(button => button.addEventListener('click', () => dialog.close()));
     dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+  });
+  // Formulários em janela (Novo deck, Importar lista): vários gatilhos podem abrir a mesma janela.
+  // Sem fechar ao clicar fora, para não perder uma lista colada por acidente.
+  document.querySelectorAll('dialog.deck-form-dialog').forEach(dialog => {
+    dialog.querySelectorAll('[data-dialog-close]').forEach(button => button.addEventListener('click', () => dialog.close()));
+    if (dialog.hasAttribute('data-open-on-load')) dialog.showModal();
+  });
+  document.querySelectorAll('[data-dialog-open]').forEach(trigger => {
+    const dialog = document.getElementById(trigger.dataset.dialogOpen);
+    if (!(dialog instanceof HTMLDialogElement)) return;
+    trigger.addEventListener('click', () => {
+      dialog.showModal();
+      dialog.querySelector('input:not([type=hidden]), textarea')?.focus();
+    });
+  });
+  // Copiar o link público (deck ou coleção) com endereço completo.
+  document.querySelectorAll('[data-copy-share]').forEach(button => {
+    button.addEventListener('click', async () => {
+      const path = button.dataset.copyShare || button.closest('.deck-share-link')?.querySelector('[data-share-url]')?.value || '';
+      const url = new URL(path, window.location.origin).href;
+      try { await navigator.clipboard.writeText(url); } catch (_) { window.prompt('Copie o link:', url); return; }
+      const label = button.textContent;
+      button.textContent = 'Link copiado';
+      window.setTimeout(() => { button.textContent = label; }, 1800);
+    });
   });
   document.querySelectorAll('[data-password-toggle]').forEach(toggle => {
     const input = toggle.parentElement?.querySelector('input');
@@ -808,7 +837,7 @@
           starting: 'Iniciando o processo…',
           checking: 'Consultando o manifesto do Scryfall…',
           downloading: data.bytes_total ? `${formatBytes(data.bytes_downloaded)} de ${formatBytes(data.bytes_total)} baixados` : `${formatBytes(data.bytes_downloaded)} baixados`,
-          importing: `${formatNumber(data.imported)} cartas importadas`,
+          importing: `${formatNumber(data.imported)} cartas processadas · ${formatNumber(data.added)} novas`,
           completed: `${formatNumber(data.imported)} cartas importadas`,
           error: 'Sincronização interrompida por um erro',
           interrupted: `Parou com ${formatNumber(data.imported)} cartas importadas`,
@@ -820,7 +849,9 @@
       }
       if (checkUpdatesButton) checkUpdatesButton.disabled = Boolean(data.active);
       if (wasActive && !data.active) {
-        if (data.state === 'completed') setFeedback(feedback, `Catálogo atualizado: ${formatNumber(data.imported)} cartas importadas.`, 'success');
+        if (data.state === 'completed') setFeedback(feedback, `Catálogo atualizado: ${formatNumber(data.imported)} registros processados, ${formatNumber(data.added)} ${data.added === 1 ? 'carta nova' : 'cartas novas'}.`, 'success');
+        const historyLink = syncPanel.querySelector('[data-sync-history-link]');
+        if (historyLink && data.run_id) historyLink.href = `/sync_history.php?run=${data.run_id}`;
         else if (data.last_error) setFeedback(feedback, data.last_error, 'error');
         renderRows(data.rows);
       }
