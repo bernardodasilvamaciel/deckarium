@@ -56,6 +56,26 @@ CREATE TABLE IF NOT EXISTS sync_status (
     card_count BIGINT NOT NULL DEFAULT 0
 );
 
+-- Histórico de sincronizações e cartas inseridas em cada uma (mantido também por app/sync_log.php).
+CREATE TABLE IF NOT EXISTS sync_runs (
+    id BIGSERIAL PRIMARY KEY,
+    bulk_type TEXT NOT NULL,
+    remote_updated_at TIMESTAMPTZ NULL,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    finished_at TIMESTAMPTZ NULL,
+    state TEXT NOT NULL DEFAULT 'importing',
+    processed INTEGER NOT NULL DEFAULT 0,
+    added INTEGER NOT NULL DEFAULT 0,
+    initial_import BOOLEAN NOT NULL DEFAULT false,
+    error TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS sync_run_cards (
+    run_id BIGINT NOT NULL REFERENCES sync_runs(id) ON DELETE CASCADE,
+    card_id UUID NOT NULL,
+    PRIMARY KEY (run_id, card_id)
+);
+CREATE INDEX IF NOT EXISTS sync_runs_started_idx ON sync_runs (started_at DESC);
+
 CREATE TABLE IF NOT EXISTS builder_collection (
     scryfall_id UUID NOT NULL,
     name TEXT NOT NULL,

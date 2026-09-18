@@ -4,9 +4,12 @@ require __DIR__ . '/db.php';
 require __DIR__ . '/functions.php';
 require __DIR__ . '/partials.php';
 require __DIR__ . '/catalog_cache.php';
+require __DIR__ . '/sync_log.php';
 authRequireAdmin();
 $stats = catalogCached('status-counts', fn() => db()->query('SELECT count(*) AS printings, count(DISTINCT COALESCE(oracle_id,id)) AS unique_cards FROM cards')->fetchAll(), 300)[0];
 $sync = db()->query('SELECT * FROM sync_status ORDER BY imported_at DESC')->fetchAll();
+syncLogSchema(db());
+$recentRuns = db()->query('SELECT id, started_at, state, added FROM sync_runs ORDER BY started_at DESC, id DESC LIMIT 3')->fetchAll();
 $config = require __DIR__ . '/config.php';
 $progress = json_decode((string)@file_get_contents($config['storage_dir'] . '/download-progress.json'), true) ?: [];
 $labels = ['starting'=>'Preparando download','running'=>'Download em andamento','completed'=>'Download concluído','completed_with_errors'=>'Concluído com imagens pendentes','disk_full'=>'Pausado: espaço insuficiente','stopped_by_user'=>'Download pausado pelo usuário','stale'=>'Progresso sem atualização recente'];
@@ -79,6 +82,17 @@ pageHeader('Status do acervo');
 <div class="table-scroll"><table><thead><tr><th>Conjunto de dados</th><th>Atualização no Scryfall</th><th>Importação local</th><th>Registros</th></tr></thead><tbody data-sync-rows>
 <?php foreach ($sync as $row): ?><tr><td><?= h($row['bulk_type']) ?></td><td><?= h(displayDate($row['scryfall_updated_at'])) ?></td><td><?= h(displayDate($row['imported_at'])) ?></td><td><?= number_format((int)$row['card_count'],0,',','.') ?></td></tr><?php endforeach; ?>
 <?php if (!$sync): ?><tr><td colspan="4">Nenhuma sincronização registrada.</td></tr><?php endif; ?>
-</tbody></table></div></section>
+</tbody></table></div>
+<div class="sync-recent">
+  <h3>Cartas adicionadas</h3>
+  <?php if ($recentRuns): ?>
+  <ul>
+    <?php foreach ($recentRuns as $run): $runState = $run['state'] === 'importing' && !$syncState['active'] ? 'interrupted' : $run['state']; ?>
+    <li><a href="/sync_history.php?run=<?= (int)$run['id'] ?>"><?= h(date('d/m/Y H:i', strtotime((string)$run['started_at']))) ?></a> · <?= number_format((int)$run['added'], 0, ',', '.') ?> <?= (int)$run['added'] === 1 ? 'carta nova' : 'cartas novas' ?><?= $runState !== 'completed' ? ' · ' . h(syncRunStateLabel($runState)) : '' ?></li>
+    <?php endforeach; ?>
+  </ul>
+  <?php else: ?><p class="muted">O registro das cartas adicionadas começa na próxima atualização do catálogo.</p><?php endif; ?>
+  <a class="text-link" href="/sync_history.php" data-sync-history-link>Ver histórico completo &rarr;</a>
+</div></section>
 <?php pageFooter(); ?>
 

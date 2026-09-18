@@ -47,6 +47,8 @@ function syncCatalogProgress(string $storage): array
         'bytes_downloaded' => $bytesDone,
         'bytes_total' => $bytesTotal,
         'imported' => (int)($progress['imported'] ?? 0),
+        'added' => (int)($progress['added'] ?? 0),
+        'run_id' => isset($progress['run_id']) ? (int)$progress['run_id'] : null,
         'bulk_type' => (string)($progress['bulk_type'] ?? ''),
         'remote_updated_at' => $progress['remote_updated_at'] ?? null,
         'last_error' => $state === 'interrupted' && empty($progress['last_error'])

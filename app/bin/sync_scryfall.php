@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require __DIR__ . '/common.php';
+require dirname(__DIR__) . '/sync_log.php';
 
 $config = cfg();
 $bulkType = $argv[1] ?? $config['scryfall']['bulk_type'];
@@ -29,6 +30,8 @@ $syncProgress = [
     'bytes_downloaded' => 0,
     'bytes_total' => 0,
     'imported' => 0,
+    'added' => 0,
+    'run_id' => null,
     'import_percent' => null,
     'last_error' => '',
     'started_at' => time(),
@@ -49,8 +52,22 @@ function syncProgress(array $patch, bool $throttle = false): void
         @rename($temp, $syncProgressPath);
     }
 }
+/** Fecha o registro do histórico com o estado final; falhas aqui não podem esconder o erro original. */
+function finishSyncRun(string $state, string $error = ''): void
+{
+    global $syncProgress;
+    if (empty($syncProgress['run_id'])) return;
+    try {
+        $pdo = db();
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        $pdo->prepare('UPDATE sync_runs SET state = ?, error = ?, finished_at = now(), added = (SELECT count(*) FROM sync_run_cards WHERE run_id = sync_runs.id) WHERE id = ?')
+            ->execute([$state, $error, $syncProgress['run_id']]);
+    } catch (Throwable) {
+    }
+}
 syncProgress([]);
 set_exception_handler(static function (Throwable $e): void {
+    finishSyncRun('error', $e->getMessage());
     syncProgress(['state' => 'error', 'last_error' => $e->getMessage(), 'finished_at' => time()]);
     fwrite(STDERR, PHP_EOL . 'Erro: ' . $e->getMessage() . PHP_EOL);
     exit(1);
@@ -59,6 +76,7 @@ foreach (['SIGTERM' => 15, 'SIGINT' => 2] as $signalName => $signalNumber) {
     if (function_exists('pcntl_async_signals') && function_exists('pcntl_signal')) {
         pcntl_async_signals(true);
         pcntl_signal(defined($signalName) ? constant($signalName) : $signalNumber, static function (): void {
+            finishSyncRun('interrupted', 'Sincronização interrompida antes do fim.');
             syncProgress(['state' => 'interrupted', 'last_error' => 'Sincronização interrompida antes do fim. Cartas já importadas foram mantidas.', 'finished_at' => time()]);
             exit(1);
         });
@@ -134,9 +152,11 @@ ON CONFLICT (id) DO UPDATE SET
   card_faces = EXCLUDED.card_faces,
   raw = EXCLUDED.raw,
   imported_at = now()
+RETURNING (xmax = 0) AS inserted
 SQL);
 
-function importCard(PDOStatement $upsert, array $card): void
+/** Retorna true quando a carta entrou no banco pela primeira vez. */
+function importCard(PDOStatement $upsert, array $card): bool
 {
     [$front, $back] = pickImageUris($card);
     $upsert->execute([
@@ -165,17 +185,40 @@ function importCard(PDOStatement $upsert, array $card): void
         ':card_faces' => json_encode($card['card_faces'] ?? [], JSON_UNESCAPED_UNICODE),
         ':raw' => json_encode($card, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
     ]);
+    $inserted = $upsert->fetchColumn();
+    $upsert->closeCursor();
+    return $inserted === true || $inserted === 't' || $inserted === 1 || $inserted === '1';
 }
 
+// Registra a execução no histórico para saber exatamente quais cartas foram adicionadas.
+syncLogSchema($pdo);
+$initialImport = !$pdo->query('SELECT EXISTS (SELECT 1 FROM cards)')->fetchColumn();
+$run = $pdo->prepare('INSERT INTO sync_runs (bulk_type, remote_updated_at, initial_import) VALUES (?, ?, ?) RETURNING id');
+$run->execute([$bulkType, $entry['updated_at'] ?? null, $initialImport ? 'true' : 'false']);
+$runId = (int)$run->fetchColumn();
+$runProgress = $pdo->prepare('UPDATE sync_runs SET processed = ?, added = ? WHERE id = ?');
+
 $count = 0;
-syncProgress(['state' => 'importing', 'imported' => 0, 'import_percent' => 0]);
-$importedOne = static function (array $card, float|int|null $percent) use ($upsert, $pdo, &$count): void {
-    importCard($upsert, $card);
+$added = 0;
+$pendingAdded = [];
+syncProgress(['state' => 'importing', 'imported' => 0, 'added' => 0, 'run_id' => $runId, 'import_percent' => 0]);
+// Os IDs novos são gravados na mesma transação do lote: se o lote falhar, o histórico não fica divergente.
+$flushAdded = static function () use ($pdo, $runId, $runProgress, &$pendingAdded, &$count, &$added): void {
+    if ($pendingAdded) syncLogAddCards($pdo, $runId, $pendingAdded);
+    $pendingAdded = [];
+    $runProgress->execute([$count, $added, $runId]);
+};
+$importedOne = static function (array $card, float|int|null $percent) use ($upsert, $pdo, &$count, &$added, &$pendingAdded, $flushAdded): void {
+    if (importCard($upsert, $card)) {
+        $added++;
+        $pendingAdded[] = $card['id'];
+    }
     $count++;
     if ($count % 1000 === 0) {
+        $flushAdded();
         $pdo->commit();
-        echo "Importadas {$count} cartas...\r";
-        syncProgress(['imported' => $count, 'import_percent' => $percent === null ? null : (int)floor($percent)]);
+        echo "Importadas {$count} cartas ({$added} novas)...\r";
+        syncProgress(['imported' => $count, 'added' => $added, 'import_percent' => $percent === null ? null : (int)floor($percent)]);
         $pdo->beginTransaction();
     }
 };
@@ -223,13 +266,15 @@ try {
             $importedOne($card, ($count + 1) / $totalCards * 100);
         }
     }
+    $flushAdded();
     $pdo->commit();
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();
     throw $e;
 }
 
-echo "\nImportação concluída: {$count} registros.\n";
+echo "\nImportação concluída: {$count} registros, {$added} cartas novas.\n";
+$pdo->prepare("UPDATE sync_runs SET state = 'completed', finished_at = now(), processed = ?, added = ? WHERE id = ?")->execute([$count, $added, $runId]);
 $status = $pdo->prepare(<<<SQL
 INSERT INTO sync_status (bulk_type, scryfall_updated_at, imported_at, source_url, card_count)
 VALUES (:bulk_type, :updated_at, now(), :source_url, :card_count)
@@ -245,5 +290,5 @@ $status->execute([
     ':source_url' => $url,
     ':card_count' => $count,
 ]);
-syncProgress(['state' => 'completed', 'imported' => $count, 'import_percent' => 100, 'finished_at' => time()]);
+syncProgress(['state' => 'completed', 'imported' => $count, 'added' => $added, 'import_percent' => 100, 'finished_at' => time()]);
 flock($syncLock, LOCK_UN);
