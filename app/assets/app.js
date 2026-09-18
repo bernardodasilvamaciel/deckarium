@@ -5,6 +5,7 @@
   if (sidebar && sidebarToggle) {
     const mobileQuery = window.matchMedia('(max-width: 850px)');
     const readState = () => {
+      if (mobileQuery.matches) return true;
       try {
         const saved = localStorage.getItem(mobileQuery.matches ? 'deckarium:sidebar-mobile-collapsed' : 'deckarium:sidebar-desktop-collapsed');
         return saved === null ? mobileQuery.matches : saved === 'true';
@@ -17,7 +18,7 @@
       const label = sidebarToggle.querySelector('[data-sidebar-toggle-label]');
       if (label) label.textContent = collapsed ? 'Expandir navegação' : 'Recolher navegação';
       if (sidebarScrim) sidebarScrim.hidden = collapsed || !mobileQuery.matches;
-      if (persist) try { localStorage.setItem(mobileQuery.matches ? 'deckarium:sidebar-mobile-collapsed' : 'deckarium:sidebar-desktop-collapsed', String(collapsed)); } catch (_) {}
+      if (persist && !mobileQuery.matches) try { localStorage.setItem(mobileQuery.matches ? 'deckarium:sidebar-mobile-collapsed' : 'deckarium:sidebar-desktop-collapsed', String(collapsed)); } catch (_) {}
     };
     setCollapsed(readState(), false);
     sidebarToggle.addEventListener('click', () => setCollapsed(!sidebar.classList.contains('is-collapsed')));

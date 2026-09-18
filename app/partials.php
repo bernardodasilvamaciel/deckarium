@@ -13,6 +13,7 @@ function uiIcon(string $name): string
         'users'=>'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.4 3-5.2 6-5.2s5.4 1.8 6 5.2M16 5.2a3 3 0 0 1 0 5.6M18 14.8c1.6.6 2.7 2.3 3 5.2"/>',
         'account'=>'<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5c.8-4 3.7-6.2 7.5-6.2s6.7 2.2 7.5 6.2"/>',
         'menu'=>'<path d="M4 7h16M4 12h16M4 17h16"/>',
+        'close'=>'<path d="M6 6l12 12M18 6 6 18"/>',
     ];
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . ($paths[$name] ?? $paths['cards']) . '</svg>';
 }
@@ -32,7 +33,7 @@ function pageHeader(string $title): void
     if ($section==='decks') echo '<link rel="stylesheet" href="/assets/decks.css?v=' . filemtime(__DIR__ . '/assets/decks.css') . '">';
     echo '<script src="/assets/app.js?v=' . h((string)filemtime(__DIR__ . '/assets/app.js')) . '" defer></script></head><body>';
     echo '<a class="skip-link" href="#main">Pular para o conteúdo</a>';
-    echo '<header class="sidebar" data-sidebar><div class="sidebar-header"><a class="brand" href="/commanders.php" aria-label="Deckarium — início"><img class="brand-mark" src="/assets/deckarium-logo.png" alt="Deckarium" width="512" height="512"></a><button type="button" class="sidebar-toggle" data-sidebar-toggle aria-expanded="true"><span class="sr-only" data-sidebar-toggle-label>Recolher navegação</span>' . uiIcon('menu') . '</button></div>';
+    echo '<header class="sidebar" data-sidebar><div class="sidebar-header"><a class="brand" href="/commanders.php" aria-label="Deckarium — início"><img class="brand-mark" src="/assets/deckarium-logo.png" alt="Deckarium" width="512" height="512"></a><button type="button" class="sidebar-toggle" data-sidebar-toggle aria-expanded="true"><span class="sr-only" data-sidebar-toggle-label>Recolher navegação</span><span class="sidebar-toggle-open">' . uiIcon('menu') . '</span><span class="sidebar-toggle-close">' . uiIcon('close') . '</span></button></div>';
     echo '<nav aria-label="Navegação principal">';
     $links = [['commanders','/commanders.php','Comandantes'],['cards','/?catalog=1#catalogo','Catálogo'],['sets','/editions.php','Edições'],['collection','/collection.php','Minha coleção'],['decks','/decks.php','Meus decks']];
     if (($user['role'] ?? '') === 'admin') {
