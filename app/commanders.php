@@ -78,6 +78,7 @@ pageHeader('Comandantes');
         <a class="secondary-link" href="/decks.php">Meus decks <span aria-hidden="true">&rarr;</span></a>
     </header>
 
+    <?php filterPanelStart(($query !== '' ? 1 : 0) + ($sort !== 'new' ? 1 : 0), 'Buscar e ordenar'); ?>
     <form class="commander-search" action="/commanders.php" method="get" role="search" aria-label="Buscar comandantes">
         <div class="commander-search-controls">
             <label class="commander-field commander-field-name">Buscar comandante por nome
@@ -92,6 +93,7 @@ pageHeader('Comandantes');
             <?php if ($query !== '' || $sort !== 'new'): ?><a href="/commanders.php" class="commander-clear">Limpar</a><?php endif; ?>
         </div>
     </form>
+    <?php filterPanelEnd(); ?>
 
     <div class="commander-layout">
         <section class="commander-gallery" aria-labelledby="latest-commanders">

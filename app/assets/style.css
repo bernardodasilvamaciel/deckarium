@@ -686,3 +686,17 @@ button.is-busy::after{content:"";display:inline-block;width:.8em;height:.8em;mar
 .set-new:has(input:disabled){opacity:.5;cursor:default}
 .set-new input{width:16px;height:16px;accent-color:var(--accent)}
 .set-new b{font:600 .72rem var(--mono);color:var(--muted)}
+
+/* Filtros recolhidos: no celular os campos tomavam a tela toda antes dos resultados. */
+.filters-shell{margin:0 0 20px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.filters-shell>summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:13px 16px;cursor:pointer;list-style:none;font-weight:700;color:var(--ink);border-radius:10px}
+.filters-shell>summary::-webkit-details-marker{display:none}
+.filters-shell>summary::before{content:"";width:16px;height:16px;flex:0 0 auto;background:currentColor;-webkit-mask:var(--filters-icon) center/contain no-repeat;mask:var(--filters-icon) center/contain no-repeat}
+.filters-shell>summary::after{content:"Mostrar";margin-left:auto;font-size:.78rem;font-weight:600;color:var(--accent)}
+.filters-shell[open]>summary::after{content:"Ocultar"}
+.filters-shell>summary:hover,.filters-shell>summary:focus-visible{background:#ece9df}
+.filters-shell-count{font-size:.78rem;font-weight:500;color:var(--muted)}
+.filters-shell-body{padding:0 16px 16px;border-top:1px solid var(--line);margin-top:2px;padding-top:16px}
+.filters-shell-body>form{margin-bottom:0}
+:root{--filters-icon:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 5h18l-7 8v6l-4 2v-8Z'/%3E%3C/svg%3E")}
+@media(max-width:600px){.filters-shell>summary{padding:12px 13px}.filters-shell-body{padding:14px 13px 14px}}

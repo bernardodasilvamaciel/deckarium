@@ -43,8 +43,34 @@ function cardFilterSql(array $f): array {
     }
     return [$where?'WHERE '.implode(' AND ',$where):'', $params];
 }
+/**
+ * Recolhe qualquer bloco de filtros atrás de um botão "Filtros".
+ * Fechado por padrão em todas as telas: no celular os campos ocupavam
+ * quase toda a altura antes dos resultados.
+ */
+function filterPanelStart(int $active=0, string $label='Filtros e busca'): void {
+    echo '<details class="filters-shell"><summary><span class="filters-shell-label">' . h($label) . '</span>'
+        . '<span class="filters-shell-count">' . ($active ? $active . ($active === 1 ? ' filtro ativo' : ' filtros ativos') : 'Nenhum filtro ativo') . '</span></summary>'
+        . '<div class="filters-shell-body">';
+}
+
+function filterPanelEnd(): void {
+    echo '</div></details>';
+}
+
+/** Quantos filtros do formulário compartilhado estão preenchidos. */
+function cardFilterActiveCount(array $f): int {
+    $active=0;
+    foreach ($f as $key=>$value) {
+        if (str_ends_with($key,'_op') || str_ends_with($key,'_mode')) continue;
+        if ($value!=='' && $value!==[]) $active++;
+    }
+    return $active;
+}
+
 function cardFilterForm(array $f,array $sets,string $action,string $view=''): void {
     $advanced=false;foreach($f as $k=>$v)if(!in_array($k,['q','oracle'])&&$v!==''&&$v!==[])$advanced=true;
+    filterPanelStart(cardFilterActiveCount($f));
     ?><form class="card-filters" method="get" action="<?= h($action) ?>" role="search">
     <?php if($view): ?><input type="hidden" name="view" value="<?= h($view) ?>"><?php endif; ?>
     <div class="filter-main"><label class="field">Nome da carta<input type="search" name="q" value="<?= h($f['q']) ?>" placeholder="Nome em inglês ou português"></label><label class="field">Texto Oracle<input name="oracle" value="<?= h($f['oracle']) ?>" placeholder="draw a card; sacrifice"></label><button>Buscar cartas</button></div>
@@ -56,6 +82,7 @@ function cardFilterForm(array $f,array $sets,string $action,string $view=''): vo
     <label class="field">Custo de mana<input name="mana" value="<?= h($f['mana']) ?>" placeholder="{2}{G}{G}"><small>Sequência de símbolos no custo.</small></label>
     <?php foreach(['rarity'=>['Raridade',['common'=>'Comum','uncommon'=>'Incomum','rare'=>'Rara','mythic'=>'Mítica','special'=>'Especial','bonus'=>'Bônus']], 'lang'=>['Idioma',['en'=>'Inglês','pt'=>'Português','es'=>'Espanhol','fr'=>'Francês','de'=>'Alemão','it'=>'Italiano','ja'=>'Japonês','ko'=>'Coreano','ru'=>'Russo','zhs'=>'Chinês simplificado','zht'=>'Chinês tradicional','la'=>'Latim','grc'=>'Grego antigo','ar'=>'Árabe','he'=>'Hebraico','sa'=>'Sânscrito','ph'=>'Phyrexiano']]] as $key=>[$label,$options]): ?><label class="field"><?= $label ?><select name="<?= $key ?>"><option value="">Todos</option><?php foreach($options as $value=>$text): ?><option value="<?= $value ?>" <?= $f[$key]===$value?'selected':'' ?>><?= $text ?></option><?php endforeach; ?></select></label><?php endforeach; ?>
     </div><p class="muted">Oracle: todos os termos separados por ponto e vírgula. Poder, resistência e lealdade: apenas valores numéricos.</p><button>Aplicar filtros</button></details><a href="<?= h($action) ?>">Limpar filtros</a></form><?php
+    filterPanelEnd();
 }
 function numberedPager(int $page,int $pages,array $params,string $anchor=''): void {
     unset($params['page']);$url=fn($n)=>'?'.http_build_query(array_merge($params,['page'=>$n])).$anchor;

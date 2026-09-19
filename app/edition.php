@@ -107,6 +107,7 @@ pageHeader($edition['set_name']);
     <?php if ($siblings): ?><nav class="set-siblings" aria-label="Outros códigos da mesma coleção"><span>Da mesma coleção</span><?php foreach ($siblings as $sibling): ?><a href="/edition.php?set=<?= h(rawurlencode((string)$sibling['set_code'])) ?>"><?= h($sibling['set_name']) ?> <b><?= h(strtoupper((string)$sibling['set_code'])) ?></b></a><?php endforeach; ?></nav><?php endif; ?>
 </section>
 
+<?php filterPanelStart((int)$active + ($sort !== 'number' ? 1 : 0) + ($onlyNew ? 1 : 0), 'Filtros da edição'); ?>
 <form class="set-filters" method="get" action="/edition.php" role="search" aria-label="Filtrar cartas da edição">
     <input type="hidden" name="set" value="<?= h($set) ?>">
     <div class="set-filters-row">
@@ -126,6 +127,7 @@ pageHeader($edition['set_name']);
         <?php if ($active || $sort !== 'number'): ?><a class="set-clear" href="/edition.php?set=<?= h(rawurlencode($set)) ?><?= $view === 'printings' ? '&amp;view=printings' : '' ?>">Limpar filtros</a><?php endif; ?>
     </div>
 </form>
+<?php filterPanelEnd(); ?>
 
 <p class="set-result muted"><?= number_format($total, 0, ',', '.') ?> <?= $view === 'unique' ? ($total === 1 ? 'carta' : 'cartas') : ($total === 1 ? 'versão' : 'versões') ?><?= $active ? ' com os filtros atuais' : '' ?> · <?= h(mb_strtolower($sortOptions[$sort])) ?><?= $pages > 1 ? ' · página ' . $page . ' de ' . $pages : '' ?></p>
 <?php if (!$cards): ?><div class="empty-state"><h2>Nenhuma carta com esses filtros</h2><p>Remova um filtro ou <a href="/edition.php?set=<?= h(rawurlencode($set)) ?>">veja todas as cartas da edição</a>.</p></div><?php endif; ?>
