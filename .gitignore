@@ -11,6 +11,8 @@ storage/profiles/
 storage/download.log
 storage/admin-inicial.txt
 storage/download-progress.json
+storage/download-process.json
+storage/STOP_DOWNLOAD
 # Capturas e scripts temporários de desenvolvimento
 app/_shot_*.html
 app/_vid*
