@@ -292,3 +292,6 @@ $status->execute([
 ]);
 syncProgress(['state' => 'completed', 'imported' => $count, 'added' => $added, 'import_percent' => 100, 'finished_at' => time()]);
 flock($syncLock, LOCK_UN);
+
+// Caches pesados (índice de funções, linha do tempo das edições…) prontos antes da primeira visita.
+passthru(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/warm_caches.php'));
