@@ -29,6 +29,11 @@ function cardImageUrl(array $card, string $face = 'front', string $size = 'norma
             || !empty($raw['card_faces'][1]['image_uris']);
     }
 
+    // Imagem já baixada: serve do acervo local (image.php lê o arquivo sem consultar o banco).
+    if (!empty($card['id']) && $available && cardImageCached((string)$card['id'], $face, $size)) {
+        return '/image.php?id=' . rawurlencode((string)$card['id']) . '&face=' . $face . '&size=' . $size;
+    }
+
     $sizeKey = $size === 'small' ? 'small' : 'normal';
     $remote = $face === 'front'
         ? ($raw['image_uris'][$sizeKey] ?? $raw['card_faces'][0]['image_uris'][$sizeKey] ?? ($card['image_uri'] ?? null))
@@ -42,6 +47,18 @@ function cardImageUrl(array $card, string $face = 'front', string $size = 'norma
     }
 
     return null;
+}
+
+/** Mesma regra de image.php: a miniatura cai para a imagem normal local quando ainda não foi baixada. */
+function cardImageCached(string $id, string $face, string $size): bool
+{
+    static $dir = null;
+    $dir ??= (require __DIR__ . '/config.php')['storage_dir'] . '/images/';
+    foreach ($size === 'small' ? ['small', 'normal'] : ['normal'] as $variant) {
+        $file = $dir . $variant . '/' . $id . '-' . $face . '.jpg';
+        if (is_file($file) && filesize($file) > 0) return true;
+    }
+    return false;
 }
 
 function displayDate(?string $date): string
