@@ -6,7 +6,9 @@ function uiIcon(string $name): string
 {
     $paths = [
         'home'=>'<path d="m3 10 9-7 9 7v11h-6v-7H9v7H3Z"/>',
-        'cards'=>'<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2M9 8h6M9 12h6M9 16h3"/>',
+        'cards'=>'<path d="M13 20H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4M7 7h6M7 10.5h3"/><circle cx="16" cy="15" r="3.5"/><path d="m18.6 17.6 2.9 2.9"/>',
+        'collection'=>'<rect x="5" y="3" width="15" height="18" rx="2"/><path d="M12.5 3v18M5 12h15M3 7.5h2M3 16.5h2"/>',
+        'decks'=>'<mask id="ui-icon-decks-front"><rect width="24" height="24" fill="#fff"/><rect x="10" y="4" width="10" height="14" rx="1.8" transform="rotate(10 15 11)" fill="#000" stroke="#000" stroke-width="3.2"/></mask><g mask="url(#ui-icon-decks-front)"><rect x="3.2" y="5.8" width="10" height="14" rx="1.8" transform="rotate(-14 8.2 12.8)"/></g><rect x="10" y="4" width="10" height="14" rx="1.8" transform="rotate(10 15 11)"/><path d="m15 8.6 2 2.4-2 2.4-2-2.4Z" transform="rotate(10 15 11)"/>',
         'sets'=>'<path d="M12 5C8 2 4 3 2 4v15c3-1 6-1 10 2 4-3 7-3 10-2V4c-2-1-6-2-10 1Zm0 0v16"/>',
         'commanders'=>'<path d="M6 18h12M8 18v-4h8v4M7 5l2 5 3-3 3 3 2-5M9 5h6"/>',
         'status'=>'<path d="M8 5h12M8 12h12M8 19h12M3 5h1M3 12h1M3 19h1"/>',
