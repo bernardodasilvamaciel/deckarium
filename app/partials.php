@@ -10,7 +10,7 @@ function uiIcon(string $name): string
         'collection'=>'<rect x="5" y="3" width="15" height="18" rx="2"/><path d="M12.5 3v18M5 12h15M3 7.5h2M3 16.5h2"/>',
         'decks'=>'<mask id="ui-icon-decks-front"><rect width="24" height="24" fill="#fff"/><rect x="10" y="4" width="10" height="14" rx="1.8" transform="rotate(10 15 11)" fill="#000" stroke="#000" stroke-width="3.2"/></mask><g mask="url(#ui-icon-decks-front)"><rect x="3.2" y="5.8" width="10" height="14" rx="1.8" transform="rotate(-14 8.2 12.8)"/></g><rect x="10" y="4" width="10" height="14" rx="1.8" transform="rotate(10 15 11)"/><path d="m15 8.6 2 2.4-2 2.4-2-2.4Z" transform="rotate(10 15 11)"/>',
         'sets'=>'<path d="M12 5C8 2 4 3 2 4v15c3-1 6-1 10 2 4-3 7-3 10-2V4c-2-1-6-2-10 1Zm0 0v16"/>',
-        'commanders'=>'<path d="M6 18h12M8 18v-4h8v4M7 5l2 5 3-3 3 3 2-5M9 5h6"/>',
+        'commanders'=>'<path d="M3.5 19.5h17M5 19.5V6l4.5 3.5L12 4l2.5 5.5L19 6v13.5M5 15h14"/>',
         'status'=>'<path d="M8 5h12M8 12h12M8 19h12M3 5h1M3 12h1M3 19h1"/>',
         'users'=>'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.4 3-5.2 6-5.2s5.4 1.8 6 5.2M16 5.2a3 3 0 0 1 0 5.6M18 14.8c1.6.6 2.7 2.3 3 5.2"/>',
         'account'=>'<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5c.8-4 3.7-6.2 7.5-6.2s6.7 2.2 7.5 6.2"/>',
