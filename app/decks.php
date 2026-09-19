@@ -498,6 +498,7 @@ if ($deck && isset($_GET['export'])) {
     }
     if($_GET['export']==='liga'){
         $scope=($_GET['liga_scope']??'missing')==='all'?'all':'missing';$ligaRows=[];
+        $ligaPrinting=in_array($_GET['liga_printing']??'liga',['liga','exact','none'],true)?(string)$_GET['liga_printing']:'liga';
         $addLigaRow=function(array $row,int $quantity,int $owned) use(&$ligaRows,$scope):void{
             $exportQuantity=$scope==='all'?$quantity:max(0,$quantity-$owned);if($exportQuantity<1)return;
             $prices=deckPriceOptions($row);$normalOwned=(int)($row['normal_quantity']??0);$foilOwned=(int)($row['foil_quantity']??0);
@@ -507,7 +508,7 @@ if ($deck && isset($_GET['export'])) {
         };
         if($commander)$addLigaRow($commander,1,$commanderAvailable??0);
         foreach($items as $row)if($row['stage']==='deck')$addLigaRow($row,(int)$row['quantity'],max(0,(int)$row['owned']-(int)$row['other_used']));
-        header('Content-Type: text/csv; charset=Windows-1252');header('Content-Disposition: attachment; filename="liga-deck-'.$id.'-'.$scope.'.csv"');echo deckLigaCsv($ligaRows);exit;
+        header('Content-Type: text/csv; charset=Windows-1252');header('Content-Disposition: attachment; filename="liga-deck-'.$id.'-'.$scope.'.csv"');echo deckLigaCsv($ligaRows,$ligaPrinting);exit;
     }
     header('Content-Type: text/plain; charset=utf-8'); header('Content-Disposition: attachment; filename="'.($_GET['export']==='shopping'?'compras':'deck').'-'.$id.'.txt"');
     if ($_GET['export']==='shopping') foreach ($shopping as $row) echo $row['quantity'].' '.$row['name']."\n";

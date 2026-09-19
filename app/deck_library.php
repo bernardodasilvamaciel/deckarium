@@ -428,17 +428,65 @@ function deckImport(string $path, bool|string $mode = 'replace'): array {
     usort($failed, fn($x, $y) => $x['line'] <=> $y['line']);
     return $applied + ['mode'=>$mode,'failed'=>$failed,'headers'=>$headers];
 }
-function deckLigaCsv(array $rows): string {
+/**
+ * Impressão que a LigaMagic reconhece, por nome de carta.
+ *
+ * O catálogo deles não tem promos (PDFT, PBLB, PLCI), The List, Secret Lair nem a
+ * numeração alta de produtos como Foundations Jumpstart, e a importação recusa a linha
+ * inteira. Aqui cada carta cai numa edição comum, no número base dela e no menor preço.
+ *
+ * @param string[] $names
+ * @return array<string,array{set_name:string,set_code:string,collector_number:string}>
+ */
+function deckLigaPrintings(array $names): array {
+    $names = array_values(array_unique(array_filter(array_map('strval', $names))));
+    if (!$names) return [];
+    $rows = deckQuery(<<<SQL
+        WITH alvo AS (SELECT lower(unnest(?::text[])) AS nome),
+        base AS (
+            SELECT DISTINCT ON (lower(c.name), c.set_code)
+                   lower(c.name) AS nome, c.set_name, c.set_code, c.collector_number,
+                   COALESCE(NULLIF(c.prices->>'usd','')::numeric, 999) AS usd
+            FROM cards c JOIN alvo a ON a.nome = lower(c.name)
+            WHERE c.lang = 'en' AND c.collector_number ~ '^[0-9]+$'
+              AND c.layout NOT IN ('token','double_faced_token','art_series','emblem')
+              AND COALESCE((SELECT f.raw->>'set_type' FROM cards f WHERE f.set_code = c.set_code LIMIT 1),'')
+                  IN ('expansion','core','commander','draft_innovation','masters','starter','duel_deck','from_the_vault','premium_deck')
+              AND COALESCE((SELECT f.raw->>'digital' FROM cards f WHERE f.set_code = c.set_code LIMIT 1),'false') <> 'true'
+            -- Número base da edição: variantes e artes alternativas recebem números altos.
+            ORDER BY lower(c.name), c.set_code, c.collector_number::int
+        )
+        SELECT DISTINCT ON (nome) nome, set_name, set_code, collector_number
+        FROM base ORDER BY nome, usd, collector_number::int
+    SQL, ['{' . implode(',', array_map(fn($n) => '"' . str_replace(['\\','"'], ['\\\\','\\"'], $n) . '"', $names)) . '}'])->fetchAll();
+    $map = [];
+    foreach ($rows as $row) $map[(string)$row['nome']] = $row;
+    return $map;
+}
+
+/**
+ * CSV da Lista de Compras da LigaMagic.
+ * $printing: 'liga' troca por uma impressão que eles reconhecem, 'exact' mantém a sua
+ * e 'none' deixa a edição em branco para a Liga escolher.
+ */
+function deckLigaCsv(array $rows, string $printing = 'liga'): string {
     $fp=fopen('php://temp','w+');
     fputcsv($fp,['Edicao (PTBR)','Edicao (EN)','Edicao (Sigla)','Card (PT)','Card (EN)','Quantidade','Qualidade (M NM SP MP HP D)','Idioma (BR EN DE ES FR IT JP KO RU TW)','Raridade (M R U C)','Cor (W U B R G M A L)','Extras','Card #','Comentario'],',','"','',"\r\n");
     $languages=['pt'=>'BR','en'=>'EN','de'=>'DE','es'=>'ES','fr'=>'FR','it'=>'IT','ja'=>'JP','ko'=>'KO','ru'=>'RU','zht'=>'TW','zhs'=>'TW'];
     $rarities=['mythic'=>'M','rare'=>'R','uncommon'=>'U','common'=>'C'];
+    $ligaPrintings = $printing === 'liga' ? deckLigaPrintings(array_column($rows, 'name')) : [];
     foreach($rows as $row){
+        $setName=(string)($row['set_name']??''); $setCode=strtolower((string)($row['set_code']??'')); $number=(string)($row['collector_number']??'');
+        if ($printing === 'none') { $setName=$setCode=$number=''; }
+        elseif (isset($ligaPrintings[mb_strtolower((string)$row['name'])])) {
+            $pick=$ligaPrintings[mb_strtolower((string)$row['name'])];
+            [$setName,$setCode,$number]=[(string)$pick['set_name'],(string)$pick['set_code'],(string)$pick['collector_number']];
+        }
         $colors=json_decode((string)($row['colors']??'[]'),true)?:[];
         $color=str_contains((string)($row['type_line']??''),'Land')?'L':(str_contains((string)($row['type_line']??''),'Artifact')?'A':(count($colors)>1?'M':($colors[0]??'')));
         $printed=''; $raw=$row['raw']??[]; if(is_string($raw))$raw=json_decode($raw,true)?:[];
         if(($row['lang']??'en')==='pt')$printed=(string)($raw['printed_name']??'');
-        fputcsv($fp,['',(string)($row['set_name']??''),strtolower((string)($row['set_code']??'')),$printed,(string)$row['name'],(int)$row['export_quantity'],'NM',$languages[$row['lang']??'en']??'EN',$rarities[$row['rarity']??'']??'',$color,!empty($row['export_foil'])?'Foil':'',(string)($row['collector_number']??''),'Exportado do Deckarium'],',','"','',"\r\n");
+        fputcsv($fp,['',$setName,$setCode,$printed,(string)$row['name'],(int)$row['export_quantity'],'NM',$languages[$row['lang']??'en']??'EN',$rarities[$row['rarity']??'']??'',$color,!empty($row['export_foil'])?'Foil':'',$number,'Exportado do Deckarium'],',','"','',"\r\n");
     }
     rewind($fp); $csv=stream_get_contents($fp)?:''; fclose($fp);
     return iconv('UTF-8','Windows-1252//TRANSLIT',$csv)?:$csv;

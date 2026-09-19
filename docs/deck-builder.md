@@ -12,6 +12,8 @@ Acesse `http://localhost:8080/decks.php` ou **Meus decks** no menu. O módulo fu
 6. A lista é finalizada automaticamente quando comandante + cartas aprovadas chegam a 100 cartas. Cada troca é planejada dentro da seleção, relacionando uma carta do deck com qualquer impressão do catálogo e indicando quando ela está disponível na coleção.
 7. Em **Minha seleção › No deck**, a seção **Análise do deck** (abaixo das cartas) mostra cartas/100, terrenos, valor estimado, símbolos de mana, alertas, curva de mana, cores dos custos, funções informadas, sugestão de terrenos e as exportações: texto, JSON completo e CSV no padrão da Liga (deck completo ou só o que falta).
 
+   No CSV da Liga há ainda a escolha da **impressão**. O catálogo deles não tem promos (PDFT, PBLB, PLCI), The List, Secret Lair nem a numeração alta de produtos como o Jumpstart de Foundations, e uma linha assim faz a importação recusar a carta inteira. Por isso o padrão é **compatível com a Liga**: a mesma carta sai numa edição comum, pelo número base dela e no menor preço. As outras opções são **a mesma impressão do deck**, útil quando você quer exatamente aquela versão, e **sem edição**, que deixa a Liga escolher.
+
 ## Minha seleção: visualizações, fichas e terrenos automáticos
 
 **Visualizações** (botões acima das cartas; a escolha fica lembrada no navegador, chave `deckarium:selection-layout`):

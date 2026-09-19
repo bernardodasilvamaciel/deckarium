@@ -56,6 +56,11 @@ $openSlots = max(0, 100 - $finalCount);
 <div class="deck-analysis-export">
     <h3>Exportar</h3>
     <span class="deck-export-links"><a href="?deck=<?= $id ?>&export=deck">Lista em texto</a><a href="?deck=<?= $id ?>&export=json" title="Deck, candidatas e comandante com todos os dados de cada carta: Scryfall completo, coleção, preços, notas e Índice de Encaixe">JSON completo</a></span>
-    <form method="get" class="liga-export"><input type="hidden" name="deck" value="<?= $id ?>"><input type="hidden" name="export" value="liga"><label>CSV para a Liga<select name="liga_scope"><option value="missing">Somente cartas que faltam</option><option value="all">Deck completo, inclusive minha coleção</option></select></label><button class="secondary-link">Baixar CSV</button></form>
+    <form method="get" class="liga-export"><input type="hidden" name="deck" value="<?= $id ?>"><input type="hidden" name="export" value="liga"><label>CSV para a Liga<select name="liga_scope"><option value="missing">Somente cartas que faltam</option><option value="all">Deck completo, inclusive minha coleção</option></select></label>
+        <label>Impressão<select name="liga_printing">
+            <option value="liga">Compatível com a Liga</option>
+            <option value="exact">A mesma impressão do deck</option>
+            <option value="none">Sem edição: a Liga escolhe</option>
+        </select><small>A Liga não tem promos, The List nem Secret Lair; “compatível” troca por uma edição comum da mesma carta.</small></label><button class="secondary-link">Baixar CSV</button></form>
 </div>
 </section>
