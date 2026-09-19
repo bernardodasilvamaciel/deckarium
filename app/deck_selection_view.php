@@ -23,6 +23,13 @@ if ($selectionStage==='deck' && $commander) {
     $commanderEntry['other_used']=(int)deckQuery("SELECT COALESCE(SUM(x.quantity),0) FROM (SELECT SUM(i.quantity)::int quantity FROM builder_items i JOIN builder_decks ud ON ud.id=i.deck_id AND ud.user_id=? JOIN cards c ON c.id=i.card_id WHERE i.stage='deck' AND i.deck_id<>? AND COALESCE(c.oracle_id,c.id)=?::uuid UNION ALL SELECT COUNT(*)::int FROM builder_decks d JOIN cards c ON c.id=d.commander_id WHERE d.user_id=? AND d.id<>? AND COALESCE(c.oracle_id,c.id)=?::uuid) x",[$userId,$id,$commander['oracle_id']?:$commander['id'],$userId,$id,$commander['oracle_id']?:$commander['id']])->fetchColumn();
     $groups = ['Comandante'=>[$commanderEntry]] + $groups;
 }
+// No deck: fichas que as cartas criam e plano de terrenos automáticos.
+$deckTokens = []; $landPlan = null; $landOptionsRequest = ['total'=>null,'buy'=>false,'skip'=>[]];
+if ($selectionStage==='deck' && $commander && !$choosingCommander) {
+    try { $deckTokens = deckTokenList($commander, $items); } catch (Throwable $tokenError) { error_log('Fichas do deck: '.$tokenError->getMessage()); }
+    try { $landOptionsRequest = deckLandRequestOptions($_GET); $landPlan = deckLandPlan($id, $commander, $items, $scoreConfig, $landOptionsRequest); } catch (Throwable $landError) { error_log('Plano de terrenos: '.$landError->getMessage()); }
+}
+$selectionLayouts = ['types'=>'Por tipo','large'=>'Cartas grandes','map'=>'Mapa de jogo'];
 $inventoryBadge=function(array $entry): string {
     $total=(int)($entry['owned']??0); $other=(int)($entry['other_used']??0); $need=(int)($entry['quantity']??1); $free=max(0,$total-$other);
     if($total===0) return '<span class="inventory-badge is-missing">Não está na coleção</span>';
@@ -41,7 +48,7 @@ $upgradeDetail=function(array $card,string $label): void { $src=cardImageUrl($ca
 <div><span class="upgrade-detail-label"><?= h($label) ?></span><h4><?= h($card['name']) ?></h4>
 <small><?= h(strtoupper((string)($card['set_code']??''))) ?> #<?= h((string)($card['collector_number']??'')) ?> · <?= h(deckPriceVariantsLabel($card)) ?></small>
 <small><?= h($card['type_line']??'Tipo não informado') ?> · <?= h($card['mana_cost']??'Sem custo de mana') ?></small>
-<p><?= nl2br(h(deckText($card) ?: 'Texto Oracle não disponível.')) ?></p></div>
+<p><?= oracleText(deckText($card) ?: 'Texto Oracle não disponível.') ?></p></div>
 </article>
 <?php };
 ?>
@@ -83,10 +90,10 @@ $bulkMoves = ['candidate' => [['deck', 'Aprovar para o deck →', 'primary-link'
 <?php if(!$groups): ?>
 <p class="empty-state">Nenhuma carta nesta etapa. <a href="?deck=<?= $id ?>&view=explore">Explore o catálogo</a> ou mova uma carta de outra etapa.</p>
 <?php else: ?>
-<div class="selection-toolbar"><span><?= count($groups) ?> <?= count($groups)===1?'tipo':'tipos' ?> · <?= array_sum(array_map(fn($entries)=>array_sum(array_column($entries,'quantity')),$groups)) ?> cartas</span><div><?php if($bulkEntries): ?><button type="button" class="selection-toggle-all selection-bulk-toggle" data-bulk-toggle aria-pressed="false" aria-controls="bulk-move-form">Selecionar várias</button><?php endif; ?><button type="button" class="selection-toggle-all" data-selection-expand>Abrir todos</button><button type="button" class="selection-toggle-all" data-selection-collapse>Fechar todos</button></div></div>
+<div class="selection-toolbar"><span><?= count($groups) ?> <?= count($groups)===1?'tipo':'tipos' ?> · <?= array_sum(array_map(fn($entries)=>array_sum(array_column($entries,'quantity')),$groups)) ?> cartas</span><div class="selection-layouts" role="group" aria-label="Visualização das cartas"><?php foreach($selectionLayouts as $layoutKey=>$layoutLabel): ?><button type="button" data-layout="<?= $layoutKey ?>" aria-pressed="<?= $layoutKey==='types'?'true':'false' ?>"><?= h($layoutLabel) ?></button><?php endforeach; ?></div><div><?php if($landPlan): ?><button type="button" class="selection-land-fill" data-selection-open="land-fill" aria-haspopup="dialog"><?= $landPlan['auto_existing'] ? 'Refazer terrenos' : 'Completar com terrenos' ?><?php if($landPlan['need']): ?> <b><?= (int)$landPlan['need'] ?></b><?php endif; ?></button><?php endif; ?><?php if($bulkEntries): ?><button type="button" class="selection-toggle-all selection-bulk-toggle" data-bulk-toggle aria-pressed="false" aria-controls="bulk-move-form">Selecionar várias</button><?php endif; ?><button type="button" class="selection-toggle-all" data-selection-expand data-layout-only="types">Abrir todos</button><button type="button" class="selection-toggle-all" data-selection-collapse data-layout-only="types">Fechar todos</button></div></div>
 <?php endif; ?>
 
-<div class="selection-groups stage-<?= h($selectionStage) ?>">
+<div class="selection-groups stage-<?= h($selectionStage) ?>" data-layout-panel="types large">
 <?php foreach($groups as $category=>$entries): $groupKey=substr(md5($category),0,10); $groupCount=array_sum(array_column($entries,'quantity')); $groupPickable=$category==='Comandante'?0:count($entries); ?>
 <div class="selection-type-wrap">
 <?php if($groupPickable): ?><button type="button" class="selection-group-pick" data-bulk-group="<?= h($groupKey) ?>">Marcar <?= h(mb_strtolower($category)) ?></button><?php endif; ?>
@@ -128,7 +135,7 @@ $bulkMoves = ['candidate' => [['deck', 'Aprovar para o deck →', 'primary-link'
             <h3 id="<?= h($dialogId) ?>-title"><?= h($entry['name']) ?><?php if(deckIsGameChanger($entry)): ?> <b class="gc-badge" title="Game Changer">GC</b><?php endif; ?></h3>
             <p class="selection-dialog-meta"><?= h(strtoupper((string)$entry['set_code'])) ?> #<?= h($entry['collector_number']) ?> · <?= h(deckPriceLabel($entry)) ?> · <?= (int)$entry['owned']>0?(int)$entry['owned'].' na coleção':'Fora da coleção' ?></p>
             <p class="selection-dialog-type"><span><?= h($entry['type_line'] ?: 'Tipo não informado') ?></span><span class="selection-dialog-mana"><?= manaSymbols($entry['mana_cost']??null) ?></span></p>
-            <div class="selection-dialog-oracle"><?= nl2br(h(deckText($entry) ?: 'Texto Oracle não disponível.')) ?></div>
+            <div class="selection-dialog-oracle"><?= oracleText(deckText($entry) ?: 'Texto Oracle não disponível.') ?></div>
             <?php if($fit): ?>
             <details class="fit-breakdown relationship-breakdown" <?= $selectionStage==='candidate'?'open':'' ?>>
                 <?php $relationshipCount=array_sum(array_map('count',$fit['relationships'])); ?>
@@ -173,6 +180,9 @@ $bulkMoves = ['candidate' => [['deck', 'Aprovar para o deck →', 'primary-link'
 </div>
 <?php endforeach; ?>
 </div>
+<?php if($groups) require __DIR__.'/deck_map_view.php'; ?>
+<?php if($selectionStage==='deck' && $commander && !$choosingCommander) require __DIR__.'/deck_tokens_view.php'; ?>
+<?php if($landPlan) require __DIR__.'/deck_lands_view.php'; ?>
 <?php if($bulkEntries): ?>
 <form method="post" id="bulk-move-form" class="selection-bulkbar" data-bulk-bar data-open-slots="<?= $openSlots ?>" hidden><?php $tokenFields('bulk_move'); ?>
     <div class="selection-bulk-info">

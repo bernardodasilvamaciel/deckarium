@@ -16,6 +16,7 @@ Projeto local para pesquisar cartas, planejar decks de Commander a partir da sua
 | Catálogo | `/?catalog=1` | Todos |
 | Edições | `/editions.php` | Todos |
 | Comunidade | `/public.php` | Todos |
+| Perfil de jogador | `/profile.php?u=usuario` | Todos (decks e coleção só se forem públicos) |
 | Deck público | `/public_deck.php?id=ID` | Todos, se o deck for público |
 | Coleção pública | `/public_collection.php?u=usuario` | Todos, se a coleção for pública |
 | Minha coleção | `/collection.php` | Login |
@@ -30,11 +31,13 @@ A navegação lateral pode ser recolhida; o botão fica sempre no topo. Em telas
 
 `/editions.php` é uma linha do tempo de todos os lançamentos, em página única e sem paginação.
 
-- **Espectrograma no topo:** uma coluna por ano; a altura é o número de cartas **inéditas** daquele ano (cada carta conta uma vez, no ano da primeira impressão; sem fichas e sem cartas só digitais) e as faixas mostram a proporção de cada cor de mana entre elas. Ao rolar, ele vira uma régua fina presa no topo, destaca o ano visível e leva a qualquer ano com um clique.
+- **Espectrograma no topo:** uma coluna por ano; a altura é o número de **cartas novas** daquele ano — cartas impressas pela primeira vez, sem reimpressões (cada carta conta uma vez; sem fichas e sem cartas só digitais) — e as faixas mostram a proporção de cada cor de mana entre elas. “Mostrar reimpressões” acrescenta, hachuradas, as cartas que voltaram a ser impressas no ano (escolha lembrada no navegador). Ao rolar, ele vira uma régua compacta presa no topo, com os anos de 5 em 5 e o ano visível destacado; a diferença de altura vira margem, então o conteúdo não pula e a régua não fica alternando.
+- **Primeira impressão:** a carta é nova na edição onde foi impressa primeiro; no mesmo dia, a edição principal vence Commander, produtos especiais e promos (ex.: DSK antes de DSC e PDSK). Regra única em `editionFirstPrintingSql()` (`functions.php`), usada pela linha do tempo e pela página da edição.
 - **Uma linha por lançamento:** os códigos de edição são agrupados pela coleção que as pessoas reconhecem (`editionUmbrella()`); subedições como Commander, fichas, promos e série de arte aparecem como marcas na linha da coleção-mãe (ex.: Duskmourn com ADSK, DSC, PDSK e TDSK). Cada linha traz data, símbolo da edição sobre a linha do tempo, tipo, faixa de cores das cartas da edição e total de cartas; lançamentos futuros aparecem como “Em breve”.
+- **Cada lançamento** mostra o total de cartas e quantas são **novas** (link direto para elas).
 - **Busca e filtros instantâneos** por nome ou código e por categoria (Expansões, Draft e Masters, Commander, Produtos especiais, Promos e fichas). Promos e fichas soltos começam ocultos; a escolha fica lembrada no navegador.
 - Edições sem símbolo no Scryfall (ex.: Secret Lair Drop) mostram o logo do Deckarium no lugar.
-- **Página de uma edição** (`/edition.php?set=CODIGO`): símbolo, datas, links para os outros códigos da mesma coleção e filtros por nome, tipos e temas, raridade (com contagem) e cores, com ordenação por número de colecionador, nome, raridade, valor de mana, preço ou cor, em cartas únicas ou todas as versões (60 por página; filtros preservados na paginação).
+- **Página de uma edição** (`/edition.php?set=CODIGO`): símbolo, datas, links para os outros códigos da mesma coleção e filtros por nome, tipos e temas, raridade (com contagem), cores e **Só cartas novas** (`&new=1`, com a contagem no cabeçalho), com ordenação por número de colecionador, nome, raridade, valor de mana, preço ou cor, em cartas únicas ou todas as versões (60 por página; filtros preservados na paginação).
 - Os dados vêm de duas consultas agregadas sobre `cards`, guardadas por `catalogCached` por até 24 horas e renovadas a cada sincronização do catálogo. Estilos e script próprios: `assets/editions.css` e `assets/editions.js`.
 
 ## Comandantes
@@ -89,6 +92,12 @@ docker compose exec app php bin/sync_scryfall.php default_cards
 ```
 
 O banco pode ter mais de 100 mil linhas; isso não significa que você precise baixar a imagem de cada linha.
+
+Ao terminar, a sincronização roda `bin/warm_caches.php`, que prepara os caches pesados (índice de funções usado em Meus decks, linha do tempo das Edições, listas de edições dos filtros) para a primeira visita não esperar por eles. O cache de consultas fica em `/tmp`, um arquivo por usuário do sistema; rodando como root, o script passa a `www-data`. Para aquecer manualmente:
+
+```bash
+docker compose exec app php bin/warm_caches.php
+```
 
 Confira a relação entre impressões e cartas únicas:
 

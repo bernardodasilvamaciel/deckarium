@@ -5,6 +5,8 @@ require __DIR__ . '/partials.php';
 require __DIR__ . '/deck_library.php';
 require __DIR__ . '/catalog_cache.php';
 require __DIR__ . '/card_filters.php';
+require __DIR__ . '/deck_tokens.php';
+require __DIR__ . '/deck_lands.php';
 $authUser = authRequireLogin();
 $userId = (int)$authUser['id'];
 $_SESSION['builder_csrf'] ??= bin2hex(random_bytes(24));
@@ -67,6 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $message = 'Metas e regras restauradas: as metas voltaram a ser calculadas para a comandante.';
                 } elseif ($action === 'scoring_config') {
                     $scoreConfig = deckScoreConfigFromPost($_POST);
+                    $scoreConfig['land_fill'] = deckScoreConfig($deck['scoring_config'] ?? null)['land_fill'];
                     deckQuery('UPDATE builder_decks SET scoring_config=?::jsonb WHERE id=? AND user_id=?',[json_encode($scoreConfig),$id,$userId]);
                     $message = 'Metas e regras salvas para este deck.';
                 }
@@ -113,6 +116,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$moved) throw new RuntimeException('Nenhuma carta foi movida'.($skippedNotes ? ': '.implode('; ', $skippedNotes) : ' — a seleção mudou desde que a página abriu. Recarregue e tente novamente').'.');
                 $destinationLabel = ['candidate'=>'as candidatas','deck'=>'o deck'][$destination];
                 $message = $moved.($moved === 1 ? ' carta movida' : ' cartas movidas').' para '.$destinationLabel.'.'.($skippedNotes ? ' '.ucfirst(implode('; ', $skippedNotes)).'.' : '');
+            } elseif (in_array($action, ['autofill_lands','clear_auto_lands','land_target'], true)) {
+                // Base de mana automática: você cuida das mágicas; os terrenos são calculados e podem ser refeitos.
+                $landCommander = $deck['commander_id'] ? deckQuery('SELECT * FROM cards WHERE id=?',[$deck['commander_id']])->fetch() : null;
+                if (!$landCommander) throw new RuntimeException('Escolha uma comandante antes de completar os terrenos.');
+                // A meta de terrenos e a opção de compra ficam salvas no deck (scoring_config.land_fill).
+                $landRequest = deckLandRequestOptions($_POST);
+                if ($action !== 'clear_auto_lands' && ($landRequest['total'] !== null || $landRequest['buy'] !== null || ($_POST['land_total'] ?? null) === '')) {
+                    $landFill = deckScoreConfig($deck['scoring_config'] ?? null)['land_fill'];
+                    if (array_key_exists('land_total', $_POST)) $landFill['total'] = $landRequest['total'];
+                    if ($landRequest['buy'] !== null) $landFill['buy'] = $landRequest['buy'];
+                    deckQuery("UPDATE builder_decks SET scoring_config=COALESCE(scoring_config,'{}'::jsonb) || jsonb_build_object('land_fill', ?::jsonb) WHERE id=? AND user_id=?", [json_encode($landFill), $id, $userId]);
+                    $deck['scoring_config'] = deckQuery('SELECT scoring_config FROM builder_decks WHERE id=?', [$id])->fetchColumn();
+                }
+                if ($action === 'land_target') {
+                    $message = $landRequest['total'] === null ? 'Meta de terrenos: sugestão calculada pelo deck.' : 'Meta de terrenos salva: '.$landRequest['total'].'.';
+                    $landReturn = '/decks.php?deck='.$id.'&view=selection&stage=deck'.($landRequest['skip'] ? '&'.http_build_query(['land_skip'=>$landRequest['skip']]) : '').'#land-fill';
+                } elseif ($action === 'clear_auto_lands') {
+                    $removed = (int)deckQuery("SELECT COALESCE(SUM(quantity),0) FROM builder_items WHERE deck_id=? AND stage='deck' AND role=?",[$id,DECK_AUTO_LAND_ROLE])->fetchColumn();
+                    deckQuery("DELETE FROM builder_items WHERE deck_id=? AND stage='deck' AND role=?",[$id,DECK_AUTO_LAND_ROLE]);
+                    $message = $removed ? $removed.' terreno(s) automático(s) retirado(s) do deck. Os terrenos que você escolheu continuam.' : 'Não havia terrenos automáticos no deck.';
+                } else {
+                    $landPlan = deckLandPlan($id, $landCommander, deckScoreLoadItems($id,$userId), deckScoreConfigFor($deck,$landCommander), ['total'=>null] + $landRequest);
+                    if ($landPlan['blocked']) throw new RuntimeException($landPlan['blocked']);
+                    if (!$landPlan['need'] && !$landPlan['auto_existing']) throw new RuntimeException('O deck já tem os terrenos da meta.');
+                    $added = deckApplyLandPlan($id, $landPlan);
+                    $message = $added.' terreno(s) no deck: '.count($landPlan['picks']).' não básico(s) e '.array_sum(array_column($landPlan['basics'],'quantity')).' básico(s).'.($landPlan['missing_count'] ? ' '.$landPlan['missing_count'].' cópia(s) não estão livres na coleção.' : ' Todos vêm da sua coleção.');
+                }
             } elseif ($action === 'sync_edhrec') {
                 if(!$deck['commander_id']) throw new RuntimeException('Escolha um comandante antes de buscar recomendações.');
                 $commanderCard=deckQuery('SELECT * FROM cards WHERE id=?',[$deck['commander_id']])->fetch();
@@ -218,6 +248,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $return.=$action==='prepare_upgrade' ? '&upgrade_card='.rawurlencode((string)($_POST['card']??'')).'#upgrade' : '#selection';
         }
         if($id && $action==='sync_edhrec') $return='/decks.php?deck='.$id.'&view=guide';
+        if($id && isset($landReturn)) $return=$landReturn;
         if($id && in_array($action,['strategy','commander','visibility'],true)) $return='/decks.php?deck='.$id.'&view=overview';
         header('Location: '.$return, true,303); exit;
     } catch (Throwable $e) {
@@ -226,21 +257,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 session_write_close();
-$decks = deckQuery("SELECT d.*,c.name commander,c.id commander_card_id,(SELECT COALESCE(SUM(quantity),0) FROM builder_items WHERE deck_id=d.id AND stage='deck') + CASE WHEN d.commander_id IS NULL THEN 0 ELSE 1 END card_count FROM builder_decks d LEFT JOIN cards c ON c.id=d.commander_id WHERE d.user_id=? ORDER BY d.id DESC",[$userId])->fetchAll();
-$deckValues=[];
-$deckValueRows=deckQuery("SELECT chosen.deck_id,chosen.quantity,c.prices,c.raw,COALESCE(bc.normal_quantity,0) normal_quantity,COALESCE(bc.foil_quantity,0) foil_quantity
-    FROM (
-        SELECT i.deck_id,i.card_id,SUM(i.quantity)::int quantity FROM builder_items i JOIN builder_decks ud ON ud.id=i.deck_id AND ud.user_id=? WHERE i.stage='deck' GROUP BY i.deck_id,i.card_id
-        UNION ALL SELECT d.id,d.commander_id,1 FROM builder_decks d WHERE d.commander_id IS NOT NULL AND d.user_id=?
-    ) chosen JOIN cards c ON c.id=chosen.card_id
-    LEFT JOIN ".deckCollectionPrintingSql()." bc ON bc.scryfall_id=c.id",[$userId,$userId])->fetchAll();
-foreach($deckValueRows as $pricedCard){
-    $deckId=(int)$pricedCard['deck_id'];$quantity=(int)$pricedCard['quantity'];$price=deckSelectedPriceBrl($pricedCard);
-    $deckValues[$deckId]??=['total'=>0.0,'unpriced'=>0];
-    if($price===null)$deckValues[$deckId]['unpriced']+=$quantity;else $deckValues[$deckId]['total']+=$price*$quantity;
-}
 $deck = $id ? deckQuery('SELECT * FROM builder_decks WHERE id=? AND user_id=?',[$id,$userId])->fetch() : null;
 if ($id && !$deck) { http_response_code(404); $id = 0; $error = $error ?: 'Deck não encontrado na sua conta.'; }
+// Lista de decks com valores: só na biblioteca (nenhum deck aberto); lê preços de todas as cartas de todos os decks.
+$decks=[]; $deckValues=[];
+if (!$deck) {
+    $decks = deckQuery("SELECT d.*,c.name commander,c.id commander_card_id,COALESCE(c.raw->'image_uris'->>'art_crop',c.raw->'card_faces'->0->'image_uris'->>'art_crop') commander_art,(SELECT COALESCE(SUM(quantity),0) FROM builder_items WHERE deck_id=d.id AND stage='deck') + CASE WHEN d.commander_id IS NULL THEN 0 ELSE 1 END card_count FROM builder_decks d LEFT JOIN cards c ON c.id=d.commander_id WHERE d.user_id=? ORDER BY d.id DESC",[$userId])->fetchAll();
+    $deckValueRows=deckQuery("SELECT chosen.deck_id,chosen.quantity,c.prices,c.raw,COALESCE(bc.normal_quantity,0) normal_quantity,COALESCE(bc.foil_quantity,0) foil_quantity
+        FROM (
+            SELECT i.deck_id,i.card_id,SUM(i.quantity)::int quantity FROM builder_items i JOIN builder_decks ud ON ud.id=i.deck_id AND ud.user_id=? WHERE i.stage='deck' GROUP BY i.deck_id,i.card_id
+            UNION ALL SELECT d.id,d.commander_id,1 FROM builder_decks d WHERE d.commander_id IS NOT NULL AND d.user_id=?
+        ) chosen JOIN cards c ON c.id=chosen.card_id
+        LEFT JOIN ".deckCollectionPrintingSql()." bc ON bc.scryfall_id=c.id",[$userId,$userId])->fetchAll();
+    foreach($deckValueRows as $pricedCard){
+        $deckId=(int)$pricedCard['deck_id'];$quantity=(int)$pricedCard['quantity'];$price=deckSelectedPriceBrl($pricedCard);
+        $deckValues[$deckId]??=['total'=>0.0,'unpriced'=>0];
+        if($price===null)$deckValues[$deckId]['unpriced']+=$quantity;else $deckValues[$deckId]['total']+=$price*$quantity;
+    }
+}
 $commander = $deck && $deck['commander_id'] ? deckQuery("SELECT c.*,COALESCE(bc.quantity,0) owned_printing,COALESCE(bc.normal_quantity,0) normal_quantity,COALESCE(bc.foil_quantity,0) foil_quantity FROM cards chosen JOIN cards c ON COALESCE(c.oracle_id,c.id)=COALESCE(chosen.oracle_id,chosen.id) LEFT JOIN ".deckCollectionPrintingSql()." bc ON bc.scryfall_id=c.id WHERE chosen.id=? ORDER BY (COALESCE(bc.quantity,0)>0) DESC,(c.lang='en') DESC,(c.local_image IS NOT NULL) DESC,c.released_at DESC NULLS LAST,c.id LIMIT 1",[$deck['commander_id']])->fetch() : null;
 $identity = $commander ? (json_decode($commander['color_identity'],true) ?: []) : [];
 $identityMana = implode('', array_map(fn($color)=>'{'.$color.'}', $identity));
@@ -316,16 +350,12 @@ if ($leader) {
     $selectionSynergyParams[] = $leader;
     $selectionSynergySelect = 'synergy.metric synergy_metric,synergy.score synergy_score';
 }
-$items = $deck ? deckQuery(deckOwnedSql()."SELECT c.*,i.stage,i.quantity,i.role,i.notes,COALESCE(o.owned,0) owned,COALESCE(bc.quantity,0) owned_printing,COALESCE(bc.normal_quantity,0) normal_quantity,COALESCE(bc.foil_quantity,0) foil_quantity,{$selectionSynergySelect},
-    COALESCE((SELECT SUM(x.quantity)::int FROM (
-        SELECT SUM(oi.quantity)::int quantity FROM builder_items oi JOIN builder_decks oid ON oid.id=oi.deck_id AND oid.user_id={$userId} JOIN cards oc ON oc.id=oi.card_id WHERE oi.stage='deck' AND oi.deck_id<>i.deck_id AND COALESCE(oc.oracle_id,oc.id)=COALESCE(c.oracle_id,c.id)
-        UNION ALL SELECT COUNT(*)::int quantity FROM builder_decks od JOIN cards oc ON oc.id=od.commander_id WHERE od.user_id={$userId} AND od.id<>i.deck_id AND COALESCE(oc.oracle_id,oc.id)=COALESCE(c.oracle_id,c.id)
-    ) x),0) other_used,
-    COALESCE((SELECT COUNT(DISTINCT x.deck_id)::int FROM (
-        SELECT oi.deck_id FROM builder_items oi JOIN builder_decks oid ON oid.id=oi.deck_id AND oid.user_id={$userId} JOIN cards oc ON oc.id=oi.card_id WHERE oi.stage='deck' AND oi.deck_id<>i.deck_id AND COALESCE(oc.oracle_id,oc.id)=COALESCE(c.oracle_id,c.id)
-        UNION SELECT od.id FROM builder_decks od JOIN cards oc ON oc.id=od.commander_id WHERE od.user_id={$userId} AND od.id<>i.deck_id AND COALESCE(oc.oracle_id,oc.id)=COALESCE(c.oracle_id,c.id)
-    ) x),0) other_decks
-    FROM builder_items i JOIN cards c ON c.id=i.card_id LEFT JOIN owned o ON o.logical_id=COALESCE(c.oracle_id,c.id) LEFT JOIN ".deckCollectionPrintingSql()." bc ON bc.scryfall_id=c.id{$selectionSynergyJoin} WHERE i.deck_id=? ORDER BY c.name",array_merge($selectionSynergyParams,[$id]))->fetchAll() : [];
+$items = $deck ? deckQuery(deckOwnedSql().", elsewhere AS (SELECT x.logical_id,SUM(x.quantity)::int used,COUNT(DISTINCT x.deck_id)::int decks FROM (
+        SELECT oi.deck_id,COALESCE(oc.oracle_id,oc.id) logical_id,oi.quantity FROM builder_items oi JOIN builder_decks od ON od.id=oi.deck_id AND od.user_id={$userId} JOIN cards oc ON oc.id=oi.card_id WHERE oi.stage='deck' AND oi.deck_id<>".(int)$id."
+        UNION ALL SELECT od.id,COALESCE(oc.oracle_id,oc.id),1 FROM builder_decks od JOIN cards oc ON oc.id=od.commander_id WHERE od.user_id={$userId} AND od.id<>".(int)$id."
+    ) x GROUP BY x.logical_id)
+    SELECT c.*,i.stage,i.quantity,i.role,i.notes,COALESCE(o.owned,0) owned,COALESCE(bc.quantity,0) owned_printing,COALESCE(bc.normal_quantity,0) normal_quantity,COALESCE(bc.foil_quantity,0) foil_quantity,{$selectionSynergySelect},COALESCE(el.used,0) other_used,COALESCE(el.decks,0) other_decks
+    FROM builder_items i JOIN cards c ON c.id=i.card_id LEFT JOIN owned o ON o.logical_id=COALESCE(c.oracle_id,c.id) LEFT JOIN ".deckCollectionPrintingSql()." bc ON bc.scryfall_id=c.id LEFT JOIN elsewhere el ON el.logical_id=COALESCE(c.oracle_id,c.id){$selectionSynergyJoin} WHERE i.deck_id=? ORDER BY c.name",array_merge($selectionSynergyParams,[$id]))->fetchAll() : [];
 $needPanel = [];
 if ($commander && !$choosingCommander && in_array($view,['needs','overview'],true)) {
     try {
@@ -342,7 +372,7 @@ $pendingUpgrade=null; $pendingUpgrades=[]; $upgradeCuts=[];
 if($deck) {
     $pendingUpgrades=deckQuery("SELECT u.*,outc.name remove_name,inc.name add_name FROM deck_upgrades u JOIN cards outc ON outc.id=u.remove_card_id JOIN cards inc ON inc.id=u.add_card_id WHERE u.deck_id=? AND u.status='planned' ORDER BY u.created_at DESC",[$id])->fetchAll();
     $pendingUpgrade=$pendingUpgrades[0]??null;
-    if($commander) {
+    if($commander && !empty($_GET['upgrade_card'])) {
         $upgradeCuts=deckQuery("SELECT c.*,i.quantity,s.score cut_score FROM builder_items i JOIN cards c ON c.id=i.card_id LEFT JOIN deck_synergy s ON s.card_id=c.id AND s.commander_id=? WHERE i.deck_id=? AND i.stage='deck' AND c.id<>? ORDER BY (s.score IS NULL) ASC,s.score ASC,c.name",[$commander['id'],$id,$commander['id']])->fetchAll();
     }
 }
@@ -456,7 +486,7 @@ if ($catalogVisible) {
     $like=fn($s)=>'%'.str_replace(['\\','%','_'],['\\\\','\\%','\\_'],$s).'%';
     if($q!==''){$where[]='c.name ILIKE ?';$params[]=$like($q);}
     // Cartas da Art Series não são jogáveis e não devem aparecer como possibilidades de deck.
-    if (!$choosingCommander) $where[]="COALESCE(c.raw->>'set_type','') <> 'art_series'";
+    if (!$choosingCommander) $where[]="c.layout <> 'art_series'";
     $textExpr="COALESCE(c.oracle_text,'') || ' ' || COALESCE((SELECT string_agg(f->>'oracle_text',' ') FROM jsonb_array_elements(c.card_faces) f),'')";
     $typeConditions=[];
     foreach (array_slice(deckTerms($type),0,12) as $term) {
@@ -564,7 +594,7 @@ pageHeader('Meus decks');
 <div class="deck-library-heading"><p class="muted"><?= count($decks) ?> <?= count($decks)===1?'deck':'decks' ?> · <a href="/collection.php"><?= number_format((int)$collection['total'],0,',','.') ?> cartas na coleção</a></p><div class="deck-library-actions"><button type="button" class="secondary-link" data-dialog-open="deck-import-dialog">Importar lista</button><button type="button" class="primary-link" data-dialog-open="deck-create-dialog">Novo deck</button></div></div>
 <?php if(!$decks): ?><div class="empty-state"><h2>Nenhum deck ainda</h2><p>Planeje do zero, escolhendo a comandante e as cartas aos poucos, ou importe uma lista pronta do Moxfield.</p><p class="deck-empty-actions"><button type="button" class="primary-link" data-dialog-open="deck-create-dialog">Planejar do zero</button><button type="button" class="secondary-link" data-dialog-open="deck-import-dialog">Importar uma lista</button></p></div><?php endif; ?>
 <div class="deck-library-rows"><?php foreach($decks as $d): ?>
-<article class="deck-library-row" <?php if($d['commander_card_id']): ?>style="--deck-art:url('/image.php?id=<?= h($d['commander_card_id']) ?>')"<?php endif; ?>><a href="?deck=<?= $d['id'] ?>"><?php if($d['commander_card_id']): ?><img class="deck-library-commander" src="/image.php?id=<?= h($d['commander_card_id']) ?>" alt="" loading="lazy"><?php endif; ?><span class="deck-library-copy"><strong><?= h($d['name']) ?></strong><span><?= h($d['commander']?:'Comandante a escolher') ?></span></span></a>
+<article class="deck-library-row<?= $d['commander_art'] ? ' has-art-crop' : '' ?>" <?php if($d['commander_card_id']): ?>style="--deck-art:url('<?= h($d['commander_art'] ?: '/image.php?id='.$d['commander_card_id']) ?>')"<?php endif; ?>><a href="?deck=<?= $d['id'] ?>"><?php if($d['commander_card_id']): ?><img class="deck-library-commander" src="/image.php?id=<?= h($d['commander_card_id']) ?>" alt="" loading="lazy"><?php endif; ?><span class="deck-library-copy"><strong><?= h($d['name']) ?></strong><span><?= h($d['commander']?:'Comandante a escolher') ?></span></span></a>
 <?php $listedValue=$deckValues[(int)$d['id']]??['total'=>0.0,'unpriced'=>0]; ?><span class="deck-library-meta"><span class="deck-library-count"><?= (int)$d['card_count'] ?> cartas</span><strong class="deck-library-value">R$ <?= number_format((float)$listedValue['total'],2,',','.') ?></strong><?php if($listedValue['unpriced']): ?><small><?= (int)$listedValue['unpriced'] ?> sem cotação</small><?php endif; ?></span><span class="deck-state <?= $d['status']==='ready'?'is-ready':'' ?>"><?= $d['status']==='ready'?'Finalizado':'Em planejamento' ?></span><?php if(in_array($d['is_public']??false,[true,'t',1,'1'],true)): ?><a class="deck-public-badge" href="/public_deck.php?id=<?= (int)$d['id'] ?>" title="Qualquer pessoa com o link pode ver">Público</a><?php endif; ?>
 <button type="button" class="deck-delete-trigger" data-deck-delete="deck-delete-<?= $d['id'] ?>" aria-haspopup="dialog">Excluir</button><dialog class="deck-delete-dialog" id="deck-delete-<?= $d['id'] ?>" aria-labelledby="deck-delete-title-<?= $d['id'] ?>"><form method="dialog" class="deck-delete-cancel"><button type="submit" aria-label="Fechar confirmação">×</button></form><h3 id="deck-delete-title-<?= $d['id'] ?>">Excluir “<?= h($d['name']) ?>”?</h3><p>O deck e seus registros de upgrade serão excluídos. Sua coleção permanecerá salva.</p><div class="deck-delete-actions"><button type="button" class="secondary-link" data-dialog-close>Cancelar</button><form method="post"><input type="hidden" name="csrf" value="<?= h($csrf) ?>"><input type="hidden" name="deck" value="<?= $d['id'] ?>"><input type="hidden" name="action" value="delete_deck"><button class="deck-delete-confirm">Excluir deck</button></form></div></dialog></article>
 <?php endforeach; ?></div></section>
@@ -599,7 +629,7 @@ $candidateCount = array_sum(array_map(fn($row) => $row['stage']==='candidate' ? 
 <div class="deck-workflow-bar <?= $isComplete?'is-complete':'' ?>"><div><strong><?= $isComplete?'Deck finalizado automaticamente':'Planejamento em andamento' ?></strong><span><?= $isComplete?'100 cartas aprovadas na seleção.':'A seleção é finalizada automaticamente quando chegar a 100 cartas no deck.' ?></span></div><span class="deck-progress"><?= $finalCount ?>/100 cartas</span></div>
 <?php if($view==='overview'): ?>
 <section id="intent" class="builder-intro">
-<div class="panel"><div class="panel-heading"><h2>Comandante</h2><a href="?deck=<?= $id ?>&choose=1#explore">Trocar</a></div><div class="builder-commander"><?php if($src=cardImageUrl($commander)): ?><img src="<?= h($src) ?>" alt="<?= h($commander['name']) ?>" width="146" height="204"><?php endif; ?><div><h3><?= h($commander['name']) ?></h3><p class="commander-identity"><strong>Identidade:</strong> <?= $identity?manaSymbols($identityMana):'<span class="muted">Incolor</span>' ?></p><p><?= nl2br(h(deckText($commander))) ?></p></div></div></div>
+<div class="panel"><div class="panel-heading"><h2>Comandante</h2><a href="?deck=<?= $id ?>&choose=1#explore">Trocar</a></div><div class="builder-commander"><?php if($src=cardImageUrl($commander)): ?><img src="<?= h($src) ?>" alt="<?= h($commander['name']) ?>" width="146" height="204"><?php endif; ?><div><h3><?= h($commander['name']) ?></h3><p class="commander-identity"><strong>Identidade:</strong> <?= $identity?manaSymbols($identityMana):'<span class="muted">Incolor</span>' ?></p><p><?= oracleText(deckText($commander)) ?></p></div></div></div>
 <form method="post" class="panel builder-form"><?php $tokenFields('strategy'); ?><h2>Minha intenção</h2><label>Estratégia e mecânicas<textarea name="strategy" rows="4" placeholder="Plano principal, temas secundários e o que quero evitar"><?= h($deck['strategy']) ?></textarea></label><label>Termos Oracle para explorar<input name="terms" value="<?= h($deck['terms']) ?>" placeholder="sacrifice; land; graveyard"></label><small>Separe palavras ou frases por ponto e vírgula. Estes termos são filtros escolhidos por você, não uma avaliação automática de sinergia.</small><button class="primary-link">Salvar intenção</button></form>
 </section>
 <?php $deckPublic=in_array($deck['is_public']??false,[true,'t',1,'1'],true); $publicUrl='/public_deck.php?id='.$id; ?>

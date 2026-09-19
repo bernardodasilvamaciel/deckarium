@@ -299,16 +299,65 @@
       if (event.target.name !== 'preset') { syncOutputs(); preview(); }
     });
   });
+  // As janelas das cartas ficam fora dos grupos: assim abrem em qualquer visualização (grupo fechado ou oculto).
+  document.querySelectorAll('[data-selection-workspace] dialog.selection-dialog').forEach(dialog => dialog.closest('[data-selection-workspace]').append(dialog));
   document.querySelectorAll('[data-selection-open]').forEach(trigger => {
     const dialog = document.getElementById(trigger.dataset.selectionOpen);
     if (!(dialog instanceof HTMLDialogElement)) return;
-    trigger.addEventListener('click', () => dialog.showModal());
+    trigger.addEventListener('click', () => { dialog.deckariumOpener = trigger; dialog.showModal(); });
+    if (dialog.dataset.dialogReady) return;
+    dialog.dataset.dialogReady = '1';
     dialog.querySelectorAll('[data-dialog-close]').forEach(button => button.addEventListener('click', () => dialog.close()));
     dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
-    dialog.addEventListener('close', () => trigger.focus({ preventScroll: true }));
+    dialog.addEventListener('close', () => dialog.deckariumOpener?.focus({ preventScroll: true }));
   });
+  /* Completar com terrenos: a prévia (GET) e a aplicação (POST) compartilham meta, compra e terrenos desmarcados. */
+  const landDialog = document.querySelector('[data-land-dialog]');
+  if (landDialog instanceof HTMLDialogElement) {
+    const previewForm = landDialog.querySelector('[data-land-preview]');
+    const applyForm = landDialog.querySelector('[data-land-apply]');
+    const carry = (target, name, value) => { const input = document.createElement('input'); input.type = 'hidden'; input.name = name; input.value = value; target.append(input); };
+    previewForm?.addEventListener('submit', () => {
+      applyForm?.querySelectorAll('input[name="land_shown[]"]').forEach(input => carry(previewForm, 'land_shown[]', input.value));
+      applyForm?.querySelectorAll('input[name="land_keep[]"]:checked').forEach(input => carry(previewForm, 'land_keep[]', input.value));
+    });
+    applyForm?.addEventListener('submit', () => {
+      const total = previewForm?.querySelector('input[name="land_total"]');
+      const buy = previewForm?.querySelector('input[name="land_buy"]');
+      applyForm.querySelectorAll('input[type="hidden"][name="land_total"], input[type="hidden"][name="land_buy"]').forEach(input => input.remove());
+      if (total) carry(applyForm, 'land_total', total.value);
+      if (buy) { carry(applyForm, 'land_buy_set', '1'); if (buy.checked) carry(applyForm, 'land_buy', '1'); }
+    });
+    const params = new URLSearchParams(location.search);
+    if (location.hash === '#land-fill' || params.has('land_skip[]')) {
+      landDialog.deckariumOpener = document.querySelector('[data-selection-open="land-fill"]');
+      landDialog.showModal();
+    }
+  }
   const selectionWorkspace = document.querySelector('[data-selection-workspace]');
   if (selectionWorkspace) {
+    /* Visualizações: por tipo (grupos recolhíveis), cartas grandes (tudo aberto) e mapa de jogo. */
+    const layoutKey = 'deckarium:selection-layout';
+    const layoutButtons = [...selectionWorkspace.querySelectorAll('[data-layout]')];
+    const typeGroups = [...selectionWorkspace.querySelectorAll('[data-selection-group]')];
+    let savedOpen = null;
+    const applyLayout = (layout, remember) => {
+      if (!layoutButtons.some(button => button.dataset.layout === layout)) layout = 'types';
+      const previous = selectionWorkspace.dataset.layout || 'types';
+      if (layout === 'large' && previous !== 'large') { savedOpen = typeGroups.map(group => group.open); typeGroups.forEach(group => { group.open = true; }); }
+      if (layout !== 'large' && previous === 'large' && savedOpen) { typeGroups.forEach((group, index) => { group.open = savedOpen[index]; }); savedOpen = null; }
+      selectionWorkspace.dataset.layout = layout;
+      layoutButtons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.layout === layout)));
+      selectionWorkspace.querySelectorAll('[data-layout-panel]').forEach(panel => { panel.hidden = !panel.dataset.layoutPanel.split(' ').includes(layout); });
+      selectionWorkspace.querySelectorAll('[data-layout-only]').forEach(node => { node.hidden = node.dataset.layoutOnly !== layout; });
+      if (remember) { try { localStorage.setItem(layoutKey, layout); } catch (error) { /* armazenamento indisponível */ } }
+    };
+    layoutButtons.forEach(button => button.addEventListener('click', () => applyLayout(button.dataset.layout, true)));
+    // Em "Cartas grandes" os grupos ficam sempre abertos.
+    typeGroups.forEach(group => group.querySelector('summary')?.addEventListener('click', event => { if (selectionWorkspace.dataset.layout === 'large') event.preventDefault(); }));
+    let storedLayout = 'types';
+    try { storedLayout = localStorage.getItem(layoutKey) || 'types'; } catch (error) { storedLayout = 'types'; }
+
     const groups = [...selectionWorkspace.querySelectorAll('[data-selection-group]')];
     const storageKey = 'deckarium:selection-open:' + selectionWorkspace.dataset.selectionWorkspace;
     let remembered = [];
@@ -317,7 +366,8 @@
     const persist = () => {
       try { localStorage.setItem(storageKey, JSON.stringify(groups.filter(group => group.open).map(group => group.dataset.selectionGroup))); } catch (error) { /* armazenamento indisponível */ }
     };
-    groups.forEach(group => group.addEventListener('toggle', persist));
+    groups.forEach(group => group.addEventListener('toggle', () => { if (selectionWorkspace.dataset.layout !== 'large') persist(); }));
+    if (layoutButtons.length) applyLayout(storedLayout, false);
     selectionWorkspace.querySelector('[data-selection-expand]')?.addEventListener('click', () => { groups.forEach(group => { group.open = true; }); persist(); });
     selectionWorkspace.querySelector('[data-selection-collapse]')?.addEventListener('click', () => { groups.forEach(group => { group.open = false; }); persist(); });
 
@@ -333,7 +383,10 @@
       const update = () => {
         const chosen = boxes.filter(box => box.checked);
         const copies = chosen.reduce((sum, box) => sum + Number(box.dataset.quantity || 1), 0);
-        boxes.forEach(box => box.closest('.selection-slot')?.classList.toggle('is-picked', box.checked));
+        boxes.forEach(box => {
+          box.closest('.selection-slot')?.classList.toggle('is-picked', box.checked);
+          selectionWorkspace.querySelectorAll(`[data-map-card="${box.value}"]`).forEach(card => card.classList.toggle('is-picked', box.checked));
+        });
         countNode.textContent = chosen.length ? `${chosen.length} ${chosen.length === 1 ? 'carta marcada' : 'cartas marcadas'}` : 'Nenhuma carta marcada';
         bulkForm.querySelectorAll('[data-bulk-submit]').forEach(button => { button.disabled = !chosen.length; });
         const deckButton = bulkForm.querySelector('[data-bulk-submit="deck"]');
@@ -375,10 +428,10 @@
       selectionWorkspace.addEventListener('click', event => {
         if (!selectionWorkspace.classList.contains('is-bulk')) return;
         const tile = event.target instanceof Element ? event.target.closest('button[data-selection-open]') : null;
-        if (!tile) return;
+        if (!tile || tile.closest('dialog') || tile.dataset.selectionOpen === 'land-fill') return;
         event.preventDefault();
         event.stopPropagation();
-        const box = tile.closest('.selection-slot')?.querySelector('[data-bulk-card]');
+        const box = tile.closest('.selection-slot')?.querySelector('[data-bulk-card]') || (tile.dataset.mapCard ? boxes.find(candidate => candidate.value === tile.dataset.mapCard) : null);
         if (box) { box.checked = !box.checked; update(); }
       }, true);
       document.addEventListener('keydown', event => {
@@ -445,6 +498,7 @@
   };
   document.addEventListener('error', event => {
     if (event.target instanceof HTMLImageElement && event.target.classList.contains('set-icon')) return;
+    if (event.target instanceof Element && event.target.closest('[data-profile-preview]')) return;
     unavailable(event.target);
   }, true);
   document.addEventListener('error', event => {
@@ -458,7 +512,7 @@
     }
   }, true);
   document.querySelectorAll('img').forEach(img => {
-    if (img.complete && img.naturalWidth === 0) unavailable(img);
+    if (img.complete && img.naturalWidth === 0 && img.getAttribute('src') && !img.closest('[data-profile-preview]')) unavailable(img);
   });
   document.addEventListener('keydown', event => {
     if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey || event.target.closest('input,textarea,select,[contenteditable]')) return;
@@ -916,3 +970,38 @@
     if (wasActive) pollSync();
   }
 })();
+
+/* Minha conta › Perfil público: prévia ao vivo de nome, foto, capa e enquadramento. */
+document.querySelectorAll('[data-profile-editor]').forEach(editor => {
+  const preview = editor.querySelector('[data-profile-preview]');
+  const cover = editor.querySelector('[data-preview-cover]');
+  const avatar = editor.querySelector('[data-preview-avatar]');
+  const initials = editor.querySelector('[data-preview-initials]');
+  const name = editor.querySelector('[data-preview-name]');
+  const nameInput = editor.querySelector('[data-preview-source="name"]');
+  const fallbackName = nameInput?.placeholder || '';
+  nameInput?.addEventListener('input', () => { if (name) name.textContent = nameInput.value.trim() || fallbackName; });
+  editor.querySelector('[data-preview-position]')?.addEventListener('input', event => preview?.style.setProperty('--cover-y', event.target.value + '%'));
+  editor.querySelectorAll('[data-preview-file]').forEach(input => input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { input.setCustomValidity('A imagem passa de 2 MB.'); input.reportValidity(); input.value = ''; return; }
+    input.setCustomValidity('');
+    const url = URL.createObjectURL(file);
+    if (input.dataset.previewFile === 'avatar' && avatar) { avatar.src = url; avatar.hidden = false; if (initials) initials.hidden = true; }
+    if (input.dataset.previewFile === 'cover' && cover) {
+      cover.src = url; cover.hidden = false; preview?.classList.add('has-cover'); preview?.classList.remove('is-card-art');
+      const upload = editor.querySelector('input[name="cover_mode"][value="upload"]');
+      if (upload) { upload.checked = true; syncModes(); }
+    }
+  }));
+  const syncModes = () => {
+    const mode = editor.querySelector('input[name="cover_mode"]:checked')?.value || 'none';
+    editor.querySelectorAll('[data-cover-mode-only]').forEach(node => { node.hidden = node.dataset.coverModeOnly !== mode; });
+  };
+  editor.querySelectorAll('input[name="cover_mode"]').forEach(radio => radio.addEventListener('change', syncModes));
+  syncModes();
+  const bio = editor.querySelector('[data-bio-counter]');
+  const count = editor.querySelector('[data-bio-count]');
+  bio?.addEventListener('input', () => { if (count) count.textContent = String(bio.value.length); });
+});

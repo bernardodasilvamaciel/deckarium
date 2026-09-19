@@ -666,3 +666,203 @@ body:has(.selection-dialog[open]){overflow:hidden}
 .builder-stock.is-missing{color:var(--muted);font-weight:500}
 .builder-stock.is-missing::before{background:transparent;border:1px solid currentColor}
 .builder-stock a{color:inherit;text-decoration:underline;text-underline-offset:2px}
+
+/* Minha seleção: visualizações (por tipo, cartas grandes, mapa de jogo) */
+.selection-toolbar{flex-wrap:wrap}
+.selection-layouts{display:inline-flex;gap:0;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.selection-layouts button{min-height:32px;padding:5px 12px;border:0;border-radius:6px;background:transparent;color:var(--muted);font:600 .8rem 'Segoe UI',sans-serif;cursor:pointer;transition:background-color .15s ease-out,color .15s ease-out}
+.selection-layouts button:hover{color:var(--ink);background:var(--soft)}
+.selection-layouts button[aria-pressed="true"]{background:var(--accent);color:#fffefa}
+.selection-layouts button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.selection-land-fill{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:6px 12px;border:1px solid var(--accent);border-radius:6px;background:var(--surface);color:var(--accent);font:700 .8rem 'Segoe UI',sans-serif;cursor:pointer}
+.selection-land-fill:hover{background:var(--soft)}
+.selection-land-fill b{min-width:22px;padding:1px 6px;border-radius:999px;background:var(--accent);color:#fffefa;font-size:.72rem;font-variant-numeric:tabular-nums}
+
+/* Cartas grandes: todos os tipos abertos, sem recolher, cartas em tamanho de leitura */
+[data-layout="large"] .selection-type>summary{cursor:default;min-height:54px}
+[data-layout="large"] .selection-type>summary:hover{background:transparent}
+[data-layout="large"] .selection-type-peek,[data-layout="large"] .selection-type-chevron{display:none}
+[data-layout="large"] .selection-slots{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:26px 22px;padding:24px 22px 28px}
+[data-layout="large"] .selection-tile{padding:0 0 10px;border:0;background:transparent}
+[data-layout="large"] .selection-tile:hover{background:transparent;transform:translateY(-4px)}
+[data-layout="large"] .selection-tile .selection-art img{border-radius:12px;box-shadow:0 12px 28px #17241c33}
+[data-layout="large"] .selection-tile-name{font-size:.95rem;margin-top:4px}
+[data-layout="large"] .selection-tile-meta,[data-layout="large"] .selection-tile-synergy{font-size:.78rem}
+[data-layout="large"] .is-commander .selection-art img{box-shadow:0 0 0 3px var(--accent),0 12px 28px #17241c33}
+
+/* Mapa de jogo: função × valor de mana, com pilhas de cartas */
+.play-map{--card-w:104px;--card-h:145px;--peek:27px;margin-top:14px}
+.play-map-intro{display:grid;gap:4px;margin-bottom:14px;max-width:80ch}
+.play-map-intro p{margin:0;font-size:.86rem;line-height:1.5}
+.play-map-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--surface);scrollbar-color:var(--accent) var(--soft)}
+.play-map-scroll:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.play-map-grid{display:grid;grid-template-columns:168px repeat(var(--map-columns),minmax(calc(var(--card-w) + 20px),1fr));min-width:calc(168px + var(--map-columns) * (var(--card-w) + 20px))}
+.play-map-corner,.play-map-colhead{padding:12px 10px;background:#f3f5ef;border-bottom:1px solid var(--line)}
+.play-map-corner{display:flex;flex-direction:column;justify-content:space-between;gap:6px;color:var(--muted);font:700 .68rem 'Segoe UI',sans-serif;letter-spacing:.06em;text-transform:uppercase;border-right:1px solid var(--line);position:sticky;left:0;z-index:3}
+.play-map-corner span:last-child{align-self:flex-end}
+.play-map-colhead{display:grid;justify-items:center;gap:1px;text-align:center}
+.play-map-colhead strong{font:700 1.25rem/1 Spectral,Georgia,serif;color:var(--ink)}
+.play-map-colhead small{color:var(--muted);font-size:.68rem}
+.play-map-colhead span{margin-top:4px;font:700 .78rem 'Segoe UI',sans-serif;color:var(--accent);font-variant-numeric:tabular-nums}
+.play-map-colhead span i,.play-map-lane-count i{font-style:normal;color:var(--muted);font-weight:600}
+.play-map-colhead.is-short span{color:#a87520}
+.play-map-lane{display:flex;flex-direction:column;gap:3px;padding:14px 12px;border-right:1px solid var(--line);border-top:1px solid var(--line);background:var(--surface);position:sticky;left:0;z-index:2}
+.play-map-lane strong{font:700 1rem Spectral,Georgia,serif}
+.play-map-lane small{color:var(--muted);font-size:.7rem;line-height:1.3}
+.play-map-lane-count{margin-top:6px;font:800 .9rem 'Segoe UI',sans-serif;color:var(--accent);font-variant-numeric:tabular-nums}
+.play-map-lane-count em{font-style:normal;font-size:.7rem;font-weight:700;color:#a87520}
+.play-map-meter{display:block;height:4px;margin-top:4px;border-radius:999px;background:#e6e4dc;overflow:hidden}
+.play-map-meter i{display:block;height:100%;border-radius:inherit;background:var(--accent)}
+.play-map-lane.is-short .play-map-meter i{background:#c79038}
+.play-map-cell{display:flex;justify-content:center;align-items:flex-start;min-height:120px;padding:12px 8px 14px;border-top:1px solid var(--line);border-left:1px dashed #e3e3db}
+.play-map-cell[data-empty]{background:repeating-linear-gradient(135deg,transparent 0 9px,#f1f1ea 9px 10px)}
+.play-map-cell.lane-commander,.play-map-lane.lane-commander{background-color:#eef3ec}
+.map-pile{position:relative;width:var(--card-w);height:calc(var(--card-h) + (var(--n) - 1) * var(--peek))}
+.map-card{position:absolute;left:0;top:calc(var(--i) * var(--peek));display:block;width:var(--card-w);padding:0;border:0;border-radius:6px;background:transparent;cursor:pointer;z-index:calc(var(--i) + 1);transition:transform .16s ease-out,box-shadow .16s ease-out;box-shadow:0 2px 6px #17241c33}
+.map-card img{display:block;width:100%;height:auto;aspect-ratio:488/680;object-fit:cover;border-radius:6px}
+.map-card:hover,.map-card:focus-visible{z-index:60;transform:translateY(-8px) scale(1.12);box-shadow:0 16px 30px #17241c55;outline:none}
+.map-card:focus-visible{box-shadow:0 0 0 3px var(--accent),0 16px 30px #17241c55}
+.map-card.is-commander{box-shadow:0 0 0 3px var(--accent),0 6px 14px #17241c40}
+.map-card.is-picked{box-shadow:0 0 0 3px #c79038,0 6px 14px #17241c40}
+.map-card-qty{position:absolute;right:5px;top:5px;padding:1px 6px;border-radius:999px;background:#17241ce0;color:#fff;font:800 .68rem 'Segoe UI',sans-serif}
+.map-card-fallback{display:grid;place-items:center;aspect-ratio:488/680;padding:8px;border-radius:6px;background:var(--soft);color:var(--ink);font-size:.72rem;text-align:center}
+.play-map-lands{margin-top:14px;padding:16px 18px 20px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.play-map-lands-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+.play-map-lands-head>div:first-child{display:grid;gap:2px}
+.play-map-lands-head strong{font:700 1rem Spectral,Georgia,serif}
+.play-map-lands-head small{color:var(--muted);font-size:.74rem}
+.play-map-sources{display:flex;gap:8px;flex-wrap:wrap}
+.play-map-sources span{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;font-size:.78rem}
+.play-map-sources b{font-variant-numeric:tabular-nums}
+.play-map-sources small{color:var(--muted);font-size:.7rem}
+.map-fan{position:relative;display:flex;padding:14px 4px 6px;overflow-x:auto;--fan:calc(var(--card-w) - 50px)}
+.map-fan .map-card{position:relative;top:auto;flex:0 0 var(--card-w);margin-right:calc(-1 * var(--fan))}
+.map-fan .map-card:last-child{margin-right:0}
+.map-fan .map-card:hover,.map-fan .map-card:focus-visible{transform:translateY(-10px) scale(1.08)}
+
+/* Fichas e marcadores do deck */
+.deck-tokens{margin-top:34px;padding-top:26px;border-top:1px solid var(--line)}
+.deck-tokens .section-heading h3{margin:0;font-size:1.3rem}
+.deck-tokens .section-heading p{color:var(--muted);margin:5px 0 0;font-size:.86rem}
+.deck-tokens-total{color:var(--accent);font-size:.82rem;font-weight:800;white-space:nowrap}
+.token-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin:16px 0 0;padding:0;list-style:none}
+.token-card{display:grid;grid-template-columns:96px minmax(0,1fr);gap:14px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.token-art{position:relative;display:block;align-self:start}
+.token-art img{display:block;width:96px;height:auto;aspect-ratio:488/680;object-fit:cover;border-radius:7px;box-shadow:0 6px 14px #17241c30}
+.token-placeholder{display:grid;place-items:center;width:96px;aspect-ratio:488/680;padding:8px;border:1px dashed #b9bfb3;border-radius:7px;background:#f3f5ef;text-align:center;font-size:.72rem}
+.token-need{position:absolute;right:-6px;bottom:-6px;min-width:30px;padding:3px 7px;border-radius:999px;background:var(--accent);color:#fffefa;font:800 .78rem 'Segoe UI',sans-serif;text-align:center;box-shadow:0 3px 8px #17241c40;font-variant-numeric:tabular-nums}
+.token-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
+.token-kind{color:var(--accent);font:800 .66rem 'Segoe UI',sans-serif;letter-spacing:.07em;text-transform:uppercase}
+.token-copy strong{font:700 1.02rem Spectral,Georgia,serif;overflow-wrap:anywhere}
+.token-copy small{color:var(--muted);font-size:.74rem;line-height:1.3}
+.token-sources{margin:6px 0 0;font-size:.76rem;line-height:1.45;color:var(--ink)}
+.token-sources .is-commander{color:var(--accent);font-weight:700}
+.token-owned{align-self:flex-start;margin-top:auto;padding:3px 8px;border-radius:999px;background:var(--soft);color:var(--accent);font-size:.7rem;font-weight:700}
+
+/* Completar com terrenos */
+.land-dialog{width:min(760px,calc(100vw - 32px));max-height:calc(100vh - 32px);padding:28px 30px 24px;border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--ink);box-shadow:0 28px 80px #17241c55;overflow:auto}
+.land-dialog::backdrop{background:#17241c99}
+.land-dialog h3{margin:2px 0 6px;font-size:1.6rem}
+.land-dialog-head p{margin:0;color:var(--muted);font-size:.88rem;line-height:1.55;max-width:62ch}
+.land-kicker{color:var(--accent);font:800 .68rem 'Segoe UI',sans-serif;letter-spacing:.08em;text-transform:uppercase}
+.land-controls{display:flex;align-items:flex-end;flex-wrap:wrap;gap:14px 20px;margin:20px 0 16px;padding:14px 16px;border-radius:10px;background:#f3f5ef}
+.land-total{display:grid;gap:4px;font-size:.8rem;font-weight:700}
+.land-total input{width:96px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);font:inherit;font-size:1rem}
+.land-total small{color:var(--muted);font-weight:400;font-size:.72rem}
+.land-buy{display:flex;align-items:center;gap:8px;min-height:40px;font-size:.84rem}
+.land-buy input{width:18px;height:18px}
+.land-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 12px}
+.land-summary>div{display:grid;gap:2px;padding:12px 14px;border:1px solid var(--line);border-radius:10px}
+.land-summary dt{color:var(--muted);font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.land-summary dd{margin:0;font:700 1.6rem/1.1 Spectral,Georgia,serif;font-variant-numeric:tabular-nums}
+.land-summary span{color:var(--muted);font-size:.72rem}
+.land-note{margin:8px 0}
+.land-colors{display:grid;gap:9px;margin:14px 0 6px}
+.land-color{display:grid;grid-template-columns:110px minmax(0,1fr) 190px;align-items:center;gap:12px;font-size:.8rem}
+.land-color-name{display:inline-flex;align-items:center;gap:6px;font-weight:700}
+.land-color-bars{position:relative;display:grid;gap:3px}
+.land-color-bars i{display:block;height:7px;border-radius:999px}
+.land-color-bars .is-demand{min-width:4px}
+.land-source-bar{background:#2f3a36;min-width:4px}
+.land-color small{color:var(--muted);font-size:.74rem;font-variant-numeric:tabular-nums}
+.land-colors>p{margin:2px 0 0;font-size:.74rem}
+.land-apply h4{display:flex;align-items:center;gap:8px;margin:20px 0 6px;font-size:1.05rem}
+.land-apply h4 span{padding:1px 8px;border-radius:999px;background:var(--soft);color:var(--accent);font:700 .76rem 'Segoe UI',sans-serif}
+.land-hint{margin:0 0 8px;font-size:.78rem}
+.land-list,.land-basics{margin:0;padding:0;list-style:none;display:grid;gap:6px}
+.land-row{display:grid;grid-template-columns:20px 46px minmax(0,1fr) auto;align-items:center;gap:12px;padding:7px 10px;border:1px solid var(--line);border-radius:10px;cursor:pointer;transition:background-color .15s ease-out,opacity .15s ease-out}
+.land-row:hover{background:#f3f5ef}
+.land-row input{width:18px;height:18px;accent-color:var(--accent)}
+.land-row:has(input:not(:checked)){opacity:.5}
+.land-row img,.land-basics img{width:46px;height:auto;border-radius:4px}
+.land-row-copy{display:grid;gap:2px;min-width:0}
+.land-row-copy strong,.land-basics strong{font-size:.88rem}
+.land-row-copy small,.land-basics small{color:var(--muted);font-size:.74rem}
+.land-row-meta{display:flex;align-items:center;gap:10px}
+.land-pips{display:inline-flex;gap:2px}
+.land-availability{padding:3px 8px;border-radius:999px;font:700 .68rem 'Segoe UI',sans-serif;white-space:nowrap;color:#fff}
+.land-availability.is-available{background:#2f6954}
+.land-availability.is-reserved{background:#a87520}
+.land-availability.is-missing{background:#a84843}
+.land-basics{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
+.land-basics li{display:grid;grid-template-columns:46px minmax(0,1fr);gap:10px;align-items:center;padding:7px 10px;border:1px solid var(--line);border-radius:10px}
+.land-basics span{display:grid;gap:2px}
+.land-dialog-footer{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
+.land-dialog-footer p{margin:0}
+.land-reset{margin-left:auto;font-size:.8rem}
+.land-footnote{margin:10px 0 0;font-size:.74rem}
+.land-clear{margin-top:6px}
+.land-clear .builder-remove{min-height:36px;padding:0;font-size:.8rem}
+
+@media(max-width:700px){
+  .selection-layouts{order:3;width:100%}
+  .selection-layouts button{flex:1;padding-inline:6px}
+  .play-map{--card-w:84px;--card-h:117px;--peek:23px}
+  .play-map-grid{grid-template-columns:120px repeat(var(--map-columns),minmax(calc(var(--card-w) + 14px),1fr));min-width:calc(120px + var(--map-columns) * (var(--card-w) + 14px))}
+  .play-map-lane{padding:10px 8px}
+  .play-map-lane small{display:none}
+  [data-layout="large"] .selection-slots{grid-template-columns:1fr 1fr;gap:16px 12px;padding:16px 12px}
+  .token-grid{grid-template-columns:1fr}
+  .land-dialog{width:100vw;max-width:100vw;max-height:100dvh;height:100dvh;margin:0;border-radius:0;padding:22px 16px}
+  .land-summary{gap:6px}
+  .land-summary>div{padding:10px}
+  .land-summary dd{font-size:1.3rem}
+  .land-color{grid-template-columns:90px minmax(0,1fr);gap:4px 10px}
+  .land-color small{grid-column:1/-1}
+  .land-row{grid-template-columns:20px 40px minmax(0,1fr)}
+  .land-row-meta{grid-column:3}
+}
+@media(prefers-reduced-motion:reduce){.map-card,.selection-layouts button,.land-row{transition:none}.map-card:hover,.map-card:focus-visible{transform:none}}
+.land-pips img,.land-color-name img,.play-map-sources img{width:16px;height:16px;flex:0 0 16px}
+
+/* Cartas grandes: nada sobre a arte; quantidade, GC, relações e coleção logo abaixo da carta */
+[data-layout="large"] .selection-tile .selection-art{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+[data-layout="large"] .selection-tile .selection-art>img,[data-layout="large"] .selection-tile .selection-art>.placeholder{flex:0 0 100%;margin-bottom:4px}
+[data-layout="large"] .selection-qty,[data-layout="large"] .selection-gc,[data-layout="large"] .selection-relation,[data-layout="large"] .inventory-badge{position:static;inset:auto;box-shadow:none;text-shadow:none}
+[data-layout="large"] .selection-qty{background:var(--ink)}
+[data-layout="large"] .selection-relation{background:var(--soft);padding:5px 8px}
+[data-layout="large"] .inventory-badge{flex:1 1 auto;padding:5px 9px;border-radius:6px;text-align:left}
+
+/* Sugestão de terrenos pelo deck */
+.land-suggestion{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 22px;align-items:start;margin:20px 0 0;padding:16px 18px;border:1px solid var(--line);border-radius:12px}
+.land-suggestion-total{display:grid;justify-items:center;padding-right:22px;border-right:1px solid var(--line)}
+.land-suggestion-total span{color:var(--muted);font:700 .68rem 'Segoe UI',sans-serif;text-transform:uppercase;letter-spacing:.06em}
+.land-suggestion-total strong{font:700 2.6rem/1 Spectral,Georgia,serif;color:var(--accent);font-variant-numeric:tabular-nums}
+.land-suggestion-total small{color:var(--muted);font-size:.74rem}
+.land-suggestion ul{margin:0;padding:0;list-style:none;display:grid;gap:4px}
+.land-suggestion li{display:flex;justify-content:space-between;gap:12px;font-size:.82rem;padding-bottom:4px;border-bottom:1px dashed #e3e3db}
+.land-suggestion li b{font-variant-numeric:tabular-nums;color:var(--ink)}
+.land-suggestion li b.is-down{color:#2f6954}
+.land-suggestion li b.is-up{color:#a87520}
+.land-suggestion>p{grid-column:1/-1;margin:4px 0 0;font-size:.76rem}
+.land-summary dd small{font:600 .9rem 'Segoe UI',sans-serif;color:var(--muted)}
+.land-total input::placeholder{color:#9aa39e}
+@media(max-width:700px){.land-suggestion{grid-template-columns:1fr}.land-suggestion-total{border-right:0;padding-right:0;border-bottom:1px solid var(--line);padding-bottom:10px}}
+
+
+/* Lista de decks: só a ilustração da comandante (recorte art_crop do Scryfall), da metade do card para a direita */
+.deck-library-row.has-art-crop::before{left:42%;background-image:var(--deck-art);background-size:cover;background-position:center 30%;opacity:.55;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 38%);mask-image:linear-gradient(90deg,transparent 0,#000 38%)}
+@media(max-width:700px){.deck-library-row.has-art-crop::before{left:30%;opacity:.42}}
+.deck-library-row.has-art-crop .deck-library-meta,.deck-library-row.has-art-crop .deck-state,.deck-library-row.has-art-crop .deck-public-badge,.deck-library-row.has-art-crop .deck-delete-trigger{background:color-mix(in srgb,var(--surface) 86%,transparent);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+.deck-library-row.has-art-crop .deck-library-meta{padding:6px 10px;border-radius:8px}
+.deck-library-row.has-art-crop .deck-delete-trigger{padding:4px 8px;border-radius:6px}

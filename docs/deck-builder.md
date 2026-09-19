@@ -12,6 +12,27 @@ Acesse `http://localhost:8080/decks.php` ou **Meus decks** no menu. O módulo fu
 6. A lista é finalizada automaticamente quando comandante + cartas aprovadas chegam a 100 cartas. Cada troca é planejada dentro da seleção, relacionando uma carta do deck com qualquer impressão do catálogo e indicando quando ela está disponível na coleção.
 7. Em **Minha seleção › No deck**, a seção **Análise do deck** (abaixo das cartas) mostra cartas/100, terrenos, valor estimado, símbolos de mana, alertas, curva de mana, cores dos custos, funções informadas, sugestão de terrenos e as exportações: texto, JSON completo e CSV no padrão da Liga (deck completo ou só o que falta).
 
+## Minha seleção: visualizações, fichas e terrenos automáticos
+
+**Visualizações** (botões acima das cartas; a escolha fica lembrada no navegador, chave `deckarium:selection-layout`):
+
+- **Por tipo:** os grupos recolhíveis de sempre.
+- **Cartas grandes:** todos os tipos abertos, sem recolher, com as cartas em tamanho de leitura.
+- **Cartas grandes** não cobre a arte: quantidade, GC, relações e situação na coleção ficam logo abaixo de cada carta.
+- **Mapa de jogo:** uma matriz **função × valor de mana**. Cada linha é o que a carta faz (Comandante, Ramp, Compra, Remoção pontual, Remoção em massa, Proteção, Recursão, Tutores, Plano de jogo) e cada coluna é quando ela chega à mesa (0–1 até 7+). As cartas ficam em pilhas, como na mesa; passar o mouse levanta a carta e clicar abre a mesma janela da carta. No deck, cada linha mostra cartas/meta da comandante (com “faltam N”) e cada coluna mostra cartas/meta da curva. A função vem do campo “Função” da carta ou, se vazio, da leitura do Oracle (`deckScoreProfile`). Abaixo, a faixa **Base de mana** abre os terrenos em leque e conta as fontes de cada cor contra os símbolos dos custos. Arquivo: `deck_map_view.php`.
+
+**Fichas e marcadores** (aba No deck, abaixo das cartas): calculados automaticamente de `raw.all_parts` (componente `token`) da comandante e das cartas aprovadas, agrupados pela identidade Oracle da ficha — fichas de criatura, Tesouros/Comida/etc., emblemas e marcadores (Monarca, Iniciativa). Cartas que criam cópias (texto “token that's a copy”, populate, myriad, encore…) geram a entrada “Cópia de uma permanente”. Cada ficha mostra quais cartas a criam, quantas já estão na coleção e uma sugestão de quantas ter à mão (soma do que cada carta cria de uma vez; X conta 3). Arquivos: `deck_tokens.php` e `deck_tokens_view.php`.
+
+**Completar com terrenos** (botão na barra da aba No deck): você cuida das mágicas e o Deckarium monta a base de mana (`deck_lands.php`).
+
+1. **Quantidade:** a janela mostra a **sugestão pelo deck** (`deckLandSuggestion`): parte de 37 terrenos com curva média 3,00 e ajusta ≈4 terrenos por ponto de curva média, −1 a cada 3 peças de aceleração até 3 manas (rochas e criaturas que geram mana e busca de terrenos valem 1; Tesouros avulsos, ½), −1 a cada 5 compras até 2 manas (até −2), +2 se o deck aproveita terrenos entrando e ±1 pelo custo da comandante, limitado a 31–42. Cada ajuste aparece com o motivo; a média do EDHREC fica como referência. A meta informada fica salva no deck (`scoring_config.land_fill`); vazia, vale a sugestão.
+   **Regra:** os terrenos só são escolhidos quando a parte não terreno está fechada — comandante + mágicas = 100 − meta (terrenos que você aprovou contam na meta e nunca são trocados). Assim as cores e os não básicos são calculados sobre a lista final. Enquanto isso a janela diz quantas mágicas faltam ou sobram.
+2. **Demanda de cor:** símbolos nos custos das mágicas do deck; os da comandante valem o dobro.
+3. **Não básicos:** primeiro terrenos que já estão nas candidatas, depois os da coleção **com cópia livre** (fora de outros decks). Cada um é pontuado por cores úteis (ponderadas pela demanda; terrenos que buscam básicos contam como as cores que podem trazer), entrar virado, desvantagens (devolver terreno, filtrar mana, sacrificar terrenos = descartado), utilidade extra, popularidade e sinergia EDHREC com a comandante. Há teto de não básicos (30% em mono, 60% em duas cores, 85% em três ou mais), mínimo de básicos para cartas que buscam básicos e teto de terrenos só incolores. “Incluir terrenos fora da coleção” amplia para os mais jogados do catálogo, marcados como compra.
+4. **Básicos:** completam o restante, divididos pela falta de fontes de cada cor em relação à participação dela nos custos, usando a impressão da coleção com mais cópias.
+
+A janela mostra o plano antes de aplicar: demanda × fontes por cor, cada não básico com motivo e disponibilidade (desmarque e clique em Recalcular para trocar pela próxima opção) e os básicos com cópias livres. Os terrenos entram com a função **“Terreno automático”**: ao completar de novo (“Refazer terrenos”), só eles são recalculados; há também “Retirar os terrenos automáticos”. Ações de POST: `autofill_lands` e `clear_auto_lands`.
+
 ## Subpáginas do deck
 
 Cada deck tem abas curtas em vez de uma página longa (`decks.php?deck=ID&view=…`):
@@ -43,7 +64,7 @@ Além da ordenação por sinergia, o painel apresenta planos prováveis para o c
 
 - Um comandante por deck; parceiros e Backgrounds ainda não são modelados.
 - A busca local é textual e explicada pelos termos encontrados. As recomendações externas não interpretam a estratégia escrita.
-- Funções são classificações manuais. A contagem de símbolos de mana é descritiva, não determina uma base de terrenos ideal.
+- Funções são classificações manuais. “Completar com terrenos” usa uma heurística (metas, símbolos e texto dos terrenos), não uma simulação de partidas; revise o plano antes de aplicar.
 - Há alertas básicos de identidade e duplicidade, sem validação completa de legalidade ou banimentos.
 - Cópias usadas em outros decks são **mostradas** (Explorar, Minha coleção, indicadores da seleção), mas não bloqueiam a adição; candidatas não reservam cópias. Preços do CSV não são usados como cotação atual.
 - Preços são os valores USD/EUR da impressão no Scryfall convertidos para BRL. A conversão usa \`USD_BRL_RATE\` (padrão 5,50) ou \`EUR_BRL_RATE\` (padrão 6,00), configuráveis no ambiente do app; “Preço indisponível” significa que aquela impressão não possui cotação.
@@ -128,6 +149,10 @@ Em “Ajustar metas e regras”, **Automáticas** é o padrão (`scoring_config.
 - **Filtro de uso:** “Usadas em decks”, “Fora de qualquer deck” e “Com cópia livre”. O cálculo considera todas as impressões da mesma carta lógica e as cópias usadas por cartas aprovadas e comandantes de todos os seus decks.
 - Cada carta da coleção mostra “Fora de decks” ou quantas cópias estão livres e em quais decks as outras estão.
 - **Exportar (CSV)** baixa o resultado com os filtros ativos (busca, acabamento, uso, ordenação). As quatro primeiras colunas (`Name`, `Scryfall ID`, `Quantity`, `Foil`) são as da importação, então o arquivo pode ser reimportado; seguem edição, código, número, idioma, raridade, cópias da carta na coleção, cópias em decks e os nomes dos decks.
+
+## Perfil público
+
+Todo usuário ativo tem um perfil em `/profile.php?u=<usuario>` (link a partir da Comunidade, que lista os jogadores, e do autor de cada deck público). Em **Minha conta › Perfil público** cada um edita, com prévia ao vivo: nome de exibição, bio, local, site, cores favoritas, foto de perfil e capa — imagem enviada ou a ilustração (`art_crop`) de uma carta — com enquadramento vertical. Imagens: JPEG, PNG ou WebP até 2 MB; o servidor remove EXIF/XMP (localização e dados da câmera) e grava em `storage/profiles/<id>/` (`profile_lib.php`, `profile_image.php`). O perfil mostra só os decks públicos e a coleção se ela for pública; nome completo e email nunca aparecem.
 
 ## Compartilhamento público
 
