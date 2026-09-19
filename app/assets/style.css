@@ -24,7 +24,7 @@ small,.muted{color:var(--muted)}
 svg{width:23px;height:23px;flex-shrink:0}
 .skip-link{position:fixed;z-index:50;left:16px;top:-90px;background:var(--surface);padding:12px}
 .skip-link:focus{top:12px}
-.sidebar{position:fixed;inset:0 auto 0 0;width:var(--rail);background:var(--ink);color:#e9edeb;padding:18px 16px 22px;display:flex;flex-direction:column;z-index:40;overflow-x:hidden;transition:width .22s ease,padding .22s ease,clip-path .25s ease}
+.sidebar{position:fixed;inset:0 auto 0 0;width:var(--rail);background:var(--ink);color:#e9edeb;padding:18px 16px 22px;display:flex;flex-direction:column;z-index:40;overflow-x:hidden;overflow-y:auto;scrollbar-width:thin;transition:width .22s ease,padding .22s ease,clip-path .25s ease}
 .sidebar-header{position:relative;display:grid;grid-template-rows:40px auto;justify-items:center;align-content:start;gap:14px;padding-bottom:18px}
 .sidebar-header .brand{grid-row:2}
 .brand{display:flex;align-items:center;justify-content:center;padding:0;color:#fffefa;text-decoration:none;font-family:Spectral,Georgia,serif;font-size:1.75rem;font-weight:700;white-space:nowrap}
@@ -684,8 +684,8 @@ button.is-busy::after{content:"";display:inline-block;width:.8em;height:.8em;mar
 .filters-shell>summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:13px 16px;cursor:pointer;list-style:none;font-weight:700;color:var(--ink);border-radius:10px}
 .filters-shell>summary::-webkit-details-marker{display:none}
 .filters-shell>summary::before{content:"";width:16px;height:16px;flex:0 0 auto;background:currentColor;-webkit-mask:var(--filters-icon) center/contain no-repeat;mask:var(--filters-icon) center/contain no-repeat}
-.filters-shell>summary::after{content:"Mostrar";margin-left:auto;font-size:.78rem;font-weight:600;color:var(--accent)}
-.filters-shell[open]>summary::after{content:"Ocultar"}
+.filters-shell>summary::after{content:attr(data-show);margin-left:auto;font-size:.78rem;font-weight:600;color:var(--accent)}
+.filters-shell[open]>summary::after{content:attr(data-hide)}
 .filters-shell>summary:hover,.filters-shell>summary:focus-visible{background:#ece9df}
 .filters-shell-count{font-size:.78rem;font-weight:500;color:var(--muted)}
 .filters-shell-body{padding:0 16px 16px;border-top:1px solid var(--line);margin-top:2px;padding-top:16px}
@@ -727,3 +727,32 @@ button.is-busy::after{content:"";display:inline-block;width:.8em;height:.8em;mar
 @media(max-width:600px){.printings-grid{grid-template-columns:repeat(auto-fill,minmax(136px,1fr));gap:12px}.printings-toolbar{gap:9px}.printings-toolbar input[type=search],.printings-toolbar select{min-width:0;width:100%}}
 
 .liga-link{display:inline-flex;align-items:center;gap:7px;margin-top:4px}
+
+/* Ações rápidas da carta: guardar na coleção ou mandar para as candidatas de um deck. */
+.card-tile-actions{margin:6px 0 2px}
+.card-actions-menu{margin:0;position:relative}
+.card-actions-menu>summary{list-style:none;display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink);font-size:.78rem;font-weight:700;cursor:pointer}
+.card-actions-menu>summary::-webkit-details-marker{display:none}
+.card-actions-menu>summary::after{content:"+";font-size:.95rem;line-height:1;color:var(--accent)}
+.card-actions-menu[open]>summary::after{content:"−"}
+.card-actions-menu>summary:hover{background:#ece9df}
+.card-actions-body{position:absolute;z-index:20;left:0;top:calc(100% + 6px);width:min(290px,78vw);display:grid;gap:12px;padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:0 12px 30px rgba(24,32,28,.2)}
+.card-actions-form{display:grid;gap:6px}
+.card-actions-title{font-size:.78rem;font-weight:800;color:var(--ink)}
+.card-actions-row{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.card-actions-row input[type=number]{width:62px}
+.card-actions-row input,.card-actions-row select{font:inherit;font-size:.84rem;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff}
+.card-actions-row select{flex:1 1 130px;min-width:0}
+.card-actions-row button{padding:6px 12px;font-size:.8rem}
+.card-actions-foil{display:flex;align-items:center;gap:5px;font-size:.8rem;color:var(--muted)}
+.card-actions-form small{font-size:.72rem;color:var(--muted)}
+.card-actions-login{display:inline-block;font-size:.78rem;color:var(--accent);font-weight:700}
+.commander-tile .card-actions-menu{margin:8px 0 2px}
+
+/* Seletor de idioma no menu lateral. */
+.sidebar-lang{display:flex;gap:6px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(233,237,235,.16);flex-wrap:wrap}
+.sidebar-lang a{padding:5px 9px;border-radius:999px;font-size:.74rem;font-weight:700;color:#c7d1ce;text-decoration:none;border:1px solid rgba(233,237,235,.2)}
+.sidebar-lang a:hover{background:#283630;color:#fff}
+.sidebar-lang a[aria-current]{background:#3b5147;color:#fff;border-color:transparent}
+.sidebar.is-collapsed .sidebar-lang{flex-direction:column;align-items:center}
+@media(max-width:850px){.sidebar-lang{margin-top:8px;padding-top:8px;border-top:0}}

@@ -230,6 +230,19 @@ Corrige a consulta da home que usava o operador JSONB `?`. O PDO PostgreSQL pode
 
 Novo módulo em http://localhost:8080/decks.php. Importação de coleção, busca Oracle e seleção manual de cartas. Consulte [o guia do módulo](docs/deck-builder.md).
 
+## Idiomas
+
+A interface fica em **português (BR)** ou **inglês**, com a troca no rodapé do menu lateral. A escolha vale para quem não tem conta (cookie de um ano) e fica salva na conta de quem entra (`users.locale`). Sem escolha, o Deckarium segue o idioma do navegador e, na dúvida, usa o português.
+
+Os textos são traduzidos em `app/lang/en.php`, onde a chave é a própria frase em português: `'Comandantes' => 'Commanders'`. Assim, em português nada é procurado, e o que ainda não foi traduzido continua aparecendo em português em vez de sumir. Para traduzir uma tela nova, envolva o texto com `t()` (ou `te()`, que já escapa para HTML) e acrescente a frase ao dicionário. As telas públicas — navegação, catálogo, edições, comandantes, carta, entrar e criar conta — já estão traduzidas; as áreas de conta, decks e administração seguem em português.
+
+## Guardar cartas direto do catálogo
+
+No catálogo, nas edições, nos comandantes e na página da carta, cada carta tem o botão **Guardar**, com duas ações:
+
+- **Na minha coleção:** guarda aquela impressão exata (edição e número), com quantidade e a opção foil, do mesmo jeito que o CSV do ManaBox registra.
+- **Nas candidatas de um deck:** manda a carta para as candidatas. Só ficam liberados os decks cuja comandante aceita as cores da carta; os demais aparecem marcados como fora da identidade, com o motivo. Deck ainda sem comandante aceita qualquer carta.
+
 ## Contas e acesso
 
 O Deckarium tem contas de usuário. Qualquer visitante consulta o **catálogo**, as **edições**, os **comandantes** e a **Comunidade** (decks e coleções que os donos tornaram públicos); **Minha coleção**, **Meus decks** e **Upgrades** exigem login, e cada conta enxerga apenas os próprios dados. **Status** e **Usuários** são exclusivos de administradores (inclusive os endpoints de download e sincronização).

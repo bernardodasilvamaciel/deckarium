@@ -10,6 +10,12 @@ require __DIR__ . '/functions.php';
 require __DIR__ . '/partials.php';
 require __DIR__ . '/catalog_cache.php';
 require __DIR__ . '/card_filters.php';
+require __DIR__ . '/card_actions.php';
+// Ações rápidas da carta (coleção e candidatas de um deck).
+$cardActionsUser = (int)(authUser()['id'] ?? 0);
+cardActionHandlePost($cardActionsUser);
+$GLOBALS['cardActionsContext'] = ['user_id' => $cardActionsUser, 'decks' => cardActionDecks($cardActionsUser),
+    'back' => authSafeNext((string)($_SERVER['REQUEST_URI'] ?? '/'), '/')];
 
 $set = strtolower(trim((string)($_GET['set'] ?? '')));
 if ($set === '' || !preg_match('/^[a-z0-9]{2,8}$/', $set)) {
@@ -93,6 +99,7 @@ $baseParams = array_filter(['set' => $set, 'view' => $view === 'unique' ? '' : $
 $colorLabels = ['W' => 'Branco', 'U' => 'Azul', 'B' => 'Preto', 'R' => 'Vermelho', 'G' => 'Verde', 'C' => 'Incolor'];
 
 pageHeader($edition['set_name'], $edition['set_name'] . ' (' . strtoupper((string)$set) . '): todas as cartas da edição, com preços, raridades e cartas impressas pela primeira vez.');
+echo cardActionNotice();
 ?>
 <section class="set-hero">
     <a class="back-link" href="/editions.php#ano-<?= h(substr((string)$edition['first_release'], 0, 4)) ?>">← Linha do tempo das edições</a>
@@ -111,20 +118,20 @@ pageHeader($edition['set_name'], $edition['set_name'] . ' (' . strtoupper((strin
 <form class="set-filters" method="get" action="/edition.php" role="search" aria-label="Filtrar cartas da edição">
     <input type="hidden" name="set" value="<?= h($set) ?>">
     <div class="set-filters-row">
-        <label class="set-field is-wide">Nome<input type="search" name="q" value="<?= h($f['q']) ?>" placeholder="Nome da carta"></label>
-        <label class="set-field is-wide">Tipos e temas<input name="type" value="<?= h($f['type']) ?>" placeholder="creature; treasure; flying"></label>
-        <label class="set-field">Raridade<select name="rarity" data-auto-submit><option value="">Todas</option><?php foreach ($rarityCounts as $rarity => $count): ?><option value="<?= h($rarity) ?>"<?= $f['rarity'] === $rarity ? ' selected' : '' ?>><?= h($rarityLabels[$rarity] ?? ucfirst((string)$rarity)) ?> (<?= (int)$count ?>)</option><?php endforeach; ?></select></label>
-        <label class="set-field">Ordenar por<select name="sort" data-auto-submit><?php foreach ($sortOptions as $key => $label): ?><option value="<?= $key ?>"<?= $sort === $key ? ' selected' : '' ?>><?= h($label) ?></option><?php endforeach; ?></select></label>
+        <label class="set-field is-wide"><?= te('Nome') ?><input type="search" name="q" value="<?= h($f['q']) ?>" placeholder="Nome da carta"></label>
+        <label class="set-field is-wide"><?= te('Tipos e temas') ?><input name="type" value="<?= h($f['type']) ?>" placeholder="creature; treasure; flying"></label>
+        <label class="set-field"><?= te('Raridade') ?><select name="rarity" data-auto-submit><option value="">Todas</option><?php foreach ($rarityCounts as $rarity => $count): ?><option value="<?= h($rarity) ?>"<?= $f['rarity'] === $rarity ? ' selected' : '' ?>><?= h($rarityLabels[$rarity] ?? ucfirst((string)$rarity)) ?> (<?= (int)$count ?>)</option><?php endforeach; ?></select></label>
+        <label class="set-field"><?= te('Ordenar por') ?><select name="sort" data-auto-submit><?php foreach ($sortOptions as $key => $label): ?><option value="<?= $key ?>"<?= $sort === $key ? ' selected' : '' ?>><?= h($label) ?></option><?php endforeach; ?></select></label>
     </div>
     <div class="set-filters-row">
-        <fieldset class="set-colors"><legend>Cores</legend><?php foreach ($colorLabels as $color => $label): ?><label title="<?= h($label) ?>"><input type="checkbox" name="colors[]" value="<?= $color ?>" data-auto-submit<?= in_array($color, $f['colors'], true) ? ' checked' : '' ?>><?= manaSymbols('{' . $color . '}') ?><span class="sr-only"><?= h($label) ?></span></label><?php endforeach; ?></fieldset>
+        <fieldset class="set-colors"><legend><?= te('Cores') ?></legend><?php foreach ($colorLabels as $color => $label): ?><label title="<?= h($label) ?>"><input type="checkbox" name="colors[]" value="<?= $color ?>" data-auto-submit<?= in_array($color, $f['colors'], true) ? ' checked' : '' ?>><?= manaSymbols('{' . $color . '}') ?><span class="sr-only"><?= h($label) ?></span></label><?php endforeach; ?></fieldset>
         <label class="set-new" title="Cartas impressas pela primeira vez nesta edição, sem reimpressões"><input type="checkbox" name="new" value="1" data-auto-submit<?= $onlyNew ? ' checked' : '' ?><?= $newCount ? '' : ' disabled' ?>> Só cartas novas <b><?= number_format($newCount, 0, ',', '.') ?></b></label>
         <fieldset class="set-view"><legend class="sr-only">Mostrar</legend>
             <label><input type="radio" name="view" value="unique"<?= $view === 'unique' ? ' checked' : '' ?> data-auto-submit> Cartas únicas</label>
             <label><input type="radio" name="view" value="printings"<?= $view === 'printings' ? ' checked' : '' ?> data-auto-submit> Todas as versões</label>
         </fieldset>
-        <button class="primary-link">Filtrar</button>
-        <?php if ($active || $sort !== 'number'): ?><a class="set-clear" href="/edition.php?set=<?= h(rawurlencode($set)) ?><?= $view === 'printings' ? '&amp;view=printings' : '' ?>">Limpar filtros</a><?php endif; ?>
+        <button class="primary-link"><?= te('Filtrar') ?></button>
+        <?php if ($active || $sort !== 'number'): ?><a class="set-clear" href="/edition.php?set=<?= h(rawurlencode($set)) ?><?= $view === 'printings' ? '&amp;view=printings' : '' ?>"><?= te('Limpar filtros') ?></a><?php endif; ?>
     </div>
 </form>
 <?php filterPanelEnd(); ?>

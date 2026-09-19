@@ -4,9 +4,15 @@ require __DIR__ . '/db.php';
 require __DIR__ . '/functions.php';
 require __DIR__ . '/partials.php';
 require __DIR__ . '/card_filters.php';
+require __DIR__ . '/card_actions.php';
+// Ações rápidas da carta (coleção e candidatas de um deck).
+$cardActionsUser = (int)(authUser()['id'] ?? 0);
+cardActionHandlePost($cardActionsUser);
+$GLOBALS['cardActionsContext'] = ['user_id' => $cardActionsUser, 'decks' => cardActionDecks($cardActionsUser),
+    'back' => authSafeNext((string)($_SERVER['REQUEST_URI'] ?? '/'), '/')];
 
 $query = is_string($_GET['q'] ?? null) ? mb_substr(trim($_GET['q']), 0, 120) : '';
-$sortOptions = ['new' => 'Mais novos', 'popular' => 'Mais populares', 'name' => 'Nome (A–Z)', 'added' => 'Adicionados recentemente'];
+$sortOptions = ['new' => t('Mais novos'), 'popular' => t('Mais populares'), 'name' => t('Nome (A–Z)'), 'added' => t('Adicionados recentemente')];
 $sort = is_string($_GET['sort'] ?? null) && isset($sortOptions[$_GET['sort']]) ? $_GET['sort'] : 'new';
 $perPage = 24;
 $page = max(1, (int)($_GET['page'] ?? 1));
@@ -71,26 +77,27 @@ $commanderImage = static fn(array $card): string => cardImageUrl($card)
     ? '/image.php?id=' . rawurlencode((string)$card['id']) . '&size=normal' : '';
 
 pageHeader('Comandantes');
+echo cardActionNotice();
 ?>
 <div class="commander-page">
     <header class="commander-header">
-        <div><h1>Comandantes</h1><p>Explore as cartas que podem liderar seu próximo deck.</p></div>
-        <a class="secondary-link" href="/decks.php">Meus decks <span aria-hidden="true">&rarr;</span></a>
+        <div><h1><?= te('Comandantes') ?></h1><p><?= te('Explore as cartas que podem liderar seu próximo deck.') ?></p></div>
+        <a class="secondary-link" href="/decks.php"><?= te('Meus decks') ?> <span aria-hidden="true">&rarr;</span></a>
     </header>
 
-    <?php filterPanelStart(($query !== '' ? 1 : 0) + ($sort !== 'new' ? 1 : 0), 'Buscar e ordenar'); ?>
+    <?php filterPanelStart(($query !== '' ? 1 : 0) + ($sort !== 'new' ? 1 : 0), t('Buscar e ordenar')); ?>
     <form class="commander-search" action="/commanders.php" method="get" role="search" aria-label="Buscar comandantes">
         <div class="commander-search-controls">
-            <label class="commander-field commander-field-name">Buscar comandante por nome
-                <input id="commander-query" name="q" type="search" maxlength="120" placeholder="Nome do comandante…" value="<?= h($query) ?>">
+            <label class="commander-field commander-field-name"><?= te('Buscar comandante por nome') ?>
+                <input id="commander-query" name="q" type="search" maxlength="120" placeholder="<?= te('Nome do comandante…') ?>" value="<?= h($query) ?>">
             </label>
-            <label class="commander-field">Ordenar por
+            <label class="commander-field"><?= te('Ordenar por') ?>
                 <select name="sort" data-auto-submit>
                     <?php foreach ($sortOptions as $value => $label): ?><option value="<?= h($value) ?>"<?= $sort === $value ? ' selected' : '' ?>><?= h($label) ?></option><?php endforeach; ?>
                 </select>
             </label>
-            <button class="primary-link" type="submit">Buscar</button>
-            <?php if ($query !== '' || $sort !== 'new'): ?><a href="/commanders.php" class="commander-clear">Limpar</a><?php endif; ?>
+            <button class="primary-link" type="submit"><?= te('Buscar') ?></button>
+            <?php if ($query !== '' || $sort !== 'new'): ?><a href="/commanders.php" class="commander-clear"><?= te('Limpar') ?></a><?php endif; ?>
         </div>
     </form>
     <?php filterPanelEnd(); ?>
@@ -98,8 +105,8 @@ pageHeader('Comandantes');
     <div class="commander-layout">
         <section class="commander-gallery" aria-labelledby="latest-commanders">
             <div class="commander-section-heading">
-                <h2 id="latest-commanders"><?= $query !== '' ? 'Resultado da busca' : 'Todos os comandantes' ?></h2>
-                <p><?= number_format($total, 0, ',', '.') ?> <?= $total === 1 ? 'comandante' : 'comandantes' ?><?= $query !== '' ? ' para “' . h($query) . '”' : ' no catálogo' ?>, sem repetir reimpressões.</p>
+                <h2 id="latest-commanders"><?= $query !== '' ? t('Resultado da busca') : t('Todos os comandantes') ?></h2>
+                <p><?= number_format($total, 0, ',', '.') ?> <?= $total === 1 ? t('comandante') : t('comandantes') ?><?= $query !== '' ? ' ' . t('para') . ' “' . h($query) . '”' : ' ' . t('no catálogo') ?>, <?= te('sem repetir reimpressões') ?>.</p>
             </div>
             <?php if ($commanders): ?>
                 <div class="commander-grid">
@@ -111,6 +118,7 @@ pageHeader('Comandantes');
                                 </span>
                                 <h3><?= h($card['name']) ?></h3>
                             </a>
+                            <?php cardActionsMenu($card, $GLOBALS['cardActionsContext']['decks'], $GLOBALS['cardActionsContext']['user_id'], $GLOBALS['cardActionsContext']['back']); ?>
                             <p><?= h($card['set_name']) ?><?php if ($sort === 'new' && $card['first_released']): ?> · desde <?= h(substr((string)$card['first_released'], 0, 4)) ?><?php elseif ($sort === 'popular' && $card['best_rank'] !== null): ?> · EDHREC #<?= number_format((int)$card['best_rank'], 0, ',', '.') ?><?php endif; ?></p>
                         </article>
                     <?php endforeach; ?>
@@ -118,8 +126,8 @@ pageHeader('Comandantes');
                 <?php if ($totalPages > 1) numberedPager($page, $totalPages, array_filter(['q' => $query, 'sort' => $sort === 'new' ? '' : $sort], 'strlen'), '#latest-commanders'); ?>
             <?php else: ?>
                 <div class="commander-empty">
-                    <h3><?= $query !== '' ? 'Nenhum comandante encontrado' : 'Seu catálogo ainda não tem comandantes' ?></h3>
-                    <p><?= $query !== '' ? 'Tente parte do nome ou use o nome original da carta.' : 'Os comandantes aparecem aqui conforme as cartas são importadas.' ?></p>
+                    <h3><?= $query !== '' ? t('Nenhum comandante encontrado') : t('Seu catálogo ainda não tem comandantes') ?></h3>
+                    <p><?= $query !== '' ? t('Tente parte do nome ou use o nome original da carta.') : t('Os comandantes aparecem aqui conforme as cartas são importadas.') ?></p>
                     <a href="<?= $query !== '' ? '/commanders.php' : '/?catalog=1#catalogo' ?>"><?= $query !== '' ? 'Ver todos os comandantes' : 'Ver catálogo' ?></a>
                 </div>
             <?php endif; ?>

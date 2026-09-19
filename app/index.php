@@ -5,6 +5,12 @@ require __DIR__ . '/functions.php';
 require __DIR__ . '/partials.php';
 require __DIR__ . '/catalog_cache.php';
 require __DIR__ . '/card_filters.php';
+require __DIR__ . '/card_actions.php';
+// Ações rápidas da carta (coleção e candidatas de um deck).
+$cardActionsUser = (int)(authUser()['id'] ?? 0);
+cardActionHandlePost($cardActionsUser);
+$GLOBALS['cardActionsContext'] = ['user_id' => $cardActionsUser, 'decks' => cardActionDecks($cardActionsUser),
+    'back' => authSafeNext((string)($_SERVER['REQUEST_URI'] ?? '/'), '/')];
 $f=cardFilters();
 $isHome = !array_filter($f) && !isset($_GET['catalog']) && !isset($_GET['view']) && !isset($_GET['page']);
 if ($isHome) {
@@ -80,47 +86,48 @@ SQL;
 }
 
 pageHeader($isHome ? 'Início' : 'Cartas');
+echo cardActionNotice();
 ?>
 <?php if ($isHome): require __DIR__ . '/home.php'; else: ?>
 <section class="hero">
   <div>
-    <h1>Encontre sua próxima carta.</h1>
-    <p>Pesquise cartas, explore edições e encontre novas possibilidades para seus decks.</p>
+    <h1><?= te('Encontre sua próxima carta.') ?></h1>
+    <p><?= te('Pesquise cartas, explore edições e encontre novas possibilidades para seus decks.') ?></p>
   </div>
-  <a class="primary-link" href="/editions.php">Explorar por edição →</a>
+  <a class="primary-link" href="/editions.php"><?= te('Explorar por edição') ?> →</a>
 </section>
 <?php endif; ?>
 
 <section id="catalogo" class="catalog-section">
   <div class="section-heading">
     <div>
-      <h2><?= $q === '' && $set === '' ? 'Últimas cartas lançadas' : 'Pesquisar cartas' ?></h2>
-      <?php if ($q === '' && $set === ''): ?><p class="muted">As cartas mais recentes do acervo, ordenadas pela data de lançamento.</p><?php endif; ?>
+      <h2><?= $q === '' && $set === '' ? t('Últimas cartas lançadas') : t('Pesquisar cartas') ?></h2>
+      <?php if ($q === '' && $set === ''): ?><p class="muted"><?= te('As cartas mais recentes do acervo, ordenadas pela data de lançamento.') ?></p><?php endif; ?>
     </div>
   </div>
   <?php cardFilterForm($f, catalogCached('filter-sets',fn()=>db()->query('SELECT set_code,MAX(set_name) set_name FROM cards GROUP BY set_code ORDER BY MAX(set_name)')->fetchAll()), '/#catalogo', $view); ?>
   <div class="view-toggle">
-    <a class="<?= $view === 'unique' ? 'active' : '' ?>" href="?<?= h(http_build_query(array_merge($f,['view'=>'unique']))) ?>#catalogo">Cartas únicas</a>
-    <a class="<?= $view === 'printings' ? 'active' : '' ?>" href="?<?= h(http_build_query(array_merge($f,['view'=>'printings']))) ?>#catalogo">Todas as impressões</a>
+    <a class="<?= $view === 'unique' ? 'active' : '' ?>" href="?<?= h(http_build_query(array_merge($f,['view'=>'unique']))) ?>#catalogo"><?= te('Cartas únicas') ?></a>
+    <a class="<?= $view === 'printings' ? 'active' : '' ?>" href="?<?= h(http_build_query(array_merge($f,['view'=>'printings']))) ?>#catalogo"><?= te('Todas as impressões') ?></a>
   </div>
-  <p class="muted"><?= number_format($total, 0, ',', '.') ?> resultado(s) — <?= $view === 'unique' ? 'sem repetir reimpressões' : 'incluindo reimpressões' ?>.</p>
-  <?php if (!$cards): ?><div class="empty-state"><h2>Nenhuma carta encontrada</h2><p>Tente um nome mais curto ou remova o filtro de edição.</p><a class="primary-link" href="/#catalogo">Limpar filtros</a></div><?php endif; ?>
-  <?php if ($q !== '' || $set !== ''): ?><p class="filter-reset"><a href="/#catalogo">Limpar filtros</a></p><?php endif; ?>
+  <p class="muted"><?= number_format($total, 0, ',', '.') ?> <?= te('resultado(s)') ?> — <?= $view === 'unique' ? te('sem repetir reimpressões') : te('incluindo reimpressões') ?>.</p>
+  <?php if (!$cards): ?><div class="empty-state"><h2><?= te('Nenhuma carta encontrada') ?></h2><p><?= te('Tente um nome mais curto ou remova o filtro de edição.') ?></p><a class="primary-link" href="/#catalogo"><?= te('Limpar filtros') ?></a></div><?php endif; ?>
+  <?php if ($q !== '' || $set !== ''): ?><p class="filter-reset"><a href="/#catalogo"><?= te('Limpar filtros') ?></a></p><?php endif; ?>
   <div class="grid">
   <?php foreach ($cards as $card): ?>
     <?php cardTile($card); ?>
   <?php endforeach; ?>
   </div>
-  <?php if ($isHome): ?><p class="home-catalog-more"><a class="primary-link" href="/?catalog=1#catalogo">Abrir catálogo completo →</a></p><?php else: numberedPager($page,$pages,array_merge($f,['view'=>$view]),'#catalogo'); endif; ?>
+  <?php if ($isHome): ?><p class="home-catalog-more"><a class="primary-link" href="/?catalog=1#catalogo"><?= te('Abrir catálogo completo') ?> →</a></p><?php else: numberedPager($page,$pages,array_merge($f,['view'=>$view]),'#catalogo'); endif; ?>
 </section>
 <?php if (!$isHome): ?>
 <section class="section-block">
   <div class="section-heading inline-heading">
     <div>
       
-      <h2>Edições recentes</h2>
+      <h2><?= te('Edições recentes') ?></h2>
     </div>
-    <a class="subtle-link" href="/editions.php">Ver todas →</a>
+    <a class="subtle-link" href="/editions.php"><?= te('Ver todas') ?> →</a>
   </div>
   <div class="edition-mini-grid">
     <?php foreach ($recentSets as $edition): ?>

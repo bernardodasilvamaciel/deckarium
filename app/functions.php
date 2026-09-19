@@ -63,14 +63,14 @@ function cardImageCached(string $id, string $face, string $size): bool
 
 function displayDate(?string $date): string
 {
-    if (!$date) return 'Sem data';
+    if (!$date) return t('Sem data');
     $value = strtotime($date);
     return $value === false ? $date : date('d/m/Y', $value);
 }
 
 function manaSymbols(?string $cost): string
 {
-    if (!$cost) return '<span class="mana-muted">Sem custo</span>';
+    if (!$cost) return '<span class="mana-muted">' . te('Sem custo') . '</span>';
     $tokens = preg_split('/\{([^}]+)\}/', $cost, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY) ?: [];
     $html = '';
     foreach ($tokens as $token) {
@@ -79,7 +79,7 @@ function manaSymbols(?string $cost): string
         $src = 'https://svgs.scryfall.io/card-symbols/' . rawurlencode(str_replace('/', '', $symbol)) . '.svg';
         $html .= '<img class="mana-symbol" src="' . h($src) . '" alt="' . h($symbol) . '" loading="lazy" width="18" height="18">';
     }
-    return $html ?: '<span class="mana-muted">Sem custo</span>';
+    return $html ?: '<span class="mana-muted">' . te('Sem custo') . '</span>';
 }
 
 /** Texto Oracle em HTML: quebras de linha e símbolos ({4}, {T}, {W/U}, {E}…) como os ícones do Scryfall. */
@@ -151,9 +151,17 @@ function cardTile(array $card): void
     $image = cardImageUrl($card);
     echo '<article class="card-tile"><a class="card-art" href="' . h($url) . '">';
     if ($image) echo '<img loading="lazy" decoding="async" width="488" height="680" src="' . h($image) . '" alt="' . h($card['name']) . '">';
-    else echo '<div class="placeholder"><strong>' . h($card['name']) . '</strong><span>Imagem indisponível</span></div>';
+    else echo '<div class="placeholder"><strong>' . h($card['name']) . '</strong><span>' . te('Imagem indisponível') . '</span></div>';
     $priceLabel=array_key_exists('foil',$card)?deckFinishPriceLabel($card,deckIsFoil($card['foil'])):deckPriceLabel($card);
-    echo '</a><div class="card-meta"><a href="' . h($url) . '">' . h($card['name']) . '</a><small>' . h(strtoupper((string)$card['set_code'])) . ' · #' . h((string)$card['collector_number']) . '</small><small class="card-price">' . h($priceLabel) . '</small></div></article>';
+    echo '</a>';
+    // Ações rápidas: só aparecem nas páginas que prepararam o contexto (catálogo, edições).
+    if (!empty($GLOBALS['cardActionsContext'])) {
+        $context = $GLOBALS['cardActionsContext'];
+        echo '<div class="card-tile-actions">';
+        cardActionsMenu($card, $context['decks'], $context['user_id'], $context['back']);
+        echo '</div>';
+    }
+    echo '<div class="card-meta"><a href="' . h($url) . '">' . h($card['name']) . '</a><small>' . h(strtoupper((string)$card['set_code'])) . ' · #' . h((string)$card['collector_number']) . '</small><small class="card-price">' . h($priceLabel) . '</small></div></article>';
 }
 
 function deckPriceBrl(array $card): ?float
@@ -173,7 +181,7 @@ function deckFinishPriceBrl(array $card,bool $foil): ?float
 function deckFinishPriceLabel(array $card,bool $foil): string
 {
     $price=deckFinishPriceBrl($card,$foil);
-    return ($foil?'Foil · ':'Não foil · ').($price===null?'Preço indisponível':'R$ '.number_format($price,2,',','.'));
+    return ($foil?t('Foil').' · ':t('Não foil').' · ').($price===null?t('Preço indisponível'):'R$ '.number_format($price,2,',','.'));
 }
 function deckSelectedPriceBrl(array $card): ?float
 {
@@ -205,14 +213,14 @@ function deckPriceOptions(array $card): array
 function deckPriceVariantsLabel(array $card): string
 {
     $options=deckPriceOptions($card); $parts=[];
-    if($options['normal']!==null) $parts[]='Não foil: R$ '.number_format($options['normal'],2,',','.');
-    if($options['foil']!==null) $parts[]='Foil: R$ '.number_format($options['foil'],2,',','.');
-    return $parts ? implode(' · ',$parts) : 'Preço indisponível';
+    if($options['normal']!==null) $parts[]=t('Não foil').': R$ '.number_format($options['normal'],2,',','.');
+    if($options['foil']!==null) $parts[]=t('Foil').': R$ '.number_format($options['foil'],2,',','.');
+    return $parts ? implode(' · ',$parts) : t('Preço indisponível');
 }
 function deckPriceLabel(array $card): string
 {
     $price=deckPriceBrl($card);
-    return $price===null?'Preço indisponível':'R$ '.number_format($price,2,',','.');
+    return $price===null?t('Preço indisponível'):'R$ '.number_format($price,2,',','.');
 }
 
 function jsonArrayToText($value): string
