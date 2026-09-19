@@ -82,8 +82,8 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
     if ($route === 'editions.php') echo '<link rel="stylesheet" href="/assets/editions.css?v=' . filemtime(__DIR__ . '/assets/editions.css') . '">';
     if ($section==='decks') echo '<link rel="stylesheet" href="/assets/decks.css?v=' . filemtime(__DIR__ . '/assets/decks.css') . '">';
     echo '<script src="/assets/app.js?v=' . h((string)filemtime(__DIR__ . '/assets/app.js')) . '" defer></script></head><body>';
-    echo '<a class="skip-link" href="#main">Pular para o conteúdo</a>';
-    echo '<header class="sidebar" data-sidebar><div class="sidebar-header"><a class="brand" href="/commanders.php" aria-label="Deckarium — início"><img class="brand-mark" src="/assets/deckarium-logo.png" alt="Deckarium" width="512" height="512"></a><button type="button" class="sidebar-toggle" data-sidebar-toggle aria-expanded="true"><span class="sr-only" data-sidebar-toggle-label>Recolher navegação</span><span class="sidebar-toggle-open">' . uiIcon('menu') . '</span><span class="sidebar-toggle-close">' . uiIcon('close') . '</span></button></div>';
+    echo '<a class="skip-link" href="#main">' . te('Pular para o conteúdo') . '</a>';
+    echo '<header class="sidebar" data-sidebar><div class="sidebar-header"><a class="brand" href="/commanders.php" aria-label="Deckarium — início"><img class="brand-mark" src="/assets/deckarium-logo.png" alt="Deckarium" width="512" height="512"></a><button type="button" class="sidebar-toggle" data-sidebar-toggle aria-expanded="true"><span class="sr-only" data-sidebar-toggle-label>' . te('Recolher navegação') . '</span><span class="sidebar-toggle-open">' . uiIcon('menu') . '</span><span class="sidebar-toggle-close">' . uiIcon('close') . '</span></button></div>';
     echo '<nav aria-label="Navegação principal">';
     $links = [['commanders','/commanders.php',t('Comandantes')],['cards','/?catalog=1#catalogo',t('Catálogo')],['sets','/editions.php',t('Edições')],['collection','/collection.php',t('Minha coleção')],['decks','/decks.php',t('Meus decks')],['community','/public.php',t('Comunidade')]];
     if (($user['role'] ?? '') === 'admin') {
