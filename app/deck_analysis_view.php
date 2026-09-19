@@ -28,6 +28,19 @@ $openSlots = max(0, 100 - $finalCount);
 <?php endif; ?>
 
 <div class="analysis-grid">
+    <div class="panel"><h3>Tipos de carta</h3>
+        <?php if($typeCounts): $maxType=max($typeCounts); ?><div class="mana-distribution"><?php foreach($typeCounts as $type=>$count): ?><div><div class="mana-label"><strong><?= h($type) ?></strong><span><?= $finalCount?round($count/$finalCount*100):0 ?>% · <?= $count ?> <?= $count===1?'carta':'cartas' ?></span></div><div class="mana-track"><i class="mana-fill type-fill" style="width:<?= $maxType?max(3,round($count/$maxType*100)):3 ?>%"></i></div></div><?php endforeach; ?></div>
+        <?php else: ?><p class="muted">Nenhuma carta aprovada ainda.</p><?php endif; ?>
+        <p class="muted">Cada carta conta uma vez. Uma carta com mais de um tipo, como artefato-criatura, entra no primeiro desta ordem: terreno, criatura, planeswalker, batalha, instantânea, feitiço, artefato, encantamento.</p>
+    </div>
+    <div class="panel"><h3>Subtipos mais frequentes</h3>
+        <?php if($topSubtypes): $maxSubtype=max($topSubtypes); ?><div class="mana-distribution"><?php foreach($topSubtypes as $subtype=>$count): ?><div><div class="mana-label"><strong><?= h($subtype) ?></strong><span><?= $count ?> <?= $count===1?'carta':'cartas' ?></span></div><div class="mana-track"><i class="mana-fill subtype-fill" style="width:<?= $maxSubtype?max(3,round($count/$maxSubtype*100)):3 ?>%"></i></div></div><?php endforeach; ?></div>
+        <?php else: ?><p class="muted">Nenhum subtipo aparece em duas ou mais cartas aprovadas. Tribos e temas como Equipamento ou Aura aparecem aqui quando se repetem.</p><?php endif; ?>
+        <p class="muted">Até 12 subtipos que aparecem em duas ou mais cartas, somando as duas faces. Subtipos de terreno ficam de fora para não encobrir os temas do deck.</p>
+    </div>
+</div>
+
+<div class="analysis-grid">
     <div class="panel"><h3>Funções informadas</h3>
         <?php if($roles): arsort($roles); ?><ul class="deck-analysis-roles"><?php foreach($roles as $role=>$count): ?><li><span><?= h($role) ?></span><b><?= $count ?></b></li><?php endforeach; ?></ul>
         <?php else: ?><p class="muted">Nenhuma carta aprovada tem função informada. Abra uma carta e preencha “Função” para acompanhar a divisão aqui.</p><?php endif; ?>

@@ -376,7 +376,32 @@ if($deck) {
         $upgradeCuts=deckQuery("SELECT c.*,i.quantity,s.score cut_score FROM builder_items i JOIN cards c ON c.id=i.card_id LEFT JOIN deck_synergy s ON s.card_id=c.id AND s.commander_id=? WHERE i.deck_id=? AND i.stage='deck' AND c.id<>? ORDER BY (s.score IS NULL) ASC,s.score ASC,c.name",[$commander['id'],$id,$commander['id']])->fetchAll();
     }
 }
-$finalCount = $commander ? 1 : 0; $landCount=0; $roles=[]; $shopping=[]; $warnings=[]; $pipCounts=array_fill_keys(['W','U','B','R','G'],0); $curveCounts=[]; $curveCards=array_fill(0,11,[]); $deckPriceTotal=0.0; $deckUnpriced=0;
+/**
+ * Divide a linha de tipo nas duas listas dos gráficos da análise.
+ * Cada carta entra em um único tipo (o primeiro da ordem abaixo que aparecer)
+ * para os totais fecharem com o tamanho do deck. Subtipos vêm das duas faces.
+ *
+ * @return array{0: string, 1: string[]}
+ */
+function deckTypeBuckets(string $typeLine): array
+{
+    $main = 'Outros';
+    foreach (['Land'=>'Terrenos','Creature'=>'Criaturas','Planeswalker'=>'Planeswalkers','Battle'=>'Batalhas','Instant'=>'Instantâneas','Sorcery'=>'Feitiços','Artifact'=>'Artefatos','Enchantment'=>'Encantamentos'] as $type=>$label) {
+        if (str_contains($typeLine, $type)) { $main = $label; break; }
+    }
+    $subtypes = [];
+    foreach (explode('//', $typeLine) as $face) {
+        $parts = preg_split('/[—–]/u', $face, 2);
+        if (count($parts) < 2) continue;
+        foreach (preg_split('/\s+/u', trim($parts[1])) ?: [] as $subtype) {
+            $subtype = trim($subtype);
+            if ($subtype !== '') $subtypes[$subtype] = true;
+        }
+    }
+    return [$main, array_keys($subtypes)];
+}
+
+$finalCount = $commander ? 1 : 0; $landCount=0; $typeCounts=[]; $subtypeCounts=[]; $roles=[]; $shopping=[]; $warnings=[]; $pipCounts=array_fill_keys(['W','U','B','R','G'],0); $curveCounts=[]; $curveCards=array_fill(0,11,[]); $deckPriceTotal=0.0; $deckUnpriced=0;
 foreach ($items as $item) {
     if ($item['stage']!=='deck') continue;
     $quantity=(int)$item['quantity']; $finalCount+=$quantity;
@@ -388,6 +413,10 @@ foreach ($items as $item) {
     $itemPrice=deckSelectedPriceBrl($item); if($itemPrice===null)$deckUnpriced+=$quantity;else $deckPriceTotal+=$itemPrice*$quantity;
     foreach ($pipCounts as $color=>$_) $pipCounts[$color]+=substr_count((string)$item['mana_cost'],$color)*$quantity;
     if (!str_contains($item['type_line'],'Land')) { $cmc=min(10,max(0,(int)floor((float)($item['cmc']??0)))); $curveCounts[$cmc]=($curveCounts[$cmc]??0)+$quantity; $curveCards[$cmc][]=$item; }
+    [$mainType,$subtypes]=deckTypeBuckets((string)$item['type_line']);
+    $typeCounts[$mainType]=($typeCounts[$mainType]??0)+$quantity;
+    // Subtipos de terreno (Plains, Island…) inundariam o gráfico e escondem os temas do deck.
+    if ($mainType!=='Terrenos') foreach ($subtypes as $subtype) $subtypeCounts[$subtype]=($subtypeCounts[$subtype]??0)+$quantity;
 }
 if ($commander) {
     $commanderOwned=(int)deckQuery(deckOwnedSql().'SELECT COALESCE((SELECT owned FROM owned WHERE logical_id=?::uuid),0)',[$commander['oracle_id']?:$commander['id']])->fetchColumn();
@@ -396,10 +425,15 @@ if ($commander) {
     $commanderPrice=deckSelectedPriceBrl($commander);if($commanderPrice===null)$deckUnpriced++;else $deckPriceTotal+=$commanderPrice;
     foreach ($pipCounts as $color=>$_) $pipCounts[$color]+=substr_count((string)$commander['mana_cost'],$color);
     $cmc=min(10,max(0,(int)floor((float)($commander['cmc']??0)))); $curveCounts[$cmc]=($curveCounts[$cmc]??0)+1; $curveCards[$cmc][]=$commander;
+    [$mainType,$subtypes]=deckTypeBuckets((string)$commander['type_line']);
+    $typeCounts[$mainType]=($typeCounts[$mainType]??0)+1;
+    foreach ($subtypes as $subtype) $subtypeCounts[$subtype]=($subtypeCounts[$subtype]??0)+1;
 }
 $isComplete = $finalCount === 100;
 if ($deck && (($deck['status']==='ready') !== $isComplete)) { deckQuery('UPDATE builder_decks SET status=? WHERE id=? AND user_id=?',[$isComplete?'ready':'planning',$id,$userId]); $deck['status']=$isComplete?'ready':'planning'; }
 $manaTotal=array_sum($pipCounts); $maxCurve=$curveCounts?max($curveCounts):0; ksort($curveCounts);
+arsort($typeCounts); arsort($subtypeCounts);
+$topSubtypes=array_slice(array_filter($subtypeCounts,fn($count)=>$count>1),0,12,true);
 $recommendedLandTotal=$isComplete?36:null; $landRecommendation=[]; $colorNames=['W'=>'Brancos','U'=>'Azuis','B'=>'Pretos','R'=>'Vermelhos','G'=>'Verdes'];
 if($recommendedLandTotal!==null){
     $rankedColors=array_keys($pipCounts); usort($rankedColors,fn($a,$b)=>$pipCounts[$b]<=>$pipCounts[$a]);
