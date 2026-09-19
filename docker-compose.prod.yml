@@ -26,6 +26,11 @@ services:
       SCRYFALL_USER_AGENT: ${SCRYFALL_USER_AGENT:-Deckarium/1.0}
       SCRYFALL_ACCEPT: application/json;q=0.9,*/*;q=0.8
       STORAGE_DIR: /var/www/storage
+      # Administrador criado só quando o banco não tem usuários (sem senha: gerada e gravada em storage/admin-inicial.txt).
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@deckarium.local}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrador}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     volumes:
       # Bulk do Scryfall e imagens das cartas (~10 GB), em /opt.
       - ${DECKARIUM_DATA_DIR:-/opt/apps/deckarium/data}/storage:/var/www/storage

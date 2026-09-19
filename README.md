@@ -240,7 +240,15 @@ O Deckarium tem contas de usuário. Qualquer visitante consulta o **catálogo**,
 - **Usuários (admin):** `/users.php` — promove/rebaixa administradores, desativa contas e gera senhas temporárias (não há envio de email para recuperar senha).
 - **Proteções:** senhas com `password_hash`, sessão regenerada no login, CSRF em todos os formulários, bloqueio de 15 minutos após 8 tentativas erradas e cookies `HttpOnly`/`SameSite=Lax`.
 
-Na primeira requisição após atualizar, o app cria as tabelas `users`, `auth_attempts` e `app_migrations`, cria o administrador definido em `app/auth_bootstrap.php` (arquivo ignorado pelo Git; pode ser apagado depois do primeiro acesso) e transfere a coleção e os decks já existentes para ele. `builder_decks` e `builder_collection` passam a ter `user_id`.
+Na primeira requisição após atualizar, o app cria as tabelas `users`, `auth_attempts` e `app_migrations`, cria um administrador padrão e transfere a coleção e os decks já existentes para ele. `builder_decks` e `builder_collection` passam a ter `user_id`.
+
+**Administrador inicial.** Quando o banco ainda não tem nenhum usuário, o app cria uma conta de administrador:
+
+- usuário `admin`, email `admin@deckarium.local` e nome `Administrador` — mude com `ADMIN_USERNAME`, `ADMIN_EMAIL` e `ADMIN_NAME` no `.env`;
+- a senha vem de `ADMIN_PASSWORD`; se ela estiver vazia, o app gera uma senha aleatória e a grava em `storage/admin-inicial.txt` e no log (`docker compose logs app | grep administrador`). Entre, troque a senha em **Minha conta** e apague o arquivo;
+- se existir `app/auth_bootstrap.php` (ignorado pelo Git, usado pelo deploy), ele tem prioridade sobre as variáveis.
+
+Com usuários já cadastrados, nada disso é executado.
 
 Para rodar os testes de fluxo, informe uma conta: `$env:DECKARIUM_USER='...'; $env:DECKARIUM_PASSWORD='...'; node tests/deck-workflow.mjs`.
 

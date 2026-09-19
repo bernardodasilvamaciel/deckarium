@@ -6,7 +6,7 @@ declare(strict_types=1);
  *
  * Carregado por partials.php (páginas) e pelos endpoints JSON. Na primeira
  * requisição após a atualização, cria as tabelas de usuários, o administrador
- * inicial (app/auth_bootstrap.php) e transfere a coleção e os decks existentes
+ * inicial (authBootstrapAdmin) e transfere a coleção e os decks existentes
  * para ele.
  */
 
@@ -72,9 +72,8 @@ function authMigrate(): void
             INSERT INTO app_migrations(name) VALUES ('auth_v1') ON CONFLICT DO NOTHING;");
 
         $userCount = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
-        $bootstrapFile = __DIR__ . '/auth_bootstrap.php';
-        if ($userCount === 0 && is_file($bootstrapFile)) {
-            $admin = require $bootstrapFile;
+        if ($userCount === 0) {
+            $admin = authBootstrapAdmin();
             $stmt = $pdo->prepare("INSERT INTO users(full_name,username,email,password_hash,role) VALUES (?,?,?,?,'admin')");
             $stmt->execute([$admin['full_name'], strtolower($admin['username']), strtolower($admin['email']), $admin['password_hash']]);
         }
@@ -90,6 +89,38 @@ function authMigrate(): void
         if ($pdo->inTransaction()) $pdo->rollBack();
         throw $e;
     }
+}
+
+/**
+ * Administrador criado quando o banco ainda não tem nenhum usuário.
+ *
+ * Ordem: app/auth_bootstrap.php (se existir) → variáveis ADMIN_* → padrão
+ * "admin". Sem ADMIN_PASSWORD, gera uma senha aleatória, grava em
+ * storage/admin-inicial.txt e no log do container (docker compose logs app).
+ *
+ * @return array{full_name: string, username: string, email: string, password_hash: string}
+ */
+function authBootstrapAdmin(): array
+{
+    $bootstrapFile = __DIR__ . '/auth_bootstrap.php';
+    if (is_file($bootstrapFile)) return require $bootstrapFile;
+
+    $env = fn(string $name, string $default): string => trim((string)getenv($name)) ?: $default;
+    $admin = [
+        'full_name' => $env('ADMIN_NAME', 'Administrador'),
+        'username' => $env('ADMIN_USERNAME', 'admin'),
+        'email' => $env('ADMIN_EMAIL', 'admin@deckarium.local'),
+    ];
+    $password = (string)getenv('ADMIN_PASSWORD');
+    if ($password === '') {
+        $password = rtrim(strtr(base64_encode(random_bytes(12)), '+/', '-_'), '=');
+        $message = "Deckarium: administrador inicial criado. Usuário: {$admin['username']} | Senha: {$password} | Troque a senha em /account.php.";
+        error_log(strtr($message, ["á" => "a"])); // o Apache escapa acentos no log
+        $config = require __DIR__ . '/config.php';
+        $file = $config['storage_dir'] . '/admin-inicial.txt';
+        if (@file_put_contents($file, $message . PHP_EOL) !== false) @chmod($file, 0600);
+    }
+    return $admin + ['password_hash' => authHashPassword($password)];
 }
 
 /** Coloca user_id nas tabelas pessoais e entrega os dados existentes ao primeiro administrador. */
