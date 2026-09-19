@@ -151,6 +151,15 @@ Tags de função do Scryfall Tagger (opcional, `php bin/sync_tagger.php`). Compl
 | `password_changed_at` | timestamptz | não | `now()` | Troca de senha; invalida outras sessões. |
 | `last_login_at` | timestamptz | sim | | Último login. |
 | `collection_public` | boolean | não | `false` | Coleção visível em `/public_collection.php?u=<usuario>`. |
+| `display_name` | text | não | `''` | Nome de exibição do perfil público; vazio mostra `@username`. O nome completo nunca é público. |
+| `bio` | text | não | `''` | Bio do perfil (até 600 caracteres). |
+| `location` | text | não | `''` | Local mostrado no perfil. |
+| `website` | text | não | `''` | Site ou rede social (sempre `http(s)://`). |
+| `favorite_colors` | jsonb | não | `[]` | Cores favoritas (`W`,`U`,`B`,`R`,`G`,`C`). |
+| `avatar_file` | text | sim | | Foto de perfil em `storage/profiles/<id>/`, servida por `profile_image.php`. |
+| `cover_file` | text | sim | | Capa enviada em `storage/profiles/<id>/`. |
+| `cover_card_id` | uuid | sim | | Carta cuja ilustração (`art_crop`) é a capa, quando não há capa enviada. |
+| `cover_position` | smallint | não | `50` | Enquadramento vertical da capa (0–100 %). |
 
 ### `auth_attempts`
 
@@ -201,7 +210,7 @@ Cópias físicas de cada usuário, por impressão e acabamento. Importada por CS
 | `strategy` | text | não | `''` | “Minha intenção”: estratégia em texto livre. Aparece na página pública. |
 | `terms` | text | não | `''` | Termos Oracle padrão do Explorar, separados por `;`. |
 | `status` | text | não | `'planning'` | `planning` ou `ready` (importados e decks com 100 cartas). |
-| `scoring_config` | jsonb | sim | | Metas e regras personalizadas; nulo = automáticas. |
+| `scoring_config` | jsonb | sim | | Metas e regras personalizadas; nulo = automáticas. `land_fill` guarda a meta de “Completar com terrenos” (`total`, nulo = sugestão pelo deck) e `buy` (incluir terrenos fora da coleção). |
 | `is_public` | boolean | não | `false` | Deck visível em `/public_deck.php?id=<id>` e na Comunidade. |
 | `created_at` | timestamptz | sim | `now()` | Criação. |
 

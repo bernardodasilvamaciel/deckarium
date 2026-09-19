@@ -4,7 +4,9 @@ declare(strict_types=1);
 require __DIR__ . '/functions.php';
 require __DIR__ . '/partials.php';
 require __DIR__ . '/deck_library.php';
+require __DIR__ . '/profile_lib.php';
 deckSchema();
+profileSchema();
 $viewer = authUser();
 session_write_close();
 
@@ -27,12 +29,33 @@ $collections = deckQuery("SELECT u.username,COALESCE(SUM(o.quantity),0) total,CO
     FROM users u LEFT JOIN builder_collection o ON o.user_id=u.id WHERE {$collectionWhere}
     GROUP BY u.id,u.username ORDER BY total DESC LIMIT 60", $username !== '' ? [$username] : [])->fetchAll();
 
+// Jogadores: todo usuário ativo tem perfil público (decks e coleção seguem a escolha de cada um).
+$playerWhere = 'u.is_active';
+$playerParams = [];
+if ($query !== '') { $playerWhere .= ' AND (u.username ILIKE ? OR u.display_name ILIKE ?)'; array_push($playerParams, $like, $like); }
+$players = $username === '' ? deckQuery("SELECT u.*, (SELECT COUNT(*) FROM builder_decks d WHERE d.user_id=u.id AND d.is_public) public_decks
+    FROM users u WHERE {$playerWhere} ORDER BY public_decks DESC, u.created_at LIMIT 48", $playerParams)->fetchAll() : [];
+if ($username !== '' && deckQuery('SELECT 1 FROM users WHERE lower(username)=lower(?) AND is_active', [$username])->fetchColumn()) { header('Location: /profile.php?u=' . rawurlencode($username), true, 302); exit; }
 pageHeader($username !== '' ? '@' . $username . ' · Comunidade' : 'Comunidade');
 ?>
 <div class="public-page">
 <section class="hero"><div><h1><?= $username !== '' ? '@' . h($username) : 'Comunidade' ?></h1><p><?= $username !== '' ? 'Decks e coleção que este usuário tornou públicos.' : 'Decks e coleções que outros jogadores tornaram públicos. Para compartilhar os seus, use “Tornar público” no deck ou em Minha coleção.' ?></p></div><?php if ($username !== ''): ?><a class="text-link" href="/public.php">&larr; Toda a comunidade</a><?php endif; ?></section>
 
 <form class="public-search" method="get" role="search"><?php if ($username !== ''): ?><input type="hidden" name="u" value="<?= h($username) ?>"><?php endif; ?><label class="field">Buscar decks<input type="search" name="q" value="<?= h($query) ?>" placeholder="Nome do deck ou da comandante"></label><button class="primary-link">Buscar</button></form>
+
+<?php if ($players): ?>
+<section aria-labelledby="public-players-title" class="public-players">
+    <div class="section-heading"><h2 id="public-players-title">Jogadores <span class="muted"><?= count($players) ?></span></h2></div>
+    <ul class="player-grid">
+    <?php foreach ($players as $player): $playerAvatar = profileAvatarUrl($player); ?>
+        <li><a class="player-card" href="/profile.php?u=<?= h(rawurlencode((string)$player['username'])) ?>">
+            <span class="player-avatar"><?php if ($playerAvatar): ?><img src="<?= h($playerAvatar) ?>" alt="" loading="lazy" width="48" height="48"><?php else: ?><?= h(profileInitials($player)) ?><?php endif; ?></span>
+            <span class="player-copy"><strong><?= h(profileName($player)) ?></strong><small>@<?= h($player['username']) ?> · <?= (int)$player['public_decks'] ?> deck<?= (int)$player['public_decks'] === 1 ? '' : 's' ?> público<?= (int)$player['public_decks'] === 1 ? '' : 's' ?></small></span>
+        </a></li>
+    <?php endforeach; ?>
+    </ul>
+</section>
+<?php endif; ?>
 
 <section aria-labelledby="public-decks-title">
     <div class="section-heading"><h2 id="public-decks-title">Decks públicos <span class="muted"><?= count($decks) ?></span></h2></div>

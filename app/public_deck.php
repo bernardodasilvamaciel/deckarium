@@ -57,7 +57,7 @@ pageHeader($deck['name'] . ' · deck público');
 <section class="public-deck-hero">
     <?php if ($commander && ($src = cardImageUrl($commander))): ?><a class="public-deck-commander" href="/card.php?id=<?= h(rawurlencode((string)$commander['id'])) ?>"><img src="<?= h($src) ?>" alt="<?= h($commander['name']) ?>" width="244" height="340"></a><?php endif; ?>
     <div>
-        <p class="public-kicker">Deck de <a href="/public.php?u=<?= h(rawurlencode((string)$deck['username'])) ?>">@<?= h($deck['username']) ?></a></p>
+        <p class="public-kicker">Deck de <a href="/profile.php?u=<?= h(rawurlencode((string)$deck['username'])) ?>">@<?= h($deck['username']) ?></a></p>
         <h1><?= h($deck['name']) ?></h1>
         <p class="public-deck-meta"><?= $commander ? 'Comandante: <strong>' . h($commander['name']) . '</strong>' : 'Sem comandante definida' ?><?= $identity ? ' · ' . manaSymbols(implode('', array_map(fn($c) => '{' . $c . '}', $identity))) : '' ?> · <?= $total ?>/100 cartas</p>
         <?php if (trim((string)$deck['strategy']) !== ''): ?><div class="public-deck-strategy"><h2>Intenção do deck</h2><p><?= nl2br(h((string)$deck['strategy'])) ?></p></div><?php endif; ?>

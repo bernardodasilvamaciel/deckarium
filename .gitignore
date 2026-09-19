@@ -7,3 +7,4 @@ storage/sync-progress.json
 storage/sync-catalog.lock
 storage/sync.log
 app/auth_bootstrap.php
+storage/profiles/

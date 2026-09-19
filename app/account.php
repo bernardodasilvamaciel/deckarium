@@ -3,6 +3,8 @@ declare(strict_types=1);
 require __DIR__ . '/db.php';
 require __DIR__ . '/functions.php';
 require __DIR__ . '/partials.php';
+require __DIR__ . '/profile_lib.php';
+profileSchema();
 
 $user = authRequireLogin();
 $userId = (int)$user['id'];
@@ -12,6 +14,10 @@ unset($_SESSION['account_message']);
 $profileErrors = [];
 $passwordErrors = [];
 $profile = ['full_name' => $user['full_name'], 'username' => $user['username'], 'email' => $user['email']];
+$publicStmt = db()->prepare('SELECT * FROM users WHERE id=?');
+$publicStmt->execute([$userId]);
+$publicProfile = $publicStmt->fetch();
+$publicErrors = [];
 
 $currentPasswordMatches = static function (string $password) use ($userId): bool {
     $stmt = db()->prepare('SELECT password_hash FROM users WHERE id=?');
@@ -34,6 +40,41 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     ->execute([$profile['full_name'], $profile['username'], $profile['email'], $userId]);
                 $_SESSION['account_message'] = 'Dados da conta atualizados.';
                 header('Location: /account.php', true, 303);
+                exit;
+            }
+        } elseif ($action === 'public_profile') {
+            // Perfil público: textos, cores, foto e capa (imagem enviada ou ilustração de uma carta).
+            [$publicData, $publicErrors] = profileValidate($_POST);
+            $avatarFile = $publicProfile['avatar_file'];
+            $coverFile = $publicProfile['cover_file'];
+            $coverCard = $publicProfile['cover_card_id'];
+            $newFiles = [];
+            try {
+                if (($_FILES['avatar']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) { $avatarFile = profileStoreImage($_FILES['avatar'], $userId, 'avatar'); $newFiles[] = $avatarFile; }
+                elseif (!empty($_POST['remove_avatar'])) $avatarFile = null;
+            } catch (RuntimeException $uploadError) { $publicErrors['avatar'] = $uploadError->getMessage(); }
+            $coverMode = (string)($_POST['cover_mode'] ?? 'keep');
+            try {
+                if ($coverMode === 'upload') {
+                    if (($_FILES['cover']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) { $coverFile = profileStoreImage($_FILES['cover'], $userId, 'cover'); $newFiles[] = $coverFile; $coverCard = null; }
+                    elseif (!$coverFile) $publicErrors['cover'] = 'Escolha uma imagem para a capa.';
+                    else $coverCard = null;
+                } elseif ($coverMode === 'card') {
+                    $found = profileFindCoverCard((string)($_POST['cover_card'] ?? ''));
+                    if (!$found) $publicErrors['cover_card'] = 'Carta não encontrada. Use o nome em inglês, como “Benjamin Sisko, Besieged”.';
+                    else { $coverCard = $found['id']; $coverFile = null; }
+                } elseif ($coverMode === 'none') { $coverFile = null; $coverCard = null; }
+            } catch (RuntimeException $uploadError) { $publicErrors['cover'] = $uploadError->getMessage(); }
+            if ($publicErrors) {
+                foreach ($newFiles as $newFile) profileDeleteImage($userId, $newFile);
+                $publicProfile = array_merge($publicProfile, $publicData, ['favorite_colors' => json_encode($publicData['favorite_colors'])]);
+            } else {
+                db()->prepare('UPDATE users SET display_name=?,bio=?,location=?,website=?,favorite_colors=?::jsonb,cover_position=?,avatar_file=?,cover_file=?,cover_card_id=?,updated_at=now() WHERE id=?')
+                    ->execute([$publicData['display_name'], $publicData['bio'], $publicData['location'], $publicData['website'], json_encode($publicData['favorite_colors']), $publicData['cover_position'], $avatarFile, $coverFile, $coverCard, $userId]);
+                if ($publicProfile['avatar_file'] !== $avatarFile) profileDeleteImage($userId, $publicProfile['avatar_file']);
+                if ($publicProfile['cover_file'] !== $coverFile) profileDeleteImage($userId, $publicProfile['cover_file']);
+                $_SESSION['account_message'] = 'Perfil público atualizado.';
+                header('Location: /account.php#perfil-publico', true, 303);
                 exit;
             }
         } elseif ($action === 'password') {
@@ -80,6 +121,7 @@ pageHeader('Minha conta');
 ?>
 <section class="hero"><div><h1>Minha conta</h1><p>Seus dados de acesso e um resumo do que está guardado no seu nome.</p></div></section>
 <?php if ($message): ?><p class="notice <?= $messageType ?>" role="status"><?= h($message) ?></p><?php endif; ?>
+<?php require __DIR__ . '/profile_editor_view.php'; ?>
 
 <div class="account-summary">
   <div><span>Perfil</span><strong><?= $user['role'] === 'admin' ? 'Administrador' : 'Jogador' ?></strong><small>Desde <?= h(date('d/m/Y', strtotime((string)$user['created_at']))) ?></small></div>

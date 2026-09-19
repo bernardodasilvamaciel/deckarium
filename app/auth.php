@@ -140,7 +140,7 @@ function authLoadUser(): ?array
         $_SESSION['auth_notice'] = 'Sua sessão expirou. Entre novamente.';
         return null;
     }
-    $stmt = db()->prepare('SELECT id,full_name,username,email,role,is_active,password_hash,created_at,last_login_at FROM users WHERE id=?');
+    $stmt = db()->prepare('SELECT * FROM users WHERE id=?');
     $stmt->execute([$userId]);
     $user = $stmt->fetch();
     // Trocar a senha ou desativar a conta encerra as outras sessões.

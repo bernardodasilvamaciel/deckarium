@@ -21,7 +21,7 @@ function uiIcon(string $name): string
 function pageHeader(string $title): void
 {
     $route = basename($_SERVER['SCRIPT_NAME'] ?? 'index.php');
-    $section = !empty($GLOBALS['isHome']) ? 'home' : match ($route) { 'editions.php','edition.php'=>'sets', 'commanders.php'=>'commanders', 'collection.php'=>'collection', 'decks.php','upgrades.php','deck_board.php'=>'decks','status.php','sync_history.php'=>'status','public.php','public_deck.php','public_collection.php'=>'community','users.php'=>'users','account.php'=>'account','login.php','register.php'=>'auth',default=>'cards' };
+    $section = !empty($GLOBALS['isHome']) ? 'home' : match ($route) { 'editions.php','edition.php'=>'sets', 'commanders.php'=>'commanders', 'collection.php'=>'collection', 'decks.php','upgrades.php','deck_board.php'=>'decks','status.php','sync_history.php'=>'status','public.php','public_deck.php','public_collection.php','profile.php'=>'community','users.php'=>'users','account.php'=>'account','login.php','register.php'=>'auth',default=>'cards' };
     $user = authUser();
     $version = (string)filemtime(__DIR__ . '/assets/style.css');
     echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
@@ -48,7 +48,7 @@ function pageHeader(string $title): void
     echo '</nav>';
     if ($user) {
         $initials = mb_strtoupper(implode('', array_map(fn($part) => mb_substr($part, 0, 1), array_slice(preg_split('/\s+/u', trim((string)$user['full_name'])) ?: [], 0, 2))));
-        echo '<div class="sidebar-account"><a class="account-chip" href="/account.php"' . ($section === 'account' ? ' aria-current="page"' : '') . '><span class="account-avatar" aria-hidden="true">' . h($initials ?: '?') . '</span><span class="account-names"><strong>' . h($user['full_name']) . '</strong><small>@' . h($user['username']) . ($user['role'] === 'admin' ? ' · admin' : '') . '</small></span></a>';
+        echo '<div class="sidebar-account"><a class="account-chip" href="/account.php"' . ($section === 'account' ? ' aria-current="page"' : '') . '><span class="account-avatar" aria-hidden="true">' . (!empty($user['avatar_file']) ? '<img src="/profile_image.php?u=' . (int)$user['id'] . '&amp;kind=avatar&amp;v=' . h(rawurlencode((string)$user['avatar_file'])) . '" alt="">' : h($initials ?: '?')) . '</span><span class="account-names"><strong>' . h($user['full_name']) . '</strong><small>@' . h($user['username']) . ($user['role'] === 'admin' ? ' · admin' : '') . '</small></span></a>';
         echo '<form method="post" action="/logout.php" class="account-logout">' . authCsrfField() . '<button type="submit">Sair</button></form></div>';
     } else {
         $next = $section === 'auth' ? '' : '?next=' . rawurlencode((string)($_SERVER['REQUEST_URI'] ?? '/'));
