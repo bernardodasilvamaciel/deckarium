@@ -8,11 +8,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # remoteip: usa o IP real do visitante enviado pelo Cloudflare (CF-Connecting-IP)
-RUN a2enmod headers remoteip
+RUN a2enmod headers remoteip rewrite
 
 COPY docker/php/php.ini /usr/local/etc/php/conf.d/mtg.ini
 COPY docker/php/php.prod.ini /usr/local/etc/php/conf.d/zz-prod.ini
 COPY docker/php/remoteip.conf /etc/apache2/conf-enabled/remoteip.conf
+COPY docker/php/sitemap.conf /etc/apache2/conf-enabled/sitemap.conf
 
 # Apache escuta no endereço de APACHE_LISTEN (rede do host; padrão 127.0.0.1:8000).
 ENV APACHE_LISTEN=127.0.0.1:8000

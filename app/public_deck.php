@@ -50,7 +50,7 @@ uksort($groups, fn($a, $b) => array_search($a, array_values($typeLabels) + [99 =
 $identity = $commander ? (json_decode((string)$commander['color_identity'], true) ?: []) : [];
 $maxCurve = max(1, ...$curve);
 
-pageHeader($deck['name'] . ' · deck público');
+pageHeader($deck['name'] . ' · deck público', 'Deck de Commander "' . $deck['name'] . '"' . ($commander ? ' com ' . $commander['name'] : '') . ', publicado por @' . $deck['username'] . ' no Deckarium.');
 ?>
 <div class="public-page">
 <?php if (!$isPublic): ?><p class="notice warning">Pré-visualização: este deck é privado. Torne-o público na <a href="/decks.php?deck=<?= $id ?>&amp;view=overview">Visão geral</a> para compartilhar o link.</p><?php endif; ?>

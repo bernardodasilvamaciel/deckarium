@@ -92,7 +92,7 @@ $active = $f['q'] !== '' || $f['type'] !== '' || $f['rarity'] !== '' || $f['colo
 $baseParams = array_filter(['set' => $set, 'view' => $view === 'unique' ? '' : $view, 'sort' => $sort === 'number' ? '' : $sort, 'q' => $f['q'], 'type' => $f['type'], 'rarity' => $f['rarity'], 'colors' => $f['colors'], 'new' => $onlyNew ? '1' : ''], static fn($v) => $v !== '' && $v !== []);
 $colorLabels = ['W' => 'Branco', 'U' => 'Azul', 'B' => 'Preto', 'R' => 'Vermelho', 'G' => 'Verde', 'C' => 'Incolor'];
 
-pageHeader($edition['set_name']);
+pageHeader($edition['set_name'], $edition['set_name'] . ' (' . strtoupper((string)$set) . '): todas as cartas da edição, com preços, raridades e cartas impressas pela primeira vez.');
 ?>
 <section class="set-hero">
     <a class="back-link" href="/editions.php#ano-<?= h(substr((string)$edition['first_release'], 0, 4)) ?>">← Linha do tempo das edições</a>

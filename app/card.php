@@ -72,7 +72,10 @@ SQL);
     $printings = $p->fetchAll();
 }
 
-pageHeader($card['name']);
+$cardDescription = trim($card['name'] . ' — ' . (string)$card['type_line'] . '. ' . (string)$card['set_name']
+    . ' (' . strtoupper((string)$card['set_code']) . ') #' . (string)$card['collector_number'] . '. '
+    . mb_substr((string)($card['oracle_text'] ?? ''), 0, 160));
+pageHeader($card['name'], $cardDescription, ['image' => cardImageUrl($card, 'front', 'normal') ?: null]);
 $front = cardImageUrl($card, 'front', 'normal');
 $back = cardImageUrl($card, 'back', 'normal');
 ?>

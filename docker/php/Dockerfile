@@ -5,7 +5,8 @@ RUN apt-get update \
     && docker-php-ext-install pdo_pgsql \
     && rm -rf /var/lib/apt/lists/*
 
-RUN a2enmod headers
+RUN a2enmod headers rewrite
 
 COPY php.ini /usr/local/etc/php/conf.d/mtg.ini
+COPY sitemap.conf /etc/apache2/conf-enabled/sitemap.conf
 WORKDIR /var/www/html

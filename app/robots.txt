@@ -1,0 +1,33 @@
+# Deckarium — catálogo, edições, comandantes e conteúdo público da comunidade.
+# Áreas de conta e de administração ficam fora da busca: são privadas ou exigem login.
+
+User-agent: *
+Allow: /
+
+# Conta e autenticação
+Disallow: /login.php
+Disallow: /register.php
+Disallow: /logout.php
+Disallow: /account.php
+
+# Dados pessoais de cada conta
+Disallow: /collection.php
+Disallow: /decks.php
+Disallow: /deck_board.php
+Disallow: /upgrades.php
+Disallow: /card.php?*deck=
+
+# Administração, sincronização e downloads
+Disallow: /users.php
+Disallow: /status.php
+Disallow: /sync_history.php
+Disallow: /sync_control.php
+Disallow: /sync_progress.php
+Disallow: /sync_log.php
+Disallow: /check_updates.php
+Disallow: /download_control.php
+Disallow: /download_progress.php
+Disallow: /download_card_image.php
+Disallow: /download_upgrade_images.php
+
+Sitemap: https://deckarium.bernas.shop/sitemap.xml

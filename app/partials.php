@@ -20,7 +20,14 @@ function uiIcon(string $name): string
     ];
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . ($paths[$name] ?? $paths['cards']) . '</svg>';
 }
-function pageHeader(string $title): void
+/**
+ * Cabeçalho das páginas.
+ *
+ * $description alimenta o resumo que aparece nos buscadores e no compartilhamento;
+ * $meta aceita 'image' (imagem do compartilhamento) e 'noindex' (fora da busca).
+ * Áreas de conta e de administração já saem com noindex por conta da rota.
+ */
+function pageHeader(string $title, string $description = '', array $meta = []): void
 {
     $route = basename($_SERVER['SCRIPT_NAME'] ?? 'index.php');
     $section = !empty($GLOBALS['isHome']) ? 'home' : match ($route) { 'editions.php','edition.php'=>'sets', 'commanders.php'=>'commanders', 'collection.php'=>'collection', 'decks.php','upgrades.php','deck_board.php'=>'decks','status.php','sync_history.php'=>'status','public.php','public_deck.php','public_collection.php','profile.php'=>'community','users.php'=>'users','account.php'=>'account','login.php','register.php'=>'auth',default=>'cards' };
@@ -28,6 +35,44 @@ function pageHeader(string $title): void
     $version = (string)filemtime(__DIR__ . '/assets/style.css');
     echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
     echo '<meta name="theme-color" content="#171e26"><title>' . h($title) . ' · Deckarium</title>';
+
+    // Resumo, endereço canônico e cartão de compartilhamento.
+    $descriptions = [
+        'home' => 'Catálogo completo de Magic em português, com edições, comandantes, preços e oficina de decks de Commander.',
+        'cards' => 'Pesquise qualquer carta de Magic pelo nome, texto Oracle, tipo, cores, raridade e edição.',
+        'sets' => 'Todas as edições de Magic em linha do tempo, com cartas novas, reimpressões e proporção de cores.',
+        'commanders' => 'Todos os comandantes do catálogo, com as cartas mais jogadas e as sinergias de cada um.',
+        'community' => 'Decks e coleções que outros jogadores tornaram públicos no Deckarium.',
+    ];
+    $pageDescription = $description !== '' ? $description : ($descriptions[$section] ?? 'Deckarium: catálogo de Magic, oficina de decks de Commander e controle da sua coleção.');
+    $pageDescription = mb_substr(trim(preg_replace('/\s+/u', ' ', $pageDescription) ?? ''), 0, 300);
+    $privateRoutes = ['login.php','register.php','logout.php','account.php','collection.php','decks.php','deck_board.php','upgrades.php','users.php','status.php','sync_history.php'];
+    $noindex = $meta['noindex'] ?? in_array($route, $privateRoutes, true);
+    $scheme = (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'http') ? 'http' : 'https';
+    $host = (string)($_SERVER['HTTP_HOST'] ?? 'deckarium.bernas.shop');
+    // No canônico ficam só os parâmetros que identificam a página; filtros e buscas
+    // gerariam um endereço diferente a cada combinação, com o mesmo conteúdo.
+    $canonicalParams = ['card.php'=>['id'],'edition.php'=>['set','view','page'],'editions.php'=>['page'],'public_deck.php'=>['id'],
+        'public_collection.php'=>['u','page'],'profile.php'=>['u'],'public.php'=>['u'],'index.php'=>['view','page'],'commanders.php'=>['page']];
+    if (isset($meta['canonical'])) {
+        $canonical = (string)$meta['canonical'];
+    } else {
+        $path = strtok((string)($_SERVER['REQUEST_URI'] ?? '/'), '?') ?: '/';
+        $kept = array_intersect_key($_GET, array_flip($canonicalParams[$route] ?? []));
+        $canonical = $path . ($kept ? '?' . http_build_query($kept) : '');
+    }
+    $canonical = $scheme . '://' . $host . $canonical;
+    $image = $meta['image'] ?? '/assets/deckarium-logo.png';
+    if ($image !== '' && $image[0] === '/') $image = $scheme . '://' . $host . $image;
+
+    echo '<meta name="description" content="' . h($pageDescription) . '">';
+    if ($noindex) echo '<meta name="robots" content="noindex,nofollow">';
+    else echo '<link rel="canonical" href="' . h($canonical) . '">';
+    echo '<meta property="og:site_name" content="Deckarium"><meta property="og:type" content="website">';
+    echo '<meta property="og:title" content="' . h($title) . ' · Deckarium">';
+    echo '<meta property="og:description" content="' . h($pageDescription) . '">';
+    echo '<meta property="og:url" content="' . h($canonical) . '"><meta property="og:image" content="' . h($image) . '">';
+    echo '<meta property="og:locale" content="pt_BR"><meta name="twitter:card" content="summary_large_image">';
     echo '<link rel="icon" type="image/png" href="/assets/deckarium-favicon.png"><link rel="apple-touch-icon" href="/assets/deckarium-favicon.png">';
     echo '<link rel="preload" href="/assets/fonts/spectral-bold.ttf" as="font" type="font/ttf" crossorigin>';
     echo '<link rel="stylesheet" href="/assets/style.css?v=' . h($version) . '">';
