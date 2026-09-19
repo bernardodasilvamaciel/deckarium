@@ -56,13 +56,19 @@ $isCommander=(bool)deckQuery('SELECT 1 FROM cards c WHERE c.id=? AND '.deckComma
 
 $printings = [];
 if (!empty($card['oracle_id'])) {
+    // Cópias na coleção por impressão: a grade mostra quais versões você já tem.
     $p = db()->prepare(<<<SQL
-SELECT id,name,set_code,set_name,collector_number,released_at,lang,rarity,prices,raw
-FROM cards
-WHERE oracle_id = :oracle_id
-ORDER BY (lang = 'en') DESC, released_at DESC NULLS LAST, set_code, collector_number
+SELECT c.id,c.name,c.set_code,c.set_name,c.collector_number,c.released_at,c.lang,c.rarity,c.prices,c.raw,
+       c.local_image,c.image_uri,c.oracle_id,
+       COALESCE(SUM(b.quantity) FILTER (WHERE NOT b.foil),0)::int AS owned_normal,
+       COALESCE(SUM(b.quantity) FILTER (WHERE b.foil),0)::int AS owned_foil
+FROM cards c
+LEFT JOIN builder_collection b ON b.scryfall_id = c.id AND b.user_id = :user_id
+WHERE c.oracle_id = :oracle_id
+GROUP BY c.id
+ORDER BY (c.lang = 'en') DESC, c.released_at DESC NULLS LAST, c.set_code, c.collector_number
 SQL);
-    $p->execute([':oracle_id' => $card['oracle_id']]);
+    $p->execute([':oracle_id' => $card['oracle_id'], ':user_id' => $userId]);
     $printings = $p->fetchAll();
 }
 
@@ -98,21 +104,11 @@ $back = cardImageUrl($card, 'back', 'normal');
       <dt>Preços desta impressão</dt><dd class="printing-price-detail"><?= h(deckPriceVariantsLabel($card)) ?></dd>
     </dl>
     <p class="source-note price-source-note">Fonte: preços USD/EUR desta impressão no Scryfall, convertidos para reais pelo câmbio configurado.</p>
+    <?php // Preço de mercado no Brasil: a consulta é feita no site da Liga, em outra aba. ?>
+    <a class="secondary-link liga-link" href="https://www.ligamagic.com.br/?view=cards/card&amp;card=<?= h(rawurlencode(explode(' // ', (string)$card['name'])[0])) ?>" target="_blank" rel="noopener noreferrer">Ver preços na LigaMagic <span aria-hidden="true">↗</span></a>
    </div>
 
-    <?php if (count($printings) > 1): ?>
-      <details class="printings" open>
-        <summary>Outras impressões (<?= count($printings) ?>)</summary>
-        <div class="printing-list">
-          <?php foreach ($printings as $printing): ?>
-            <a data-printing-link class="<?= $printing['id'] === $card['id'] ? 'current' : '' ?>" href="/card.php?id=<?= h($printing['id']) ?>">
-              <strong><?= h(strtoupper((string)$printing['set_code'])) ?> #<?= h($printing['collector_number']) ?></strong>
-              <span><?= h($printing['set_name']) ?> · <?= h($printing['released_at']) ?> · <?= h(deckPriceVariantsLabel($printing)) ?></span>
-            </a>
-          <?php endforeach; ?>
-        </div>
-      </details>
-    <?php endif; ?>
   </section>
 </div>
+<?php if (count($printings) > 1) require __DIR__ . '/card_printings_view.php'; ?>
 <?php pageFooter(); ?>

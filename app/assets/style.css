@@ -126,18 +126,10 @@ dt{color:var(--muted)}
 dd{margin:0;overflow-wrap:anywhere}
 details{margin-top:18px}
 summary{cursor:pointer;padding:12px 0;font-size:.9rem;font-weight:600;color:var(--accent)}
-.printing-list{max-height:370px;overflow:auto;display:grid;gap:4px;scrollbar-color:#a0b1a3 #edf0e8;scrollbar-width:thin}
-.printing-list a{padding:11px 12px;display:flex;flex-direction:column;gap:3px;text-decoration:none;border-radius:5px;color:var(--ink)}
-.printing-list a.current{background:var(--soft)}
-.printing-list a:hover{background:#e8ece3}
-.printing-list a.is-loading{opacity:.55;pointer-events:none;position:relative}
-.printing-list a.is-loading::after{content:'Atualizando…';margin-left:.5rem;color:var(--muted);font-size:.78rem}
 .info-note{margin:16px 0;padding:13px 15px;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--muted);font-size:.88rem}
 .info-note summary{cursor:pointer;color:var(--ink);font-weight:800}
 .info-note p{margin:8px 0 0}
 .price-source-note{max-width:58ch;margin-top:16px}
-.printing-list strong{font-size:.84rem}
-.printing-list span{font-size:.8rem;color:var(--muted)}
 .tabs{border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:24px;gap:8px}
 .tabs a{border:1px solid var(--line);background:var(--surface)}
 .tabs a.active{background:var(--accent);color:#fff}
@@ -700,3 +692,38 @@ button.is-busy::after{content:"";display:inline-block;width:.8em;height:.8em;mar
 .filters-shell-body>form{margin-bottom:0}
 :root{--filters-icon:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 5h18l-7 8v6l-4 2v-8Z'/%3E%3C/svg%3E")}
 @media(max-width:600px){.filters-shell>summary{padding:12px 13px}.filters-shell-body{padding:14px 13px 14px}}
+
+/* Grade de impressões da página da carta: escolher a versão olhando arte, preço e o que você já tem. */
+.printings-panel{margin-top:28px;border-top:1px solid var(--line);padding-top:22px}
+.printings-head h2{margin:0 0 4px;font-size:1.45rem}
+.printings-head p{margin:0}
+.printings-toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:16px 0 18px}
+.printings-toolbar label{display:flex;flex-direction:column;gap:5px;font-size:.78rem;font-weight:700;color:var(--ink)}
+.printings-toolbar input[type=search],.printings-toolbar select{font:inherit;font-weight:500;font-size:.86rem;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:#fff;min-width:150px}
+.printings-search{flex:1 1 220px}
+.printings-check{flex-direction:row;align-items:center;gap:7px;font-weight:600;padding-bottom:9px}
+.printings-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:16px}
+.printing-tile{display:flex;flex-direction:column;gap:9px;padding:9px;border:1px solid var(--line);border-radius:11px;background:var(--surface);text-decoration:none;color:var(--ink);transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease}
+.printing-tile:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(28,36,32,.14);border-color:#b9c3b4}
+.printing-tile.current{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 35%,transparent)}
+.printing-tile.is-loading{opacity:.55;pointer-events:none}
+.printing-tile-art{position:relative;display:block;aspect-ratio:146/204;border-radius:8px;overflow:hidden;background:#e7e4db}
+.printing-tile-art img{width:100%;height:100%;object-fit:cover;display:block}
+.printing-tile-noart{display:flex;align-items:center;justify-content:center;height:100%;font-size:.74rem;color:var(--muted)}
+.printing-tag{position:absolute;left:6px;padding:3px 7px;border-radius:999px;font-size:.66rem;font-weight:800;letter-spacing:.02em}
+.printing-tag.is-current{top:6px;background:var(--accent);color:#fff}
+.printing-tag.is-owned{bottom:6px;background:#1f2b24;color:#e9f0e7}
+.printing-tile-body{display:flex;flex-direction:column;gap:2px;min-width:0}
+.printing-tile-body strong{display:flex;align-items:center;gap:6px;font-size:.84rem}
+.printing-tile-icon{width:16px;height:16px;object-fit:contain;flex:0 0 16px;filter:grayscale(1) contrast(1.2)}
+/* Impressão sem imagem: o aviso ocupa o espaço da arte, sem esticar o quadro. */
+.printing-tile-art .image-fallback{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;border:0;border-radius:0;padding:10px;font-size:.72rem;gap:4px}
+.printing-tile-art .image-fallback strong{font-size:.76rem}
+.printing-tile-set,.printing-tile-meta{font-size:.76rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.printing-tile-price{display:flex;flex-wrap:wrap;gap:4px 8px;margin-top:3px;font-size:.78rem}
+.printing-tile-price b{color:var(--accent);font-variant-numeric:tabular-nums}
+.printing-tile-price i{font-style:normal;color:var(--muted);font-size:.74rem}
+.printings-empty{margin-top:14px;color:var(--muted)}
+@media(max-width:600px){.printings-grid{grid-template-columns:repeat(auto-fill,minmax(136px,1fr));gap:12px}.printings-toolbar{gap:9px}.printings-toolbar input[type=search],.printings-toolbar select{min-width:0;width:100%}}
+
+.liga-link{display:inline-flex;align-items:center;gap:7px;margin-top:4px}
