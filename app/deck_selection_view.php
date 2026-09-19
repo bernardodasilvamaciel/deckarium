@@ -29,7 +29,7 @@ if ($selectionStage==='deck' && $commander && !$choosingCommander) {
     try { $deckTokens = deckTokenList($commander, $items); } catch (Throwable $tokenError) { error_log('Fichas do deck: '.$tokenError->getMessage()); }
     try { $landOptionsRequest = deckLandRequestOptions($_GET); $landPlan = deckLandPlan($id, $commander, $items, $scoreConfig, $landOptionsRequest); } catch (Throwable $landError) { error_log('Plano de terrenos: '.$landError->getMessage()); }
 }
-$selectionLayouts = ['types'=>'Por tipo','large'=>'Cartas grandes','map'=>'Mapa de jogo'];
+$selectionLayouts = ['types'=>'Por tipo','large'=>'Cartas grandes','text'=>'Lista','map'=>'Mapa de jogo'];
 $inventoryBadge=function(array $entry): string {
     $total=(int)($entry['owned']??0); $other=(int)($entry['other_used']??0); $need=(int)($entry['quantity']??1); $free=max(0,$total-$other);
     if($total===0) return '<span class="inventory-badge is-missing">Não está na coleção</span>';
@@ -92,6 +92,47 @@ $bulkMoves = ['candidate' => [['deck', 'Aprovar para o deck →', 'primary-link'
 <?php else: ?>
 <div class="selection-toolbar"><span><?= count($groups) ?> <?= count($groups)===1?'tipo':'tipos' ?> · <?= array_sum(array_map(fn($entries)=>array_sum(array_column($entries,'quantity')),$groups)) ?> cartas</span><div class="selection-layouts" role="group" aria-label="Visualização das cartas"><?php foreach($selectionLayouts as $layoutKey=>$layoutLabel): ?><button type="button" data-layout="<?= $layoutKey ?>" aria-pressed="<?= $layoutKey==='types'?'true':'false' ?>"><?= h($layoutLabel) ?></button><?php endforeach; ?></div><div><?php if($landPlan): ?><button type="button" class="selection-land-fill" data-selection-open="land-fill" aria-haspopup="dialog"><?= $landPlan['auto_existing'] ? 'Refazer terrenos' : 'Completar com terrenos' ?><?php if($landPlan['need']): ?> <b><?= (int)$landPlan['need'] ?></b><?php endif; ?></button><?php endif; ?><?php if($bulkEntries): ?><button type="button" class="selection-toggle-all selection-bulk-toggle" data-bulk-toggle aria-pressed="false" aria-controls="bulk-move-form">Selecionar várias</button><?php endif; ?><button type="button" class="selection-toggle-all" data-selection-expand data-layout-only="types">Abrir todos</button><button type="button" class="selection-toggle-all" data-selection-collapse data-layout-only="types">Fechar todos</button></div></div>
 <?php endif; ?>
+
+<?php
+// Lista em texto: leitura rápida do deck inteiro, com a carta aparecendo ao passar o mouse.
+$textRows = [];
+foreach ($groups as $category => $entries) foreach ($entries as $entry) {
+    $entryPrice = deckSelectedPriceBrl($entry);
+    $textRows[] = ['entry' => $entry, 'category' => $category, 'price' => $entryPrice, 'total' => $entryPrice === null ? null : $entryPrice * (int)$entry['quantity']];
+}
+$textTotal = array_sum(array_map(fn($row) => $row['total'] ?? 0, $textRows));
+$textUnpriced = count(array_filter($textRows, fn($row) => $row['price'] === null));
+?>
+<div class="selection-text" data-layout-panel="text" data-selection-text hidden>
+  <div class="selection-text-head">
+    <label>Ordenar<select data-text-sort>
+      <option value="type">Tipo e nome</option>
+      <option value="price-desc">Preço: maior primeiro</option>
+      <option value="price-asc">Preço: menor primeiro</option>
+      <option value="cmc">Valor de mana</option>
+      <option value="name">Nome</option>
+    </select></label>
+    <p class="muted">Total <strong>R$ <?= number_format($textTotal, 2, ',', '.') ?></strong><?= $textUnpriced ? ' · '.$textUnpriced.($textUnpriced === 1 ? ' carta sem cotação' : ' cartas sem cotação') : '' ?>. Passe o mouse para ver a carta; clique para abrir a página dela.</p>
+  </div>
+  <ol class="selection-text-list" data-text-list>
+    <?php foreach ($textRows as $index => $row): $entry = $row['entry']; ?>
+    <li>
+      <a class="selection-text-row" href="/card.php?id=<?= h($entry['id']) ?>"
+         data-preview="<?= h((string)cardImageUrl($entry, 'front', 'normal')) ?>"
+         data-price="<?= $row['total'] === null ? '' : h((string)$row['total']) ?>"
+         data-cmc="<?= h((string)(float)($entry['cmc'] ?? 0)) ?>"
+         data-name="<?= h(mb_strtolower((string)$entry['name'])) ?>"
+         data-order="<?= $index ?>">
+        <span class="selection-text-qty"><?= (int)$entry['quantity'] ?>×</span>
+        <span class="selection-text-name"><?= h($entry['name']) ?><?php if(deckIsGameChanger($entry)): ?> <b class="gc-badge" title="Game Changer">GC</b><?php endif; ?></span>
+        <span class="selection-text-mana"><?= manaSymbols($entry['mana_cost'] ?? null) ?></span>
+        <span class="selection-text-type"><?= h($row['category']) ?></span>
+        <span class="selection-text-price"><?= $row['total'] === null ? 'sem cotação' : 'R$ '.number_format($row['total'], 2, ',', '.') ?></span>
+      </a>
+    </li>
+    <?php endforeach; ?>
+  </ol>
+</div>
 
 <div class="selection-groups stage-<?= h($selectionStage) ?>" data-layout-panel="types large">
 <?php foreach($groups as $category=>$entries): $groupKey=substr(md5($category),0,10); $groupCount=array_sum(array_column($entries,'quantity')); $groupPickable=$category==='Comandante'?0:count($entries); ?>

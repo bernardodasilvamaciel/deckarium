@@ -37,6 +37,49 @@
     field.addEventListener('change', () => field.form?.requestSubmit());
   });
 
+  // Filtros da grade de impressões: só no navegador, sem recarregar a página.
+  const printingsPanel = document.querySelector('[data-printings]');
+  if (printingsPanel) {
+    const grid = printingsPanel.querySelector('[data-printing-grid]');
+    const empty = printingsPanel.querySelector('[data-printing-empty]');
+    const search = printingsPanel.querySelector('[data-printing-filter]');
+    const langSelect = printingsPanel.querySelector('[data-printing-lang]');
+    const sortSelect = printingsPanel.querySelector('[data-printing-sort]');
+    const ownedOnly = printingsPanel.querySelector('[data-printing-owned]');
+    const tiles = [...grid.querySelectorAll('.printing-tile')];
+    const price = tile => { const value = parseFloat(tile.dataset.price); return Number.isFinite(value) ? value : null; };
+    const apply = () => {
+      const term = (search?.value || '').trim().toLowerCase();
+      const lang = langSelect?.value || '';
+      let shown = 0;
+      tiles.forEach(tile => {
+        const visible = (!term || tile.dataset.search.includes(term))
+          && (!lang || tile.dataset.lang === lang)
+          && (!ownedOnly?.checked || Number(tile.dataset.owned) > 0);
+        tile.hidden = !visible;
+        if (visible) shown++;
+      });
+      if (empty) empty.hidden = shown > 0;
+      const mode = sortSelect?.value || 'default';
+      const ordered = [...tiles].sort((a, b) => {
+        if (mode === 'cheap' || mode === 'expensive') {
+          const first = price(a), second = price(b);
+          // Impressões sem cotação ficam no fim nas duas ordens.
+          if (first === null || second === null) return (first === null) - (second === null);
+          return mode === 'cheap' ? first - second : second - first;
+        }
+        if (mode === 'set') return a.dataset.set.localeCompare(b.dataset.set);
+        if (mode === 'old') return (a.dataset.released || '').localeCompare(b.dataset.released || '');
+        return Number(a.dataset.order) - Number(b.dataset.order);
+      });
+      ordered.forEach(tile => grid.append(tile));
+    };
+    [search, langSelect, sortSelect, ownedOnly].forEach(field => {
+      field?.addEventListener('input', apply);
+      field?.addEventListener('change', apply);
+    });
+  }
+
   const bindPrintingAjax = () => {
     document.querySelectorAll('[data-printing-link]').forEach(link => {
       if (link.dataset.ajaxBound) return;
@@ -353,6 +396,59 @@
       if (remember) { try { localStorage.setItem(layoutKey, layout); } catch (error) { /* armazenamento indisponível */ } }
     };
     layoutButtons.forEach(button => button.addEventListener('click', () => applyLayout(button.dataset.layout, true)));
+
+    /* Lista em texto: ordenação e prévia da carta seguindo o mouse. */
+    const textPanel = selectionWorkspace.querySelector('[data-selection-text]');
+    if (textPanel) {
+      const list = textPanel.querySelector('[data-text-list]');
+      const sort = textPanel.querySelector('[data-text-sort]');
+      const rows = [...list.querySelectorAll('li')];
+      const value = (row, name) => row.querySelector('.selection-text-row').dataset[name];
+      const price = row => { const parsed = parseFloat(value(row, 'price')); return Number.isFinite(parsed) ? parsed : null; };
+      sort?.addEventListener('change', () => {
+        const mode = sort.value;
+        [...rows].sort((a, b) => {
+          if (mode === 'price-desc' || mode === 'price-asc') {
+            const first = price(a), second = price(b);
+            // Cartas sem cotação ficam no fim das duas ordens.
+            if (first === null || second === null) return (first === null) - (second === null);
+            return mode === 'price-desc' ? second - first : first - second;
+          }
+          if (mode === 'cmc') return parseFloat(value(b, 'cmc')) - parseFloat(value(a, 'cmc'));
+          if (mode === 'name') return value(a, 'name').localeCompare(value(b, 'name'));
+          return Number(value(a, 'order')) - Number(value(b, 'order'));
+        }).forEach(row => list.append(row));
+      });
+
+      // Uma única prévia, reaproveitada por todas as linhas.
+      const preview = document.createElement('img');
+      preview.className = 'selection-text-preview';
+      preview.alt = '';
+      preview.hidden = true;
+      document.body.append(preview);
+      const place = event => {
+        const margin = 16;
+        const width = preview.offsetWidth || 244;
+        const height = preview.offsetHeight || 340;
+        const left = event.clientX + margin + width > window.innerWidth ? event.clientX - margin - width : event.clientX + margin;
+        const top = Math.min(Math.max(margin, event.clientY - height / 2), window.innerHeight - height - margin);
+        preview.style.transform = `translate(${Math.max(margin, left)}px, ${Math.max(margin, top)}px)`;
+      };
+      list.addEventListener('pointerover', event => {
+        if (event.pointerType !== 'mouse') return;
+        const row = event.target.closest('.selection-text-row');
+        if (!row || !row.dataset.preview) return;
+        preview.src = row.dataset.preview;
+        preview.hidden = false;
+        place(event);
+      });
+      list.addEventListener('pointermove', event => { if (!preview.hidden) place(event); });
+      list.addEventListener('pointerout', event => {
+        if (event.relatedTarget?.closest?.('.selection-text-row')) return;
+        preview.hidden = true;
+      });
+      window.addEventListener('scroll', () => { preview.hidden = true; }, { passive: true });
+    }
     // Em "Cartas grandes" os grupos ficam sempre abertos.
     typeGroups.forEach(group => group.querySelector('summary')?.addEventListener('click', event => { if (selectionWorkspace.dataset.layout === 'large') event.preventDefault(); }));
     let storedLayout = 'types';
