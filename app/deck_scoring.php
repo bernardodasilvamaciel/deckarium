@@ -60,7 +60,7 @@ function deckScoreDefaultConfig(): array
         'thresholds' => ['advance' => 70, 'review' => 45],
         'targets_mode' => 'auto',
         // Completar com terrenos: meta salva (null = sugestão calculada pelo deck) e se inclui terrenos fora da coleção.
-        'land_fill' => ['total' => null, 'buy' => false],
+        'land_fill' => ['total' => null, 'buy' => false, 'basic_share' => null],
     ];
 }
 
@@ -95,6 +95,7 @@ function deckScoreConfig(mixed $raw): array
     $config['targets_mode'] = $mode;
     if (isset($raw['land_fill']['total']) && is_numeric($raw['land_fill']['total'])) $config['land_fill']['total'] = max(20, min(60, (int)$raw['land_fill']['total']));
     $config['land_fill']['buy'] = !empty($raw['land_fill']['buy']);
+    if (isset($raw['land_fill']['basic_share']) && is_numeric($raw['land_fill']['basic_share'])) $config['land_fill']['basic_share'] = max(0.0, min(1.0, (float)$raw['land_fill']['basic_share']));
     return $config;
 }
 

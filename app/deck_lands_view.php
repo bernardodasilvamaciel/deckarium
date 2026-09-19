@@ -31,7 +31,11 @@ $landSuggestion = $landPlan['suggestion'];
     <?php $tokenFields('land_target'); ?><input type="hidden" name="land_buy_set" value="1">
     <?php foreach($landOptionsRequest['skip'] as $skipped): ?><input type="hidden" name="land_skip[]" value="<?= h($skipped) ?>"><?php endforeach; ?>
     <label class="land-total">Meta de terrenos<input type="number" name="land_total" min="20" max="60" placeholder="<?= (int)$landSuggestion['total'] ?>" value="<?= $landPlan['target_source']==='suggestion' ? '' : (int)$landPlan['target'] ?>"><small>Vazio = usar a sugestão (<?= (int)$landSuggestion['total'] ?>). Atual: <?= (int)$landPlan['target'] ?>, <?= h($landTargetLabel) ?>.</small></label>
-    <label class="builder-check land-buy"><input type="checkbox" name="land_buy" value="1" <?= $landPlan['include_missing']?'checked':'' ?>> Incluir terrenos fora da coleção</label>
+    <label class="land-source">Origem dos não básicos<select name="land_buy">
+        <option value="" <?= $landPlan['include_missing']?'':'selected' ?>>Só o que sobra na minha coleção</option>
+        <option value="1" <?= $landPlan['include_missing']?'selected':'' ?>>Sobras da coleção e, se faltar, de fora</option>
+    </select><small>“De fora” usa os terrenos mais jogados do catálogo e os que o EDHREC mostra nesta comandante.</small></label>
+    <label class="land-basic-min">Mínimo de básicos<span class="land-basic-min-input"><input type="number" name="land_basic_share" min="0" max="100" step="1" placeholder="<?= (int)round($landPlan['basic_share']*100) ?>" value="<?= $landPlan['basic_share_source']==='custom' ? (int)round($landPlan['basic_share']*100) : '' ?>"><b>%</b></span><small>Vazio = automático pela identidade de cor (<?= (int)round($landPlan['basic_share']*100) ?>% = <?= (int)$landPlan['min_basics'] ?> básicos neste plano<?= $landPlan['manual_basics']?', já contando os '.(int)$landPlan['manual_basics'].' seus':'' ?>).</small></label>
     <button class="secondary-link">Salvar e recalcular</button>
 </form>
 

@@ -22,11 +22,13 @@ function deckLandPlan(int $deckId, array $commander, array $items, array $config
     $identity = array_values(array_intersect(['W', 'U', 'B', 'R', 'G'], json_decode((string)$commander['color_identity'], true) ?: []));
     $colors = $identity ?: ['C'];
     $includeMissing = $options['buy'] ?? (bool)($config['land_fill']['buy'] ?? false);
+    // Mínimo de básicos: a fração informada pelo usuário ou a padrão da identidade de cor.
+    $basicShareOption = $options['basic_share'] ?? ($config['land_fill']['basic_share'] ?? null);
     $skip = array_flip(array_map('strtolower', (array)($options['skip'] ?? [])));
 
     $taken = [strtolower((string)($commander['oracle_id'] ?: $commander['id'])) => true];
     $takenPrintings = [];
-    $cardCount = 1; $manualLands = 0; $autoLands = 0; $nonland = 0; $basicFetchers = 0;
+    $cardCount = 1; $manualLands = 0; $manualBasics = 0; $autoLands = 0; $nonland = 0; $basicFetchers = 0;
     $pips = array_fill_keys($colors, 0.0);
     $sources = array_fill_keys($colors, 0);
     $candidateLands = [];
@@ -49,6 +51,7 @@ function deckLandPlan(int $deckId, array $commander, array $items, array $config
         $cardCount += $quantity;
         if ($isLand) {
             $manualLands += $quantity;
+            if (str_contains((string)$item['type_line'], 'Basic')) $manualBasics += $quantity;
             foreach (deckLandColors($item, $colors) as $color) $sources[$color] += $quantity;
         } else {
             $nonland += $quantity;
@@ -82,12 +85,17 @@ function deckLandPlan(int $deckId, array $commander, array $items, array $config
     $multicolor = count($identity) >= 2;
 
     // Terrenos não básicos considerados: candidatas, coleção com cópia livre e (opcional) catálogo.
-    $nonbasicCap = match (true) { count($identity) >= 3 => 0.85, count($identity) === 2 => 0.6, default => 0.3 };
-    $minBasics = min($need, max((int)ceil($need * (1 - $nonbasicCap)), $basicFetchers * 2));
-    $landOptions = deckLandOptions($deckId, $commander, $identity, $includeMissing);
+    // Piso de terrenos básicos. Antes o limite era só um teto de não básicos (até 85% em três cores),
+    // o que deixava decks quase sem básicos — ruins para buscas, para Tesouros e para o bolso.
+    $defaultShare = match (count($identity)) { 0, 1 => 0.55, 2 => 0.42, 3 => 0.34, 4 => 0.28, default => 0.25 };
+    $basicShare = $basicShareOption !== null ? max(0.0, min(1.0, (float)$basicShareOption)) : $defaultShare;
+    $totalTarget = $manualLands + max(0, $target - $manualLands);
+    $minBasics = min($need, max(0, (int)ceil($basicShare * $totalTarget) - $manualBasics, $basicFetchers * 2));
     $synergy = deckQuery("SELECT COALESCE(card.oracle_id,card.id)::text, MAX(s.score) FROM deck_synergy s
         JOIN cards leader ON leader.id=s.commander_id JOIN cards card ON card.id=s.card_id
         WHERE COALESCE(leader.oracle_id,leader.id)=?::uuid GROUP BY 1", [(string)($commander['oracle_id'] ?: $commander['id'])])->fetchAll(PDO::FETCH_KEY_PAIR);
+    // Terrenos que o EDHREC mostra nesta comandante entram na busca mesmo fora do top 6000 geral.
+    $landOptions = deckLandOptions($deckId, $commander, $identity, $includeMissing, $includeMissing ? array_keys($synergy) : []);
     $pool = [];
     foreach ($candidateLands as $logical => $item) {
         if (isset($taken[$logical]) || str_contains((string)$item['type_line'], 'Basic')) continue;
@@ -129,11 +137,16 @@ function deckLandPlan(int $deckId, array $commander, array $items, array $config
         foreach ($weights as $color => $weight) { $exact = $basicCount * $weight / $sum; $basics[$color] = (int)floor($exact); $allocated += $basics[$color]; $remainders[$color] = $exact - floor($exact); }
         arsort($remainders);
         foreach (array_keys($remainders) as $color) { if ($allocated >= $basicCount) break; $basics[$color]++; $allocated++; }
-        // Cada cor com demanda recebe ao menos um básico quando houver básicos a distribuir.
+        // Piso por cor: cada cor pedida nos custos fica com básicos próprios, mesmo quando os não básicos
+        // já cobrem a cor. Sem isso o plano chegava a 16 básicos de uma cor só e nenhum da outra,
+        // o que trava buscas de básico e mãos iniciais.
         foreach ($demandColors as $color) {
-            if ($basics[$color] > 0 || $sources[$color] > 0 || $basicCount < count($demandColors)) continue;
-            $donor = array_search(max($basics), $basics, true);
-            if ($donor !== false && $basics[$donor] > 1) { $basics[$donor]--; $basics[$color]++; }
+            $floor = min($share[$color] >= 0.15 ? 2 : 1, intdiv($basicCount, max(1, count($demandColors))));
+            while ($basics[$color] < $floor) {
+                $donor = array_search(max($basics), $basics, true);
+                if ($donor === false || $donor === $color || $basics[$donor] <= $floor + 1) break;
+                $basics[$donor]--; $basics[$color]++;
+            }
         }
         foreach ($basics as $color => $amount) $sources[$color] += $amount;
     }
@@ -151,6 +164,8 @@ function deckLandPlan(int $deckId, array $commander, array $items, array $config
         'manual' => $manualLands, 'auto_existing' => $autoLands, 'nonland' => $nonland, 'open' => $open, 'need' => $need,
         'share' => $share, 'sources' => $sources, 'colors' => $colors, 'identity' => $identity,
         'picks' => $picks, 'basics' => $basicPicks, 'notes' => $notes, 'include_missing' => $includeMissing,
+        'min_basics' => $minBasics, 'basic_share' => $basicShare, 'basic_share_source' => $basicShareOption !== null ? 'custom' : 'auto',
+        'manual_basics' => $manualBasics,
         'missing_count' => count(array_filter($picks, fn($pick) => in_array($pick['availability'], ['reserved', 'missing'], true))) + array_sum(array_column($basicPicks, 'missing')),
     ];
 }
@@ -197,13 +212,15 @@ function deckLandSuggestion(array $commander, array $spells, array $config): arr
 }
 
 /** Terrenos não básicos na identidade e legais em Commander: os da coleção e, se pedido, os mais jogados do catálogo. */
-function deckLandOptions(int $deckId, array $commander, array $identity, bool $includeMissing): array
+function deckLandOptions(int $deckId, array $commander, array $identity, bool $includeMissing, array $extraLogicalIds = []): array
 {
     // 1) Quais cartas lógicas considerar: os terrenos da coleção (poucas linhas) e, com compra, os mais jogados do catálogo.
     $landSql = "split_part(COALESCE(c.type_line,''),' // ',1) ILIKE '%Land%' AND COALESCE(c.type_line,'') NOT ILIKE '%Basic%'";
     $ownedRows = deckQuery("SELECT DISTINCT c.id::text AS id, COALESCE(c.oracle_id,c.id)::text AS logical_id FROM builder_collection b JOIN cards c ON c.id=b.scryfall_id WHERE b.user_id=? AND {$landSql}", [deckOwnerId()])->fetchAll();
     $logical = array_column($ownedRows, 'logical_id');
     if ($includeMissing) $logical = array_merge($logical, deckQuery("SELECT DISTINCT COALESCE(c.oracle_id,c.id)::text FROM cards c WHERE c.edhrec_rank_cached <= 6000 AND {$landSql}")->fetchAll(PDO::FETCH_COLUMN));
+    $uuidPattern = '/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i';
+    foreach ($extraLogicalIds as $extraId) if (is_string($extraId) && preg_match($uuidPattern, $extraId)) $logical[] = $extraId;
     if (!$logical) return [];
     // 2) Uma impressão por carta (a da coleção primeiro), escolhida só pelo id; sem JOINs com a coleção, que faziam o
     //    PostgreSQL reagrupar a coleção para cada impressão (~100 ms). O registro completo é lido só da escolhida.
@@ -318,7 +335,14 @@ function deckLandRequestOptions(array $source): array
     $total = filter_var($source['land_total'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 20, 'max_range' => 60]]);
     // land_buy_set indica que o formulário mostrou a opção; sem ele, vale a escolha salva no deck.
     $buy = array_key_exists('land_buy_set', $source) || array_key_exists('land_buy', $source) ? ($source['land_buy'] ?? '') === '1' : null;
-    return ['total' => $total === false ? null : $total, 'buy' => $buy, 'skip' => array_slice(array_values(array_unique($skip)), 0, 200)];
+    // Percentual mínimo de básicos: vazio volta ao automático da identidade de cor.
+    $basicShare = null;
+    if (array_key_exists('land_basic_share', $source)) {
+        $percent = filter_var($source['land_basic_share'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 0, 'max_range' => 100]]);
+        $basicShare = $percent === false ? null : $percent / 100;
+    }
+    return ['total' => $total === false ? null : $total, 'buy' => $buy, 'basic_share' => $basicShare,
+        'basic_share_set' => array_key_exists('land_basic_share', $source), 'skip' => array_slice(array_values(array_unique($skip)), 0, 200)];
 }
 
 /** Aplica o plano: troca os terrenos automáticos anteriores pelos novos, sem passar de 100 cartas. */

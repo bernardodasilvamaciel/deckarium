@@ -122,10 +122,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$landCommander) throw new RuntimeException('Escolha uma comandante antes de completar os terrenos.');
                 // A meta de terrenos e a opção de compra ficam salvas no deck (scoring_config.land_fill).
                 $landRequest = deckLandRequestOptions($_POST);
-                if ($action !== 'clear_auto_lands' && ($landRequest['total'] !== null || $landRequest['buy'] !== null || ($_POST['land_total'] ?? null) === '')) {
+                if ($action !== 'clear_auto_lands' && ($landRequest['total'] !== null || $landRequest['buy'] !== null || $landRequest['basic_share_set'] || ($_POST['land_total'] ?? null) === '')) {
                     $landFill = deckScoreConfig($deck['scoring_config'] ?? null)['land_fill'];
                     if (array_key_exists('land_total', $_POST)) $landFill['total'] = $landRequest['total'];
                     if ($landRequest['buy'] !== null) $landFill['buy'] = $landRequest['buy'];
+                    if ($landRequest['basic_share_set']) $landFill['basic_share'] = $landRequest['basic_share'];
                     deckQuery("UPDATE builder_decks SET scoring_config=COALESCE(scoring_config,'{}'::jsonb) || jsonb_build_object('land_fill', ?::jsonb) WHERE id=? AND user_id=?", [json_encode($landFill), $id, $userId]);
                     $deck['scoring_config'] = deckQuery('SELECT scoring_config FROM builder_decks WHERE id=?', [$id])->fetchColumn();
                 }
