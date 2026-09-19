@@ -3,7 +3,8 @@ declare(strict_types=1);
 /**
  * Edições: linha do tempo de todos os lançamentos em uma única página.
  * Subedições (Commander, fichas, promos, art series…) entram como marcas na linha da coleção-mãe.
- * O espectrograma do topo mostra, por ano, quantas cartas inéditas surgiram e a proporção de cada cor de mana.
+ * O espectrograma do topo mostra, por ano, quantas cartas novas (primeira impressão) surgiram e a proporção de cada cor de mana;
+ * opcionalmente, também as reimpressões do ano. Cada lançamento mostra quantas das suas cartas são novas.
  */
 require __DIR__ . '/db.php';
 require __DIR__ . '/functions.php';
@@ -29,24 +30,43 @@ $sets = catalogCached('editions-timeline-v1', static fn(): array => db()->query(
     GROUP BY s.set_code, s.w, s.u, s.b, s.r, s.g, s.colorless
 SQL)->fetchAll(), 86400);
 
-// Cartas inéditas por ano: cada carta conta uma vez, no ano da primeira impressão (sem fichas e cartas só digitais).
-$newCards = catalogCached('editions-new-cards-v1', static fn(): array => db()->query(<<<'SQL'
-    WITH firsts AS (
-        SELECT DISTINCT ON (COALESCE(oracle_id, id)) released_at,
-               COALESCE(NULLIF(colors, '[]'::jsonb), card_faces->0->'colors', '[]'::jsonb) AS c
-        FROM cards
-        WHERE released_at IS NOT NULL
-          AND layout NOT IN ('token', 'double_faced_token', 'emblem', 'art_series')
-          AND COALESCE(raw->>'set_type', '') NOT IN ('token', 'memorabilia')
-          AND COALESCE(raw->>'digital', 'false') <> 'true'
-        ORDER BY COALESCE(oracle_id, id), released_at
-    )
-    SELECT extract(year FROM released_at)::int::text AS year, COUNT(*) AS cards,
-           COUNT(*) FILTER (WHERE c @> '["W"]') AS "W", COUNT(*) FILTER (WHERE c @> '["U"]') AS "U",
-           COUNT(*) FILTER (WHERE c @> '["B"]') AS "B", COUNT(*) FILTER (WHERE c @> '["R"]') AS "R",
-           COUNT(*) FILTER (WHERE c @> '["G"]') AS "G", COUNT(*) FILTER (WHERE c = '[]'::jsonb) AS "C"
-    FROM firsts GROUP BY 1
-SQL)->fetchAll(), 86400);
+// Cartas novas: cada carta conta uma vez, na primeira impressão (papel, sem fichas); a mesma regra de editionFirstPrintingSql().
+// Por ano: novas (com cores) e reimpressões (cartas impressas no ano que já existiam antes). Por edição: quantas cartas novas.
+$firstPrintings = catalogCached('editions-first-printings-v2', static function (): array {
+    // Tipo da edição e "só digital" lidos uma vez por edição (ler o JSON de cada impressão levaria ~10 s).
+    $rows = db()->query("WITH sets AS (
+            SELECT s.set_code, x.set_type, x.digital FROM (SELECT DISTINCT set_code FROM cards WHERE set_code IS NOT NULL) s
+            CROSS JOIN LATERAL (SELECT COALESCE(raw->>'set_type','') AS set_type, COALESCE(raw->>'digital','false') AS digital FROM cards WHERE set_code = s.set_code LIMIT 1) x
+        ), eligible AS (
+            SELECT COALESCE(c.oracle_id, c.id) AS lid, c.set_code, c.released_at, " . editionSetRankSql('st.set_type') . " AS rank,
+                   COALESCE(NULLIF(c.colors, '[]'::jsonb), c.card_faces->0->'colors', '[]'::jsonb) AS colors
+            FROM cards c JOIN sets st ON st.set_code = c.set_code
+            WHERE c.released_at IS NOT NULL AND c.layout NOT IN ('token','double_faced_token','emblem','art_series')
+              AND st.set_type NOT IN ('token','memorabilia') AND st.digital <> 'true'
+        ), firsts AS (
+            SELECT DISTINCT ON (lid) lid, set_code, released_at, colors FROM eligible ORDER BY lid, released_at, rank, set_code
+        ), printed AS (
+            SELECT extract(year FROM released_at)::int::text AS year, COUNT(DISTINCT lid) AS printed FROM eligible GROUP BY 1
+        ), years AS (
+            SELECT extract(year FROM released_at)::int::text AS year, COUNT(*) AS cards,
+                   COUNT(*) FILTER (WHERE colors @> '[\"W\"]') AS \"W\", COUNT(*) FILTER (WHERE colors @> '[\"U\"]') AS \"U\",
+                   COUNT(*) FILTER (WHERE colors @> '[\"B\"]') AS \"B\", COUNT(*) FILTER (WHERE colors @> '[\"R\"]') AS \"R\",
+                   COUNT(*) FILTER (WHERE colors @> '[\"G\"]') AS \"G\", COUNT(*) FILTER (WHERE colors = '[]'::jsonb) AS \"C\"
+            FROM firsts GROUP BY 1
+        )
+        SELECT 'year' AS kind, p.year AS key, COALESCE(y.cards, 0) AS cards, GREATEST(0, p.printed - COALESCE(y.cards, 0)) AS reprints,
+               COALESCE(y.\"W\",0) AS \"W\", COALESCE(y.\"U\",0) AS \"U\", COALESCE(y.\"B\",0) AS \"B\", COALESCE(y.\"R\",0) AS \"R\", COALESCE(y.\"G\",0) AS \"G\", COALESCE(y.\"C\",0) AS \"C\"
+        FROM printed p LEFT JOIN years y ON y.year = p.year
+        UNION ALL SELECT 'set', set_code, COUNT(*), 0, 0, 0, 0, 0, 0, 0 FROM firsts GROUP BY set_code")->fetchAll();
+    $result = ['years' => [], 'sets' => []];
+    foreach ($rows as $row) {
+        if ($row['kind'] === 'set') $result['sets'][$row['key']] = (int)$row['cards'];
+        else $result['years'][] = ['year' => $row['key']] + array_intersect_key($row, array_flip(['cards', 'reprints', 'W', 'U', 'B', 'R', 'G', 'C']));
+    }
+    return $result;
+}, 86400);
+$newCards = $firstPrintings['years'];
+$setNewCards = $firstPrintings['sets'];
 
 // Categorias do filtro, a partir do set_type do Scryfall.
 $categories = [
@@ -105,7 +125,7 @@ foreach ($groups as $umbrella => $members) {
     $releases[] = [
         'code' => (string)$master['set_code'], 'name' => (string)$master['set_name'], 'type' => $master['set_type'],
         'category' => $categoryOf($master['set_type']), 'date' => $date, 'year' => $date !== '' ? substr($date, 0, 4) : 'Sem data',
-        'cards' => (int)$master['unique_cards'], 'future' => $date > $today,
+        'cards' => (int)$master['unique_cards'], 'new' => (int)($setNewCards[$master['set_code']] ?? 0), 'future' => $date > $today,
         'spectrum' => ['W' => (int)$master['w'], 'U' => (int)$master['u'], 'B' => (int)$master['b'], 'R' => (int)$master['r'], 'G' => (int)$master['g'], 'C' => (int)$master['colorless']],
         'children' => $children,
         'search' => $fold($master['set_name'] . ' ' . $master['set_code'] . ' ' . implode(' ', array_map(static fn($c) => $c['name'] . ' ' . $c['code'], $children))),
@@ -116,7 +136,7 @@ usort($releases, static fn(array $a, array $b): int => [$b['date'], $a['name']] 
 // Linha do tempo por ano; o espectrograma usa as cartas inéditas de cada ano.
 $years = [];
 $spectro = [];
-$blankYear = ['cards' => 0, 'releases' => 0, 'W' => 0, 'U' => 0, 'B' => 0, 'R' => 0, 'G' => 0, 'C' => 0];
+$blankYear = ['cards' => 0, 'reprints' => 0, 'releases' => 0, 'W' => 0, 'U' => 0, 'B' => 0, 'R' => 0, 'G' => 0, 'C' => 0];
 foreach ($releases as $release) {
     $years[$release['year']][] = $release;
     if ($release['year'] === 'Sem data') continue;
@@ -125,15 +145,16 @@ foreach ($releases as $release) {
 }
 foreach ($newCards as $row) {
     $spectro[$row['year']] ??= $blankYear;
-    foreach (['cards', 'W', 'U', 'B', 'R', 'G', 'C'] as $key) $spectro[$row['year']][$key] = (int)$row[$key];
+    foreach (['cards', 'reprints', 'W', 'U', 'B', 'R', 'G', 'C'] as $key) $spectro[$row['year']][$key] = (int)$row[$key];
 }
 if ($spectro) {
     for ($y = (int)min(array_keys($spectro)); $y <= (int)max(array_keys($spectro)); $y++) {
-        $spectro[(string)$y] ??= ['cards' => 0, 'releases' => 0, 'W' => 0, 'U' => 0, 'B' => 0, 'R' => 0, 'G' => 0, 'C' => 0];
+        $spectro[(string)$y] ??= $blankYear;
     }
     ksort($spectro);
 }
 $maxYearCards = max(1, ...array_column($spectro, 'cards'));
+$maxYearPrinted = max(1, ...array_map(static fn(array $data): int => $data['cards'] + $data['reprints'], $spectro));
 $categoryCounts = array_count_values(array_column($releases, 'category'));
 $firstYear = $spectro ? array_key_first($spectro) : '';
 $lastYear = $spectro ? array_key_last($spectro) : '';
@@ -158,7 +179,7 @@ pageHeader('Edições');
 <div class="timeline-page" data-timeline>
 <header class="timeline-intro">
     <h1>Edições</h1>
-    <p><?= number_format($total, 0, ',', '.') ?> códigos de edição, de <?= h($firstYear) ?> a <?= h($lastYear) ?>, reunidos em <?= number_format(count($releases), 0, ',', '.') ?> lançamentos. Cada coluna abaixo é um ano: a altura mostra quantas cartas inéditas surgiram nele e as faixas, a proporção de cada cor de mana entre elas. Clique num ano para ir até ele.</p>
+    <p><?= number_format($total, 0, ',', '.') ?> códigos de edição, de <?= h($firstYear) ?> a <?= h($lastYear) ?>, reunidos em <?= number_format(count($releases), 0, ',', '.') ?> lançamentos. Cada coluna abaixo é um ano: a altura mostra quantas <strong>cartas novas</strong> surgiram nele — cartas impressas pela primeira vez, sem contar reimpressões — e as faixas, a proporção de cada cor de mana entre elas. Ligue “Mostrar reimpressões” para comparar com o que voltou a ser impresso. Clique num ano para ir até ele.</p>
 </header>
 
 <div class="spectro-sentinel" data-spectro-sentinel aria-hidden="true"></div>
@@ -166,15 +187,20 @@ pageHeader('Edições');
     <ol class="spectro-bars">
     <?php $column = 0; foreach ($spectro as $year => $data): $column++;
         $height = $data['cards'] ? max(3, round($data['cards'] / $maxYearCards * 100, 2)) : 0;
+        $heightAll = ($data['cards'] + $data['reprints']) ? max(3, round(($data['cards'] + $data['reprints']) / $maxYearPrinted * 100, 2)) : 0;
+        $yearTitle = $year . ': ' . number_format($data['cards'], 0, ',', '.') . ' cartas novas · ' . number_format($data['reprints'], 0, ',', '.') . ' reimpressões · ' . $data['releases'] . ' lançamentos';
         $colors = array_intersect_key($data, array_flip(['W', 'U', 'B', 'R', 'G', 'C']));
         $sum = array_sum($colors); ?>
-        <li style="--i:<?= $column ?>"><a href="#ano-<?= h($year) ?>" data-spectro-year="<?= h($year) ?>" aria-label="<?= h($year) ?>: <?= $data['releases'] ?> lançamentos, <?= number_format($data['cards'], 0, ',', '.') ?> cartas inéditas"<?= $data['releases'] ? ' title="' . h($year . ': ' . number_format($data['cards'], 0, ',', '.') . ' cartas inéditas · ' . $data['releases'] . ' lançamentos') . '"' : ' aria-disabled="true" tabindex="-1"' ?>>
-            <span class="spectro-col" style="height:<?= $height ?>%"><?php foreach (array_reverse($colors, true) as $color => $count): if (!$count) continue; ?><i class="m-<?= $color ?>" style="flex-grow:<?= $count ?>"></i><?php endforeach; ?></span>
+        <li style="--i:<?= $column ?>"><a href="#ano-<?= h($year) ?>" data-spectro-year="<?= h($year) ?>" aria-label="<?= h($yearTitle) ?>"<?= $data['releases'] ? ' title="' . h($yearTitle) . '"' : ' aria-disabled="true" tabindex="-1"' ?>>
+            <span class="spectro-col" style="--h-new:<?= $height ?>%;--h-all:<?= $heightAll ?>%"><?php if ($data['reprints']): ?><i class="m-reprint" style="flex-grow:<?= $data['reprints'] ?>"></i><?php endif; ?><?php foreach (array_reverse($colors, true) as $color => $count): if (!$count) continue; ?><i class="m-<?= $color ?>" style="flex-grow:<?= $count ?>"></i><?php endforeach; ?></span>
             <span class="spectro-year<?= ((int)$year % 5 === 0 || $year === $firstYear || $year === $lastYear) ? ' is-labeled' : '' ?>"><?= h($year) ?></span>
         </a></li>
     <?php endforeach; ?>
     </ol>
-    <p class="spectro-legend" aria-hidden="true"><?php foreach ($colorNames as $color => $name): ?><span><i class="m-<?= $color ?>"></i><?= h(ucfirst($name)) ?></span><?php endforeach; ?></p>
+    <div class="spectro-foot">
+        <p class="spectro-legend" aria-hidden="true"><?php foreach ($colorNames as $color => $name): ?><span><i class="m-<?= $color ?>"></i><?= h(ucfirst($name)) ?></span><?php endforeach; ?><span class="legend-reprint"><i class="m-reprint"></i>Reimpressões</span></p>
+        <label class="spectro-toggle"><input type="checkbox" data-spectro-reprints> Mostrar reimpressões</label>
+    </div>
 </nav>
 
 <div class="timeline-controls">
@@ -207,7 +233,7 @@ pageHeader('Edições');
             </div>
             <span class="release-type"><?= h($typeLabels[$release['type']] ?? ($release['type'] ?: 'Outro')) ?></span>
             <?= $spectrumBar($release['spectrum']) ?>
-            <span class="release-cards"><?= number_format($release['cards'], 0, ',', '.') ?> <small>cartas</small></span>
+            <span class="release-cards"><?= number_format($release['cards'], 0, ',', '.') ?> <small>cartas</small><?php if ($release['new']): ?><a class="release-new" href="<?= h($url) ?>&amp;new=1" title="Cartas impressas pela primeira vez nesta edição"><?= number_format($release['new'], 0, ',', '.') ?> <small>novas</small></a><?php elseif (!$release['future'] && $release['category'] !== 'extras'): ?><span class="release-new is-none">sem cartas novas</span><?php endif; ?></span>
         </li>
     <?php endforeach; ?>
     </ol>

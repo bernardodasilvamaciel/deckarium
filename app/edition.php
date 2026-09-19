@@ -1,7 +1,8 @@
 <?php
 declare(strict_types=1);
 /**
- * Página de uma edição: cartas com busca, filtros (raridade, cores, tipos e temas) e ordenação.
+ * Página de uma edição: cartas com busca, filtros (raridade, cores, tipos e temas, só cartas novas) e ordenação.
+ * Carta nova = impressa pela primeira vez nesta edição (editionFirstPrintingSql()).
  * Mostra também os outros códigos da mesma coleção (Commander, fichas, promos…).
  */
 require __DIR__ . '/db.php';
@@ -51,6 +52,11 @@ $orderSql = match ($sort) {
     default => $number . ', c.name',
 };
 [$whereSql, $params] = cardFilterSql($f);
+$onlyNew = ($_GET['new'] ?? '') === '1';
+if ($onlyNew) $whereSql .= ($whereSql === '' ? ' WHERE ' : ' AND ') . editionFirstPrintingSql('c');
+$newStmt = db()->prepare('SELECT COUNT(DISTINCT COALESCE(c.oracle_id, c.id)) FROM cards c WHERE c.set_code = ? AND ' . editionFirstPrintingSql('c'));
+$newStmt->execute([$set]);
+$newCount = (int)$newStmt->fetchColumn();
 $perPage = 60;
 $page = max(1, (int)($_GET['page'] ?? 1));
 $offset = ($page - 1) * $perPage;
@@ -82,8 +88,8 @@ $siblings = array_values(array_filter(
 
 $icon = setIconUrl($set);
 $logo = '/assets/deckarium-favicon.png';
-$active = $f['q'] !== '' || $f['type'] !== '' || $f['rarity'] !== '' || $f['colors'];
-$baseParams = array_filter(['set' => $set, 'view' => $view === 'unique' ? '' : $view, 'sort' => $sort === 'number' ? '' : $sort, 'q' => $f['q'], 'type' => $f['type'], 'rarity' => $f['rarity'], 'colors' => $f['colors']], static fn($v) => $v !== '' && $v !== []);
+$active = $f['q'] !== '' || $f['type'] !== '' || $f['rarity'] !== '' || $f['colors'] || $onlyNew;
+$baseParams = array_filter(['set' => $set, 'view' => $view === 'unique' ? '' : $view, 'sort' => $sort === 'number' ? '' : $sort, 'q' => $f['q'], 'type' => $f['type'], 'rarity' => $f['rarity'], 'colors' => $f['colors'], 'new' => $onlyNew ? '1' : ''], static fn($v) => $v !== '' && $v !== []);
 $colorLabels = ['W' => 'Branco', 'U' => 'Azul', 'B' => 'Preto', 'R' => 'Vermelho', 'G' => 'Verde', 'C' => 'Incolor'];
 
 pageHeader($edition['set_name']);
@@ -95,7 +101,7 @@ pageHeader($edition['set_name']);
         <div>
             <p class="set-hero-kicker"><span><?= h(strtoupper($set)) ?></span><?= h(displayDate($edition['first_release'])) ?><?= $edition['last_release'] !== $edition['first_release'] ? ' — ' . h(displayDate($edition['last_release'])) : '' ?></p>
             <h1><?= h($edition['set_name']) ?></h1>
-            <p class="muted"><?= number_format((int)$edition['unique_cards'], 0, ',', '.') ?> cartas únicas · <?= number_format((int)$edition['printings'], 0, ',', '.') ?> impressões</p>
+            <p class="muted"><?= number_format((int)$edition['unique_cards'], 0, ',', '.') ?> cartas únicas · <?= number_format($newCount, 0, ',', '.') ?> novas nesta edição · <?= number_format((int)$edition['printings'], 0, ',', '.') ?> impressões</p>
         </div>
     </div>
     <?php if ($siblings): ?><nav class="set-siblings" aria-label="Outros códigos da mesma coleção"><span>Da mesma coleção</span><?php foreach ($siblings as $sibling): ?><a href="/edition.php?set=<?= h(rawurlencode((string)$sibling['set_code'])) ?>"><?= h($sibling['set_name']) ?> <b><?= h(strtoupper((string)$sibling['set_code'])) ?></b></a><?php endforeach; ?></nav><?php endif; ?>
@@ -111,6 +117,7 @@ pageHeader($edition['set_name']);
     </div>
     <div class="set-filters-row">
         <fieldset class="set-colors"><legend>Cores</legend><?php foreach ($colorLabels as $color => $label): ?><label title="<?= h($label) ?>"><input type="checkbox" name="colors[]" value="<?= $color ?>" data-auto-submit<?= in_array($color, $f['colors'], true) ? ' checked' : '' ?>><?= manaSymbols('{' . $color . '}') ?><span class="sr-only"><?= h($label) ?></span></label><?php endforeach; ?></fieldset>
+        <label class="set-new" title="Cartas impressas pela primeira vez nesta edição, sem reimpressões"><input type="checkbox" name="new" value="1" data-auto-submit<?= $onlyNew ? ' checked' : '' ?><?= $newCount ? '' : ' disabled' ?>> Só cartas novas <b><?= number_format($newCount, 0, ',', '.') ?></b></label>
         <fieldset class="set-view"><legend class="sr-only">Mostrar</legend>
             <label><input type="radio" name="view" value="unique"<?= $view === 'unique' ? ' checked' : '' ?> data-auto-submit> Cartas únicas</label>
             <label><input type="radio" name="view" value="printings"<?= $view === 'printings' ? ' checked' : '' ?> data-auto-submit> Todas as versões</label>

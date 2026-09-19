@@ -65,10 +65,54 @@ function manaSymbols(?string $cost): string
     return $html ?: '<span class="mana-muted">Sem custo</span>';
 }
 
+/** Texto Oracle em HTML: quebras de linha e símbolos ({4}, {T}, {W/U}, {E}…) como os ícones do Scryfall. */
+function oracleText(?string $text): string
+{
+    $html = nl2br(h((string)$text));
+    return preg_replace_callback('/\{([^{}\s]{1,12})\}/u', function (array $match): string {
+        $symbol = ['½' => 'HALF', '∞' => 'INFINITY'][$match[1]] ?? strtoupper(str_replace('/', '', $match[1]));
+        if (!preg_match('/^[A-Z0-9]+$/', $symbol)) return $match[0];
+        return '<img class="oracle-symbol" src="https://svgs.scryfall.io/card-symbols/' . rawurlencode($symbol) . '.svg" alt="{' . $match[1] . '}" title="{' . $match[1] . '}" width="16" height="16" loading="lazy">';
+    }, $html) ?? $html;
+}
+
 function setIconUrl(?string $code): ?string
 {
     $code = strtolower(trim((string)$code));
     return preg_match('/^[a-z0-9]{2,8}$/', $code) ? 'https://svgs.scryfall.io/sets/' . rawurlencode($code) . '.svg' : null;
+}
+
+/**
+ * Cartas novas: a impressão é a primeira da carta (nenhuma impressão anterior em outra edição).
+ * Conta só papel e ignora fichas, emblemas e art series. No mesmo dia, a edição principal ganha
+ * de Commander, produtos especiais e promos (ex.: DSK antes de DSC e PDSK).
+ */
+function editionPrintEligibleSql(string $alias): string
+{
+    return "{$alias}.released_at IS NOT NULL AND {$alias}.layout NOT IN ('token','double_faced_token','emblem','art_series')"
+        . " AND " . editionSetFactSql($alias, 'set_type') . " NOT IN ('token','memorabilia') AND " . editionSetFactSql($alias, 'digital') . " <> 'true'";
+}
+
+/** Tipo da edição ou "só digital", lidos de uma carta da mesma edição: a mesma regra da linha do tempo (editions.php). */
+function editionSetFactSql(string $alias, string $fact): string
+{
+    $default = $fact === 'digital' ? 'false' : '';
+    return "(SELECT COALESCE(f.raw->>'{$fact}','{$default}') FROM cards f WHERE f.set_code = {$alias}.set_code LIMIT 1)";
+}
+
+/** Ordem de prioridade da edição no mesmo dia; recebe a expressão SQL do set_type. */
+function editionSetRankSql(string $setType): string
+{
+    return "CASE {$setType} WHEN 'expansion' THEN 0 WHEN 'core' THEN 0 WHEN 'draft_innovation' THEN 1 WHEN 'masters' THEN 1"
+        . " WHEN 'commander' THEN 2 WHEN 'promo' THEN 4 ELSE 3 END";
+}
+
+/** Condição SQL: a linha {$alias} é a primeira impressão da carta. */
+function editionFirstPrintingSql(string $alias): string
+{
+    return editionPrintEligibleSql($alias) . " AND NOT EXISTS (SELECT 1 FROM cards o WHERE COALESCE(o.oracle_id,o.id)=COALESCE({$alias}.oracle_id,{$alias}.id)"
+        . " AND o.set_code<>{$alias}.set_code AND " . editionPrintEligibleSql('o')
+        . " AND (o.released_at < {$alias}.released_at OR (o.released_at = {$alias}.released_at AND (" . editionSetRankSql(editionSetFactSql('o', 'set_type')) . ", o.set_code) < (" . editionSetRankSql(editionSetFactSql($alias, 'set_type')) . ", {$alias}.set_code))))";
 }
 
 function editionUmbrella(string $name): string

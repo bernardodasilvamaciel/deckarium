@@ -46,11 +46,44 @@
   }));
   apply();
 
-  // A régua encolhe quando o topo da página sai de vista.
+  // Reimpressões: camada opcional sobre as cartas novas de cada ano (lembrada no navegador).
+  const reprints = page.querySelector('[data-spectro-reprints]');
+  const reprintKey = 'deckarium:editions-reprints';
+  try { reprints.checked = localStorage.getItem(reprintKey) === '1'; } catch (_) { /* padrão: só novas */ }
+  const syncReprints = () => spectro.classList.toggle('show-reprints', reprints.checked);
+  reprints?.addEventListener('change', () => { syncReprints(); try { localStorage.setItem(reprintKey, reprints.checked ? '1' : '0'); } catch (_) { /* ignora */ } });
+  syncReprints();
+
+  // A régua encolhe quando o topo da página sai de vista. A diferença de altura vira margem inferior, aplicada
+  // junto com a classe: o conteúdo abaixo não se move, então a rolagem não é "corrigida" pelo navegador.
+  // A altura compacta é medida antes, numa cópia invisível; medir a própria régua no meio da troca fazia
+  // a página subir por um instante e, perto do topo, a rolagem voltava a 0 (a régua "bugava" ao descer).
   const topbar = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--topbar')) || 0;
-  new IntersectionObserver(([entry]) => {
-    spectro.classList.toggle('is-stuck', !entry.isIntersecting && entry.boundingClientRect.top < topbar() + 1);
-  }, { rootMargin: `-${topbar() + 1}px 0px 0px 0px` }).observe(sentinel);
+  let heights = null;
+  const measure = () => {
+    const probe = spectro.cloneNode(true);
+    probe.classList.add('is-stuck');
+    probe.removeAttribute('data-spectro');
+    Object.assign(probe.style, { position: 'absolute', visibility: 'hidden', left: '0', top: '0', width: `${spectro.getBoundingClientRect().width}px`, marginBottom: '0', animation: 'none' });
+    probe.setAttribute('aria-hidden', 'true');
+    spectro.parentNode.append(probe);
+    const stuck = probe.offsetHeight;
+    probe.remove();
+    const wasStuck = spectro.classList.contains('is-stuck');
+    const full = wasStuck ? heights.full : spectro.offsetHeight;
+    heights = { full, stuck, margin: heights?.margin ?? (parseFloat(getComputedStyle(spectro).marginBottom) || 0) };
+    if (wasStuck) spectro.style.marginBottom = `${heights.margin + heights.full - heights.stuck}px`;
+  };
+  const setStuck = (stuck) => {
+    if (stuck === spectro.classList.contains('is-stuck')) return;
+    if (!heights) measure();
+    spectro.classList.toggle('is-stuck', stuck);
+    spectro.style.marginBottom = stuck ? `${heights.margin + heights.full - heights.stuck}px` : '';
+  };
+  const syncStuck = () => setStuck(sentinel.getBoundingClientRect().top < topbar() + 1);
+  window.addEventListener('resize', () => {
+    if (spectro.classList.contains('is-stuck')) { setStuck(false); heights = null; measure(); syncStuck(); } else heights = null;
+  });
 
   // Destaca na régua o ano que está no alto da tela.
   let current = null;
@@ -74,7 +107,8 @@
   window.addEventListener('scroll', () => {
     if (ticking) return;
     ticking = true;
-    window.requestAnimationFrame(() => { onScroll(); ticking = false; });
+    window.requestAnimationFrame(() => { syncStuck(); onScroll(); ticking = false; });
   }, { passive: true });
+  syncStuck();
   onScroll();
 })();

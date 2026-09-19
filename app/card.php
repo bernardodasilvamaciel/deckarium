@@ -85,9 +85,9 @@ $back = cardImageUrl($card, 'back', 'normal');
     <p class="mana-line"><strong>Custo:</strong> <span class="mana-cost"><?= manaSymbols($card['mana_cost']) ?></span></p>
     <p><strong>Tipo:</strong> <?= h($card['type_line']) ?></p>
     <?php if ($card['oracle_text']): ?>
-    <div class="oracle"><?= nl2br(h($card['oracle_text'])) ?></div>
+    <div class="oracle"><?= oracleText($card['oracle_text']) ?></div>
     <?php else: foreach (json_decode($card['card_faces'] ?? '[]', true) ?: [] as $cardFace): ?>
-    <div class="oracle"><strong><?= h($cardFace['name'] ?? '') ?></strong><p class="mana-line"><span class="mana-cost"><?= manaSymbols($cardFace['mana_cost'] ?? null) ?></span> · <?= h($cardFace['type_line'] ?? '') ?></p><?= nl2br(h($cardFace['oracle_text'] ?? '')) ?></div>
+    <div class="oracle"><strong><?= h($cardFace['name'] ?? '') ?></strong><p class="mana-line"><span class="mana-cost"><?= manaSymbols($cardFace['mana_cost'] ?? null) ?></span> · <?= h($cardFace['type_line'] ?? '') ?></p><?= oracleText($cardFace['oracle_text'] ?? '') ?></div>
     <?php endforeach; endif; ?>
     <dl>
       <dt>Edição</dt><dd><?= h($card['set_name']) ?> (<?= h(strtoupper((string)$card['set_code'])) ?>)</dd>
