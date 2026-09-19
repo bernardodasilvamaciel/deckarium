@@ -17,6 +17,8 @@ function uiIcon(string $name): string
         'account'=>'<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5c.8-4 3.7-6.2 7.5-6.2s6.7 2.2 7.5 6.2"/>',
         'community'=>'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.7 5.6 3.7 9s-1.2 6.4-3.7 9c-2.5-2.6-3.7-5.6-3.7-9S9.5 5.6 12 3Z"/>',
         'menu'=>'<path d="M4 7h16M4 12h16M4 17h16"/>',
+        'collapse'=>'<path d="M14.5 5.5 8 12l6.5 6.5"/>',
+        'expand'=>'<path d="M9.5 5.5 16 12l-6.5 6.5"/>',
         'close'=>'<path d="M6 6l12 12M18 6 6 18"/>',
     ];
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . ($paths[$name] ?? $paths['cards']) . '</svg>';
@@ -83,7 +85,7 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
     if ($section==='decks') echo '<link rel="stylesheet" href="/assets/decks.css?v=' . filemtime(__DIR__ . '/assets/decks.css') . '">';
     echo '<script src="/assets/app.js?v=' . h((string)filemtime(__DIR__ . '/assets/app.js')) . '" defer></script></head><body>';
     echo '<a class="skip-link" href="#main">' . te('Pular para o conteúdo') . '</a>';
-    echo '<header class="sidebar" data-sidebar><div class="sidebar-header"><a class="brand" href="/commanders.php" aria-label="Deckarium — início"><img class="brand-mark" src="/assets/deckarium-logo.png" alt="Deckarium" width="512" height="512"></a><button type="button" class="sidebar-toggle" data-sidebar-toggle aria-expanded="true"><span class="sr-only" data-sidebar-toggle-label>' . te('Recolher navegação') . '</span><span class="sidebar-toggle-open">' . uiIcon('menu') . '</span><span class="sidebar-toggle-close">' . uiIcon('close') . '</span></button></div>';
+    echo '<header class="sidebar" data-sidebar><div class="sidebar-header"><a class="brand" href="/commanders.php" aria-label="Deckarium — início"><img class="brand-mark" src="/assets/deckarium-logo.png" alt="Deckarium" width="512" height="512"></a><button type="button" class="sidebar-toggle" data-sidebar-toggle aria-expanded="true"><span class="sr-only" data-sidebar-toggle-label>' . te('Recolher navegação') . '</span><span class="sidebar-toggle-open">' . uiIcon('menu') . '</span><span class="sidebar-toggle-close">' . uiIcon('close') . '</span><span class="sidebar-toggle-collapse">' . uiIcon('collapse') . '</span><span class="sidebar-toggle-expand">' . uiIcon('expand') . '</span></button></div>';
     echo '<nav aria-label="Navegação principal">';
     $links = [['commanders','/commanders.php',t('Comandantes')],['cards','/?catalog=1#catalogo',t('Catálogo')],['sets','/editions.php',t('Edições')],['collection','/collection.php',t('Minha coleção')],['decks','/decks.php',t('Meus decks')],['community','/public.php',t('Comunidade')]];
     if (($user['role'] ?? '') === 'admin') {
@@ -106,7 +108,9 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
     echo '<div class="sidebar-lang" role="group" aria-label="' . te('Idioma do site') . '">';
     foreach (APP_LOCALES as $localeCode => $localeLabel) {
         $current = appLocale() === $localeCode;
-        echo '<a href="' . h(appLocaleUrl($localeCode)) . '"' . ($current ? ' aria-current="true"' : '') . ' lang="' . h($localeCode) . '">' . h($localeLabel) . '</a>';
+        $short = $localeCode === 'en' ? 'EN' : 'PT';
+        echo '<a href="' . h(appLocaleUrl($localeCode)) . '"' . ($current ? ' aria-current="true"' : '') . ' lang="' . h($localeCode) . '">'
+            . '<span class="lang-full">' . h($localeLabel) . '</span><span class="lang-short" aria-hidden="true">' . $short . '</span></a>';
     }
     echo '</div>';
     echo '</header><div class="sidebar-scrim" data-sidebar-scrim hidden></div><div class="app-content"><main id="main" class="wrap">';
