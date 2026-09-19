@@ -609,6 +609,20 @@ if ($catalogVisible) {
     $hasMore=$page<$totalPages; $results=array_slice($results,0,24);
      }
     // Uso das cópias em outros decks, para mostrar se a cópia da coleção está livre.
+    // Menor preço entre todas as impressões da carta, para aparecer em cada resultado.
+    if($results){
+        $logicalIds=array_values(array_unique(array_map(fn($row)=>(string)($row['oracle_id']?:$row['id']),$results)));
+        $placeholders=implode(',',array_fill(0,count($logicalIds),'?::uuid'));
+        $cheapest=deckQuery("SELECT COALESCE(c.oracle_id,c.id) logical_id, MIN(".deckCheapestPriceSql('c').") price, COUNT(*) printings
+            FROM cards c WHERE COALESCE(c.oracle_id,c.id) IN ({$placeholders}) GROUP BY 1",$logicalIds)->fetchAll();
+        $cheapestByLogical=[]; foreach($cheapest as $cheapRow) $cheapestByLogical[(string)$cheapRow['logical_id']]=$cheapRow;
+        foreach($results as &$priceRow){
+            $cheapRow=$cheapestByLogical[(string)($priceRow['oracle_id']?:$priceRow['id'])]??null;
+            $priceRow['cheapest_price']=$cheapRow && $cheapRow['price']!==null?(float)$cheapRow['price']:null;
+            $priceRow['printing_count']=(int)($cheapRow['printings']??0);
+        }
+        unset($priceRow);
+    }
     if(!$choosingCommander && $results){
         $usageElsewhere=deckUsageElsewhere($id,array_map(fn($row)=>(string)($row['oracle_id']?:$row['id']),$results));
         foreach($results as &$resultRow){
