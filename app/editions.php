@@ -178,7 +178,7 @@ pageHeader('Edições');
 ?>
 <div class="timeline-page" data-timeline>
 <header class="timeline-intro">
-    <h1>Edições</h1>
+    <h1><?= te('Edições') ?></h1>
     <p><?= number_format($total, 0, ',', '.') ?> códigos de edição, de <?= h($firstYear) ?> a <?= h($lastYear) ?>, reunidos em <?= number_format(count($releases), 0, ',', '.') ?> lançamentos. Cada coluna abaixo é um ano: a altura mostra quantas <strong>cartas novas</strong> surgiram nele — cartas impressas pela primeira vez, sem contar reimpressões — e as faixas, a proporção de cada cor de mana entre elas. Ligue “Mostrar reimpressões” para comparar com o que voltou a ser impresso. Clique num ano para ir até ele.</p>
 </header>
 
@@ -204,7 +204,7 @@ pageHeader('Edições');
 </nav>
 
 <div class="timeline-controls">
-    <label class="timeline-search"><span>Buscar edição</span><input type="search" value="<?= h($query) ?>" placeholder="Nome ou código, ex.: Duskmourn, MH3" data-timeline-search autocomplete="off"></label>
+    <label class="timeline-search"><span><?= te('Buscar edição') ?></span><input type="search" value="<?= h($query) ?>" placeholder="Nome ou código, ex.: Duskmourn, MH3" data-timeline-search autocomplete="off"></label>
     <fieldset class="timeline-filters"><legend>Mostrar</legend>
         <?php foreach ($categories as $key => $label): ?><label><input type="checkbox" value="<?= $key ?>" data-timeline-filter<?= $key === 'extras' ? '' : ' checked' ?>><?= h($label) ?> <b><?= number_format($categoryCounts[$key] ?? 0, 0, ',', '.') ?></b></label><?php endforeach; ?>
     </fieldset>

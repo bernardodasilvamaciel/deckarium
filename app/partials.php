@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/i18n.php';
 
 function uiIcon(string $name): string
 {
@@ -33,8 +34,8 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
     $section = !empty($GLOBALS['isHome']) ? 'home' : match ($route) { 'editions.php','edition.php'=>'sets', 'commanders.php'=>'commanders', 'collection.php'=>'collection', 'decks.php','upgrades.php','deck_board.php'=>'decks','status.php','sync_history.php'=>'status','public.php','public_deck.php','public_collection.php','profile.php'=>'community','users.php'=>'users','account.php'=>'account','login.php','register.php'=>'auth',default=>'cards' };
     $user = authUser();
     $version = (string)filemtime(__DIR__ . '/assets/style.css');
-    echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
-    echo '<meta name="theme-color" content="#171e26"><title>' . h($title) . ' · Deckarium</title>';
+    echo '<!doctype html><html lang="' . h(appLocale()) . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
+    echo '<meta name="theme-color" content="#171e26"><title>' . te($title) . ' · Deckarium</title>';
 
     // Resumo, endereço canônico e cartão de compartilhamento.
     $descriptions = [
@@ -44,7 +45,7 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
         'commanders' => 'Todos os comandantes do catálogo, com as cartas mais jogadas e as sinergias de cada um.',
         'community' => 'Decks e coleções que outros jogadores tornaram públicos no Deckarium.',
     ];
-    $pageDescription = $description !== '' ? $description : ($descriptions[$section] ?? 'Deckarium: catálogo de Magic, oficina de decks de Commander e controle da sua coleção.');
+    $pageDescription = t($description !== '' ? $description : ($descriptions[$section] ?? 'Deckarium: catálogo de Magic, oficina de decks de Commander e controle da sua coleção.'));
     $pageDescription = mb_substr(trim(preg_replace('/\s+/u', ' ', $pageDescription) ?? ''), 0, 300);
     $privateRoutes = ['login.php','register.php','logout.php','account.php','collection.php','decks.php','deck_board.php','upgrades.php','users.php','status.php','sync_history.php'];
     $noindex = $meta['noindex'] ?? in_array($route, $privateRoutes, true);
@@ -69,10 +70,10 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
     if ($noindex) echo '<meta name="robots" content="noindex,nofollow">';
     else echo '<link rel="canonical" href="' . h($canonical) . '">';
     echo '<meta property="og:site_name" content="Deckarium"><meta property="og:type" content="website">';
-    echo '<meta property="og:title" content="' . h($title) . ' · Deckarium">';
+    echo '<meta property="og:title" content="' . te($title) . ' · Deckarium">';
     echo '<meta property="og:description" content="' . h($pageDescription) . '">';
     echo '<meta property="og:url" content="' . h($canonical) . '"><meta property="og:image" content="' . h($image) . '">';
-    echo '<meta property="og:locale" content="pt_BR"><meta name="twitter:card" content="summary_large_image">';
+    echo '<meta property="og:locale" content="' . (appLocale() === 'en' ? 'en_US' : 'pt_BR') . '"><meta name="twitter:card" content="summary_large_image">';
     echo '<link rel="icon" type="image/png" href="/assets/deckarium-favicon.png"><link rel="apple-touch-icon" href="/assets/deckarium-favicon.png">';
     echo '<link rel="preload" href="/assets/fonts/spectral-bold.ttf" as="font" type="font/ttf" crossorigin>';
     echo '<link rel="stylesheet" href="/assets/style.css?v=' . h($version) . '">';
@@ -84,10 +85,10 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
     echo '<a class="skip-link" href="#main">Pular para o conteúdo</a>';
     echo '<header class="sidebar" data-sidebar><div class="sidebar-header"><a class="brand" href="/commanders.php" aria-label="Deckarium — início"><img class="brand-mark" src="/assets/deckarium-logo.png" alt="Deckarium" width="512" height="512"></a><button type="button" class="sidebar-toggle" data-sidebar-toggle aria-expanded="true"><span class="sr-only" data-sidebar-toggle-label>Recolher navegação</span><span class="sidebar-toggle-open">' . uiIcon('menu') . '</span><span class="sidebar-toggle-close">' . uiIcon('close') . '</span></button></div>';
     echo '<nav aria-label="Navegação principal">';
-    $links = [['commanders','/commanders.php','Comandantes'],['cards','/?catalog=1#catalogo','Catálogo'],['sets','/editions.php','Edições'],['collection','/collection.php','Minha coleção'],['decks','/decks.php','Meus decks'],['community','/public.php','Comunidade']];
+    $links = [['commanders','/commanders.php',t('Comandantes')],['cards','/?catalog=1#catalogo',t('Catálogo')],['sets','/editions.php',t('Edições')],['collection','/collection.php',t('Minha coleção')],['decks','/decks.php',t('Meus decks')],['community','/public.php',t('Comunidade')]];
     if (($user['role'] ?? '') === 'admin') {
-        $links[] = ['status','/status.php','Status'];
-        $links[] = ['users','/users.php','Usuários'];
+        $links[] = ['status','/status.php',t('Status')];
+        $links[] = ['users','/users.php',t('Usuários')];
     }
     foreach ($links as [$key,$url,$label]) {
         echo '<a href="' . $url . '"' . ($section === $key ? ' aria-current="page"' : '') . '>' . uiIcon($key) . '<span>' . $label . '</span></a>';
@@ -96,14 +97,21 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
     if ($user) {
         $initials = mb_strtoupper(implode('', array_map(fn($part) => mb_substr($part, 0, 1), array_slice(preg_split('/\s+/u', trim((string)$user['full_name'])) ?: [], 0, 2))));
         echo '<div class="sidebar-account"><a class="account-chip" href="/account.php"' . ($section === 'account' ? ' aria-current="page"' : '') . '><span class="account-avatar" aria-hidden="true">' . (!empty($user['avatar_file']) ? '<img src="/profile_image.php?u=' . (int)$user['id'] . '&amp;kind=avatar&amp;v=' . h(rawurlencode((string)$user['avatar_file'])) . '" alt="">' : h($initials ?: '?')) . '</span><span class="account-names"><strong>' . h($user['full_name']) . '</strong><small>@' . h($user['username']) . ($user['role'] === 'admin' ? ' · admin' : '') . '</small></span></a>';
-        echo '<form method="post" action="/logout.php" class="account-logout">' . authCsrfField() . '<button type="submit">Sair</button></form></div>';
+        echo '<form method="post" action="/logout.php" class="account-logout">' . authCsrfField() . '<button type="submit">' . te('Sair') . '</button></form></div>';
     } else {
         $next = $section === 'auth' ? '' : '?next=' . rawurlencode((string)($_SERVER['REQUEST_URI'] ?? '/'));
-        echo '<div class="sidebar-account is-guest"><span>Guarde sua coleção e seus decks.</span><div><a class="account-login" href="/login.php' . h($next) . '">Entrar</a><a class="account-register" href="/register.php">Criar conta</a></div></div>';
+        echo '<div class="sidebar-account is-guest"><span>' . te('Guarde sua coleção e seus decks.') . '</span><div><a class="account-login" href="/login.php' . h($next) . '">' . te('Entrar') . '</a><a class="account-register" href="/register.php">' . te('Criar conta') . '</a></div></div>';
     }
+    // Troca de idioma: mantém a página e os filtros, mudando só ?lang=.
+    echo '<div class="sidebar-lang" role="group" aria-label="' . te('Idioma do site') . '">';
+    foreach (APP_LOCALES as $localeCode => $localeLabel) {
+        $current = appLocale() === $localeCode;
+        echo '<a href="' . h(appLocaleUrl($localeCode)) . '"' . ($current ? ' aria-current="true"' : '') . ' lang="' . h($localeCode) . '">' . h($localeLabel) . '</a>';
+    }
+    echo '</div>';
     echo '</header><div class="sidebar-scrim" data-sidebar-scrim hidden></div><div class="app-content"><main id="main" class="wrap">';
 }
 function pageFooter(): void
 {
-    echo '</main><footer class="wrap footer"><span>Deckarium</span><span>Dados e imagens do Scryfall. Acervo para consulta pessoal.</span>' . (authIsAdmin() ? '<a href="/status.php">Status do acervo</a>' : '') . '</footer></div></body></html>';
+    echo '</main><footer class="wrap footer"><span>Deckarium</span><span>Dados e imagens do Scryfall. Acervo para consulta pessoal.</span>' . (authIsAdmin() ? '<a href="/status.php">' . te('Status do acervo') . '</a>' : '') . '</footer></div></body></html>';
 }

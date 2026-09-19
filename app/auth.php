@@ -37,8 +37,8 @@ function authMigrate(): void
     $done = true;
     $pdo = db();
     try {
-        $applied = $pdo->query("SELECT name FROM app_migrations WHERE name IN ('auth_v1','ownership_v1')")->fetchAll(PDO::FETCH_COLUMN);
-        if (count($applied) === 2) return;
+        $applied = $pdo->query("SELECT name FROM app_migrations WHERE name IN ('auth_v1','ownership_v1','locale_v1')")->fetchAll(PDO::FETCH_COLUMN);
+        if (count($applied) === 3) return;
     } catch (PDOException) {
         // Tabela de migrações ainda não existe.
     }
@@ -77,6 +77,10 @@ function authMigrate(): void
             $stmt = $pdo->prepare("INSERT INTO users(full_name,username,email,password_hash,role) VALUES (?,?,?,?,'admin')");
             $stmt->execute([$admin['full_name'], strtolower($admin['username']), strtolower($admin['email']), $admin['password_hash']]);
         }
+
+        // Idioma escolhido por cada conta (pt-BR ou en); vazio = seguir o navegador.
+        $pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS locale text NOT NULL DEFAULT '';
+            INSERT INTO app_migrations(name) VALUES ('locale_v1') ON CONFLICT DO NOTHING;");
 
         $owner = $pdo->query("SELECT id FROM users ORDER BY (role='admin') DESC, id LIMIT 1")->fetchColumn();
         $ownershipDone = (bool)$pdo->query("SELECT 1 FROM app_migrations WHERE name='ownership_v1'")->fetchColumn();

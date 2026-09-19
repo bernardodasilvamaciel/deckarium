@@ -41,7 +41,7 @@ $field = function (string $name, string $label, string $type, string $autocomple
         . ($type !== 'password' ? ' value="' . h($data[$name] ?? '') . '"' : '')
         . ($describedBy !== '' ? ' aria-describedby="' . $describedBy . '"' : '')
         . (isset($errors[$name]) ? ' aria-invalid="true"' : '') . '>';
-    echo $type === 'password' ? '<span class="password-field">' . $input . '<button type="button" data-password-toggle aria-pressed="false">Mostrar</button></span>' : $input;
+    echo $type === 'password' ? '<span class="password-field">' . $input . '<button type="button" data-password-toggle aria-pressed="false">' . te('Mostrar') . '</button></span>' : $input;
     if ($hint !== '') echo '<small id="' . $id . '-hint">' . h($hint) . '</small>';
     if (isset($errors[$name])) echo '<small class="field-error" id="' . $id . '-error">' . h($errors[$name]) . '</small>';
     echo '</div>';
@@ -51,18 +51,18 @@ pageHeader('Criar conta');
 ?>
 <section class="auth-layout">
   <div class="auth-intro">
-    <span class="auth-kicker">Novo por aqui</span>
-    <h1>Seu espaço para montar decks.</h1>
+    <span class="auth-kicker"><?= te('Novo por aqui') ?></span>
+    <h1><?= te('Seu espaço para montar decks.') ?></h1>
     <p>Crie uma conta gratuita para guardar sua coleção, planejar decks de Commander e acompanhar cada troca.</p>
     <ul class="auth-benefits">
-      <li><strong>Importe sua coleção</strong><span>CSV do ManaBox com impressões e foils.</span></li>
-      <li><strong>Planeje com calma</strong><span>Candidatas → deck de 100 cartas.</span></li>
-      <li><strong>Privado por padrão</strong><span>Outras contas não veem seus decks nem sua coleção.</span></li>
+      <li><strong><?= te('Importe sua coleção') ?></strong><span><?= te('CSV do ManaBox com impressões e foils.') ?></span></li>
+      <li><strong><?= te('Planeje com calma') ?></strong><span><?= te('Candidatas → deck de 100 cartas.') ?></span></li>
+      <li><strong><?= te('Privado por padrão') ?></strong><span><?= te('Outras contas não veem seus decks nem sua coleção.') ?></span></li>
     </ul>
   </div>
   <form class="auth-card" method="post" action="/register.php">
-    <h2>Criar conta</h2>
-    <?php if ($generalError): ?><p class="auth-message is-error" role="alert"><?= h($generalError) ?></p><?php elseif ($errors): ?><p class="auth-message is-error" role="alert">Revise os campos destacados.</p><?php endif; ?>
+    <h2><?= te('Criar conta') ?></h2>
+    <?php if ($generalError): ?><p class="auth-message is-error" role="alert"><?= h($generalError) ?></p><?php elseif ($errors): ?><p class="auth-message is-error" role="alert"><?= te('Revise os campos destacados.') ?></p><?php endif; ?>
     <?= authCsrfField() ?>
     <input type="hidden" name="next" value="<?= h($next) ?>">
     <?php $field('full_name', 'Nome completo', 'text', 'name', '', ['maxlength' => 120, 'autofocus' => 'autofocus']); ?>
@@ -70,7 +70,7 @@ pageHeader('Criar conta');
     <?php $field('email', 'Email', 'email', 'email', '', ['maxlength' => 190]); ?>
     <?php $field('password', 'Senha', 'password', 'new-password', 'Pelo menos ' . AUTH_MIN_PASSWORD . ' caracteres. Uma frase longa é mais segura e fácil de lembrar.', ['minlength' => AUTH_MIN_PASSWORD, 'maxlength' => 72]); ?>
     <button class="primary-link auth-submit" type="submit">Criar conta</button>
-    <p class="auth-switch">Já tem conta? <a href="/login.php<?= $next !== '/decks.php' ? '?next=' . h(rawurlencode($next)) : '' ?>">Entrar</a></p>
+    <p class="auth-switch"><?= te('Já tem conta? ') ?><a href="/login.php<?= $next !== '/decks.php' ? '?next=' . h(rawurlencode($next)) : '' ?>">Entrar</a></p>
   </form>
 </section>
 <?php pageFooter(); ?>

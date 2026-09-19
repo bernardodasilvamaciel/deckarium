@@ -35,12 +35,12 @@ pageHeader('Entrar');
 ?>
 <section class="auth-layout">
   <div class="auth-intro">
-    <span class="auth-kicker">Sua mesa de montagem</span>
-    <h1>Bem-vindo de volta.</h1>
+    <span class="auth-kicker"><?= te('Sua mesa de montagem') ?></span>
+    <h1><?= te('Bem-vindo de volta.') ?></h1>
     <p>Entre para continuar seus planejamentos, consultar sua coleção e registrar os próximos upgrades.</p>
     <ul class="auth-benefits">
-      <li><strong>Coleção pessoal</strong><span>Cópias, acabamentos e valores só seus.</span></li>
-      <li><strong>Decks em andamento</strong><span>Candidatas e lista final preservadas.</span></li>
+      <li><strong><?= te('Coleção pessoal') ?></strong><span><?= te('Cópias, acabamentos e valores só seus.') ?></span></li>
+      <li><strong><?= te('Decks em andamento') ?></strong><span><?= te('Candidatas e lista final preservadas.') ?></span></li>
     </ul>
   </div>
   <form class="auth-card" method="post" action="/login.php">
@@ -53,12 +53,12 @@ pageHeader('Entrar');
       <input name="identifier" value="<?= h($identifier) ?>" autocomplete="username" autocapitalize="none" spellcheck="false" required <?= $identifier === '' ? 'autofocus' : '' ?>>
     </label>
     <label class="auth-field">Senha
-      <span class="password-field"><input type="password" name="password" autocomplete="current-password" required <?= $identifier !== '' ? 'autofocus' : '' ?>><button type="button" data-password-toggle aria-pressed="false">Mostrar</button></span>
+      <span class="password-field"><input type="password" name="password" autocomplete="current-password" required <?= $identifier !== '' ? 'autofocus' : '' ?>><button type="button" data-password-toggle aria-pressed="false"><?= te('Mostrar') ?></button></span>
     </label>
     <label class="auth-check"><input type="checkbox" name="remember" value="1"> Manter conectado por 30 dias</label>
     <button class="primary-link auth-submit" type="submit">Entrar</button>
-    <p class="auth-switch">Ainda não tem conta? <a href="/register.php<?= $next !== '/' ? '?next=' . h(rawurlencode($next)) : '' ?>">Criar conta</a></p>
-    <p class="auth-footnote">Esqueceu a senha? Peça a um administrador do Deckarium para gerar uma senha temporária.</p>
+    <p class="auth-switch"><?= te('Ainda não tem conta? ') ?><a href="/register.php<?= $next !== '/' ? '?next=' . h(rawurlencode($next)) : '' ?>"><?= te('Criar conta') ?></a></p>
+    <p class="auth-footnote"><?= te('Esqueceu a senha? Peça a um administrador do Deckarium para gerar uma senha temporária.') ?></p>
   </form>
 </section>
 <?php pageFooter(); ?>

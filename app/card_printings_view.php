@@ -14,27 +14,27 @@ foreach ($printings as $printingRow) {
 <section class="printings-panel" data-printings>
   <div class="printings-head">
     <div>
-      <h2>Impressões desta carta</h2>
-      <p class="muted"><?= count($printings) ?> versões<?= $printingOwnedTotal ? ' · '.$printingOwnedTotal.($printingOwnedTotal === 1 ? ' cópia sua' : ' cópias suas') : '' ?>. Clique em uma para ver os dados e o preço dela.</p>
+      <h2><?= te('Impressões desta carta') ?></h2>
+      <p class="muted"><?= count($printings) ?> <?= te('versões') ?><?= $printingOwnedTotal ? ' · '.$printingOwnedTotal.' '.($printingOwnedTotal === 1 ? te('cópia sua') : te('cópias suas')) : '' ?>. <?= te('Clique em uma para ver os dados e o preço dela.') ?></p>
     </div>
   </div>
 
   <div class="printings-toolbar">
-    <label class="printings-search">Edição ou número<input type="search" data-printing-filter placeholder="ecl, commander, #123…" autocomplete="off"></label>
-    <label>Idioma<select data-printing-lang>
-      <option value="">Todos</option>
+    <label class="printings-search"><?= te('Edição ou número') ?><input type="search" data-printing-filter placeholder="ecl, commander, #123…" autocomplete="off"></label>
+    <label><?= te('Idioma') ?><select data-printing-lang>
+      <option value=""><?= te('Todos') ?></option>
       <?php foreach ($printingLangs as $langCode=>$langLabel): if(!isset($printingLangsPresent[$langCode])) continue; ?>
         <option value="<?= h($langCode) ?>"><?= h($langLabel) ?></option>
       <?php endforeach; ?>
     </select></label>
-    <label>Ordenar<select data-printing-sort>
-      <option value="default">Lançamento (mais novas)</option>
-      <option value="old">Lançamento (mais antigas)</option>
-      <option value="cheap">Preço: menor primeiro</option>
-      <option value="expensive">Preço: maior primeiro</option>
-      <option value="set">Edição e número</option>
+    <label><?= te('Ordenar') ?><select data-printing-sort>
+      <option value="default"><?= te('Lançamento (mais novas)') ?></option>
+      <option value="old"><?= te('Lançamento (mais antigas)') ?></option>
+      <option value="cheap"><?= te('Preço: menor primeiro') ?></option>
+      <option value="expensive"><?= te('Preço: maior primeiro') ?></option>
+      <option value="set"><?= te('Edição e número') ?></option>
     </select></label>
-    <?php if ($printingOwnedTotal): ?><label class="printings-check"><input type="checkbox" data-printing-owned> Só as que eu tenho</label><?php endif; ?>
+    <?php if ($printingOwnedTotal): ?><label class="printings-check"><input type="checkbox" data-printing-owned> <?= te('Só as que eu tenho') ?></label><?php endif; ?>
   </div>
 
   <div class="printings-grid" data-printing-grid>
@@ -57,9 +57,9 @@ foreach ($printings as $printingRow) {
       <span class="printing-tile-art">
         <?php if ($printingSrc = cardImageUrl($printing, 'front', 'small')): ?>
           <img src="<?= h($printingSrc) ?>" alt="<?= h(strtoupper((string)$printing['set_code']).' #'.$printing['collector_number']) ?>" loading="lazy" width="146" height="204">
-        <?php else: ?><span class="printing-tile-noart">sem imagem</span><?php endif; ?>
-        <?php if ($printing['id'] === $card['id']): ?><b class="printing-tag is-current">Vendo agora</b><?php endif; ?>
-        <?php if ($printingOwned): ?><b class="printing-tag is-owned"><?= $printingOwned ?>× sua<?= (int)$printing['owned_foil'] ? ($printing['owned_normal'] ? ' · foil' : ' foil') : '' ?></b><?php endif; ?>
+        <?php else: ?><span class="printing-tile-noart"><?= te('sem imagem') ?></span><?php endif; ?>
+        <?php if ($printing['id'] === $card['id']): ?><b class="printing-tag is-current"><?= te('Vendo agora') ?></b><?php endif; ?>
+        <?php if ($printingOwned): ?><b class="printing-tag is-owned"><?= $printingOwned ?>× <?= te('sua') ?><?= (int)$printing['owned_foil'] ? ($printing['owned_normal'] ? ' · ' . te('foil') : ' ' . te('foil')) : '' ?></b><?php endif; ?>
       </span>
       <span class="printing-tile-body">
         <strong>
@@ -70,12 +70,12 @@ foreach ($printings as $printingRow) {
         <span class="printing-tile-meta"><?= h($printingYear) ?> · <?= h($printingLangs[(string)$printing['lang']] ?? strtoupper((string)$printing['lang'])) ?> · <?= h($printingRarities[(string)$printing['rarity']] ?? (string)$printing['rarity']) ?></span>
         <span class="printing-tile-price">
           <?php if ($printingPrices['normal'] !== null): ?><b>R$ <?= number_format($printingPrices['normal'], 2, ',', '.') ?></b><?php endif; ?>
-          <?php if ($printingPrices['foil'] !== null): ?><i>foil R$ <?= number_format($printingPrices['foil'], 2, ',', '.') ?></i><?php endif; ?>
-          <?php if ($printingPrices['normal'] === null && $printingPrices['foil'] === null): ?><i>sem cotação</i><?php endif; ?>
+          <?php if ($printingPrices['foil'] !== null): ?><i><?= te('foil') ?> R$ <?= number_format($printingPrices['foil'], 2, ',', '.') ?></i><?php endif; ?>
+          <?php if ($printingPrices['normal'] === null && $printingPrices['foil'] === null): ?><i><?= te('sem cotação') ?></i><?php endif; ?>
         </span>
       </span>
     </a>
     <?php endforeach; ?>
   </div>
-  <p class="printings-empty" data-printing-empty hidden>Nenhuma impressão com esses filtros.</p>
+  <p class="printings-empty" data-printing-empty hidden><?= te('Nenhuma impressão com esses filtros.') ?></p>
 </section>
