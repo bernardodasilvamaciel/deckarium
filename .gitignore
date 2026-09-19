@@ -8,3 +8,9 @@ storage/sync-catalog.lock
 storage/sync.log
 app/auth_bootstrap.php
 storage/profiles/
+storage/download.log
+storage/download-progress.json
+# Capturas e scripts temporários de desenvolvimento
+app/_shot_*.html
+app/_vid*
+storage/_*.php
