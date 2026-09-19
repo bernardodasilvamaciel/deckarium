@@ -2,6 +2,18 @@
 
 Projeto local para pesquisar cartas, planejar decks de Commander a partir da sua coleção, compartilhar decks e coleções e manter um cache de imagens sem precisar baixar todas as impressões do Scryfall.
 
+## Capturas
+
+<table>
+<tr><td width="50%"><a href="docs/images/comandantes.png"><img src="docs/images/comandantes.png" alt="Comandantes"></a><br><b>Comandantes</b><br><sub>Todos os comandantes do catálogo, dos mais novos aos mais populares no EDHREC.</sub></td><td width="50%"><a href="docs/images/catalogo.png"><img src="docs/images/catalogo.png" alt="Catálogo"></a><br><b>Catálogo</b><br><sub>Busca e filtros sobre todas as cartas, uma impressão por carta.</sub></td></tr>
+<tr><td width="50%"><a href="docs/images/edicoes.png"><img src="docs/images/edicoes.png" alt="Edições"></a><br><b>Edições</b><br><sub>Linha do tempo com cartas novas por ano e, opcionalmente, as reimpressões.</sub></td><td width="50%"><a href="docs/images/edicao.png"><img src="docs/images/edicao.png" alt="Página da edição"></a><br><b>Página da edição</b><br><sub>Filtros, contagem de cartas novas e “Só cartas novas”.</sub></td></tr>
+<tr><td width="50%"><a href="docs/images/colecao.png"><img src="docs/images/colecao.png" alt="Minha coleção"></a><br><b>Minha coleção</b><br><sub>Cópias, acabamentos, uso em decks e resumo de valor.</sub></td><td width="50%"><a href="docs/images/decks.png"><img src="docs/images/decks.png" alt="Meus decks"></a><br><b>Meus decks</b><br><sub>Biblioteca de decks com a ilustração da comandante.</sub></td></tr>
+<tr><td width="50%"><a href="docs/images/deck-visao-geral.png"><img src="docs/images/deck-visao-geral.png" alt="Visão geral do deck"></a><br><b>Visão geral do deck</b><br><sub>Comandante, intenção e atalhos para as subpáginas.</sub></td><td width="50%"><a href="docs/images/explorar.png"><img src="docs/images/explorar.png" alt="Explorar"></a><br><b>Explorar</b><br><sub>Resultados ordenados por sinergia EDHREC, com situação na coleção.</sub></td></tr>
+<tr><td width="50%"><a href="docs/images/selecao-cartas-grandes.png"><img src="docs/images/selecao-cartas-grandes.png" alt="Minha seleção · Cartas grandes"></a><br><b>Minha seleção · Cartas grandes</b><br><sub>Cartas em tamanho de leitura; informações abaixo da arte.</sub></td><td width="50%"><a href="docs/images/mapa-de-jogo.png"><img src="docs/images/mapa-de-jogo.png" alt="Minha seleção · Mapa de jogo"></a><br><b>Minha seleção · Mapa de jogo</b><br><sub>Função × valor de mana, com metas por linha e por coluna.</sub></td></tr>
+<tr><td width="50%"><a href="docs/images/fichas.png"><img src="docs/images/fichas.png" alt="Fichas e marcadores"></a><br><b>Fichas e marcadores</b><br><sub>Calculados automaticamente das cartas do deck.</sub></td><td width="50%"><a href="docs/images/terrenos.png"><img src="docs/images/terrenos.png" alt="Completar com terrenos"></a><br><b>Completar com terrenos</b><br><sub>Sugestão de quantidade pelo deck, não básicos da coleção e básicos pelas cores.</sub></td></tr>
+<tr><td width="50%"><a href="docs/images/analise.png"><img src="docs/images/analise.png" alt="Análise do deck"></a><br><b>Análise do deck</b><br><sub>Contagens, valor, curva de mana e cores dos custos.</sub></td><td width="50%"><a href="docs/images/quadro.png"><img src="docs/images/quadro.png" alt="Quadro de relações"></a><br><b>Quadro de relações</b><br><sub>Cartas agrupadas pelo tema e setas entre o que fornece e o que aproveita.</sub></td></tr>
+</table>
+
 ## Documentação
 
 - [Oficina de decks](docs/deck-builder.md) — decks, coleção, EDHREC, quadro de relações e compartilhamento.

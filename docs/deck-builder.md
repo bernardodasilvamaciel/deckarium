@@ -21,7 +21,13 @@ Acesse `http://localhost:8080/decks.php` ou **Meus decks** no menu. O módulo fu
 - **Cartas grandes** não cobre a arte: quantidade, GC, relações e situação na coleção ficam logo abaixo de cada carta.
 - **Mapa de jogo:** uma matriz **função × valor de mana**. Cada linha é o que a carta faz (Comandante, Ramp, Compra, Remoção pontual, Remoção em massa, Proteção, Recursão, Tutores, Plano de jogo) e cada coluna é quando ela chega à mesa (0–1 até 7+). As cartas ficam em pilhas, como na mesa; passar o mouse levanta a carta e clicar abre a mesma janela da carta. No deck, cada linha mostra cartas/meta da comandante (com “faltam N”) e cada coluna mostra cartas/meta da curva. A função vem do campo “Função” da carta ou, se vazio, da leitura do Oracle (`deckScoreProfile`). Abaixo, a faixa **Base de mana** abre os terrenos em leque e conta as fontes de cada cor contra os símbolos dos custos. Arquivo: `deck_map_view.php`.
 
+![Mapa de jogo](images/mapa-de-jogo.png)
+
+![Fichas e marcadores](images/fichas.png)
+
 **Fichas e marcadores** (aba No deck, abaixo das cartas): calculados automaticamente de `raw.all_parts` (componente `token`) da comandante e das cartas aprovadas, agrupados pela identidade Oracle da ficha — fichas de criatura, Tesouros/Comida/etc., emblemas e marcadores (Monarca, Iniciativa). Cartas que criam cópias (texto “token that's a copy”, populate, myriad, encore…) geram a entrada “Cópia de uma permanente”. Cada ficha mostra quais cartas a criam, quantas já estão na coleção e uma sugestão de quantas ter à mão (soma do que cada carta cria de uma vez; X conta 3). Arquivos: `deck_tokens.php` e `deck_tokens_view.php`.
+
+![Completar com terrenos](images/terrenos.png)
 
 **Completar com terrenos** (botão na barra da aba No deck): você cuida das mágicas e o Deckarium monta a base de mana (`deck_lands.php`).
 
@@ -116,6 +122,8 @@ As relações (`app/deck_relations.php`) são setas **A → B**: a carta A *forn
 Na Minha seleção, o diálogo de cada carta lista as relações com o deck e com as candidatas nesse formato.
 
 ## Quadro de relações
+
+![Quadro de relações](images/quadro.png)
 
 `deck_board.php?deck=ID` (aba **Quadro de relações** do deck) mostra **só a comandante e as cartas aprovadas no deck**; candidatas ficam de fora para o quadro continuar leve.
 
