@@ -13,6 +13,9 @@ storage/admin-inicial.txt
 storage/download-progress.json
 storage/download-process.json
 storage/STOP_DOWNLOAD
+storage/auto-update.lock
+storage/auto-update.log
+storage/download-normal.lock
 # Capturas e scripts temporários de desenvolvimento
 app/_shot_*.html
 app/_vid*

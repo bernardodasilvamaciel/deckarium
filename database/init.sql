@@ -76,6 +76,26 @@ CREATE TABLE IF NOT EXISTS sync_run_cards (
 );
 CREATE INDEX IF NOT EXISTS sync_runs_started_idx ON sync_runs (started_at DESC);
 
+-- Histórico da rotina automática do cron (mantido também por app/auto_update.php).
+CREATE TABLE IF NOT EXISTS auto_update_runs (
+    id BIGSERIAL PRIMARY KEY,
+    trigger_source TEXT NOT NULL DEFAULT 'cron',
+    state TEXT NOT NULL DEFAULT 'checking',
+    started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    finished_at TIMESTAMPTZ NULL,
+    bulk_type TEXT NOT NULL DEFAULT '',
+    remote_updated_at TIMESTAMPTZ NULL,
+    had_update BOOLEAN NOT NULL DEFAULT false,
+    sync_run_id BIGINT NULL,
+    cards_imported INTEGER NOT NULL DEFAULT 0,
+    cards_added INTEGER NOT NULL DEFAULT 0,
+    images_downloaded INTEGER NOT NULL DEFAULT 0,
+    images_failed INTEGER NOT NULL DEFAULT 0,
+    images_bytes BIGINT NOT NULL DEFAULT 0,
+    error TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS auto_update_runs_started_idx ON auto_update_runs (started_at DESC);
+
 CREATE TABLE IF NOT EXISTS builder_collection (
     scryfall_id UUID NOT NULL,
     name TEXT NOT NULL,

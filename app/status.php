@@ -5,6 +5,7 @@ require __DIR__ . '/functions.php';
 require __DIR__ . '/partials.php';
 require __DIR__ . '/catalog_cache.php';
 require __DIR__ . '/sync_log.php';
+require __DIR__ . '/auto_update.php';
 authRequireAdmin();
 $stats = catalogCached('status-counts', fn() => db()->query('SELECT count(*) AS printings, count(DISTINCT COALESCE(oracle_id,id)) AS unique_cards FROM cards')->fetchAll(), 300)[0];
 $sync = db()->query('SELECT * FROM sync_status ORDER BY imported_at DESC')->fetchAll();
@@ -27,6 +28,7 @@ $progressProcessed = max(0, (int)($progress['processed'] ?? ((int)($progress['do
 $progressPercent = $progressTotal > 0 ? min(100, (int)round(($progressProcessed / $progressTotal) * 100)) : null;
 $downloadActive = in_array($state, ['running','starting','stopping'], true);
 $syncState = syncCatalogProgress(rtrim($config['storage_dir'], '/'));
+$auto = autoUpdateOverview(db(), rtrim($config['storage_dir'], '/'));
 pageHeader('Status do acervo');
 ?>
 <section class="hero"><div><h1>Seu acervo local.</h1><p>Dados importados, imagens disponíveis e andamento dos downloads.</p></div><a class="text-link" href="/status.php">Atualizar página</a></section>
@@ -34,6 +36,28 @@ pageHeader('Status do acervo');
 <div><span>Cartas únicas</span><strong><?= number_format((int)$stats['unique_cards'],0,',','.') ?></strong></div>
 <div><span>Impressões no banco</span><strong><?= number_format((int)$stats['printings'],0,',','.') ?></strong></div>
 </div>
+<section class="panel auto-panel" data-auto-panel data-state="<?= h($auto['state']) ?>" data-active="<?= $auto['active'] ? '1' : '0' ?>">
+<div class="section-heading"><h2>Atualização automática</h2><span class="status-tag" data-auto-label><?= h($auto['label']) ?></span></div>
+<p class="muted" data-auto-schedule><?= h($auto['schedule_text']) ?></p>
+<dl class="download-metrics">
+<div><dt>Próxima verificação</dt><dd data-auto-next><?= h($auto['next_run'] ?? '—') ?></dd></div>
+<div><dt>Última verificação</dt><dd data-auto-last><?= h($auto['last_check'] ?? '—') ?></dd></div>
+<div><dt>Cartas novas na última atualização</dt><dd data-auto-added><?= $auto['last_cards_added'] === null ? '—' : number_format($auto['last_cards_added'], 0, ',', '.') ?></dd></div>
+<div><dt>Imagens baixadas nela</dt><dd data-auto-images><?= $auto['last_images'] === null ? '—' : number_format($auto['last_images'], 0, ',', '.') ?></dd></div>
+</dl>
+<div class="status-actions">
+  <div><h3>Executar agora</h3><p class="muted">Faz a mesma verificação do horário agendado: só baixa se o Scryfall tiver publicado dados novos. O andamento aparece nos painéis abaixo.</p></div>
+  <div class="status-controls"><button class="secondary-link" type="button" data-auto-run<?= $auto['active'] ? ' disabled' : '' ?>><?= $auto['active'] ? 'Rotina em andamento…' : 'Executar agora' ?></button></div>
+</div>
+<div class="status-feedback" data-auto-feedback role="status" aria-live="polite" hidden></div>
+<div class="sync-recent auto-history">
+  <h3>Histórico das execuções</h3>
+  <div class="table-scroll"><table><thead><tr><th>Início</th><th>Resultado</th><th>Duração</th><th>O que aconteceu</th></tr></thead><tbody data-auto-runs>
+<?php foreach ($auto['runs'] as $run): ?><tr><td><?= h($run['started_at']) ?><?= $run['manual'] ? ' <span class="run-origin">manual</span>' : '' ?></td><td><span class="run-state" data-run-state="<?= h($run['state']) ?>"><?= h($run['label']) ?></span></td><td><?= h($run['duration']) ?></td><td><?= h($run['summary']) ?><?php if ($run['sync_run_id']): ?> <a class="text-link" href="/sync_history.php?run=<?= (int)$run['sync_run_id'] ?>">Ver cartas</a><?php endif; ?></td></tr><?php endforeach; ?>
+<?php if (!$auto['runs']): ?><tr><td colspan="4">Nenhuma execução registrada ainda. A primeira acontece no próximo horário agendado.</td></tr><?php endif; ?>
+</tbody></table></div>
+</div>
+</section>
 <section class="panel download-status" data-download-status data-state="<?= h((string)$state) ?>" data-total="<?= $progressTotal ?>">
 <div class="section-heading"><h2>Imagens em alta qualidade</h2><span class="status-tag"><?= h($stale ? 'Progresso sem atualização recente' : ($labels[$state] ?? 'Nenhum download registrado')) ?></span></div>
 <p data-download-description>Tamanho normal · escolha o escopo e acompanhe a transferência nesta página.</p>

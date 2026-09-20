@@ -241,6 +241,20 @@ th{color:var(--muted);font-size:.8rem;font-weight:600;white-space:nowrap}
 .text-button:hover{color:var(--accent-hover)}
 @media(max-width:700px){.sync-steps{flex-wrap:wrap}.sync-steps li{flex:1 1 calc(50% - 6px)}}
 
+/* Status › Atualização automática: agendamento e histórico das execuções */
+.auto-panel .download-metrics{margin:18px 0 0}
+.auto-panel .download-metrics dd{font-size:1.05rem}
+.auto-history{margin-top:24px}
+.auto-history table{font-size:.86rem}
+.auto-history td{vertical-align:top}
+.run-origin{display:inline-block;padding:1px 6px;border-radius:999px;background:var(--soft);color:var(--accent);font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+.run-state{display:inline-block;padding:3px 9px;border-radius:999px;background:#eef0ea;color:var(--muted);font-size:.74rem;font-weight:700;white-space:nowrap}
+.run-state[data-run-state=completed]{background:#edf5ee;color:#31583b}
+.run-state[data-run-state=images_pending],.run-state[data-run-state=skipped]{background:#fbf5e6;color:#72551d}
+.run-state[data-run-state=error],.run-state[data-run-state=interrupted]{background:#fbedea;color:#8a332b}
+.run-state[data-run-state=checking],.run-state[data-run-state=syncing],.run-state[data-run-state=downloading_images]{background:var(--soft);color:var(--accent)}
+@media(max-width:600px){.auto-history table{font-size:.8rem}.auto-panel .download-metrics dd{font-size:.98rem}}
+
 /* Autenticação e contas */
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .sidebar-account{margin-top:auto;border-top:1px solid #42504e;padding:18px 4px 0;display:grid;gap:10px}

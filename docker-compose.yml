@@ -36,6 +36,13 @@ services:
       SCRYFALL_USER_AGENT: ${SCRYFALL_USER_AGENT:-BernardoMTGLocal/1.0}
       SCRYFALL_ACCEPT: application/json;q=0.9,*/*;q=0.8
       STORAGE_DIR: /var/www/storage
+      # Rotina automática: verifica o Scryfall nos horários abaixo e, havendo novidade,
+      # importa o catálogo e baixa as imagens. AUTO_UPDATE_ENABLED=0 desliga o cron.
+      TZ: ${TZ:-America/Sao_Paulo}
+      AUTO_UPDATE_ENABLED: ${AUTO_UPDATE_ENABLED:-1}
+      AUTO_UPDATE_TIMES: ${AUTO_UPDATE_TIMES:-06:10,18:10}
+      AUTO_UPDATE_IMAGE_MODE: ${AUTO_UPDATE_IMAGE_MODE:-all}
+      AUTO_UPDATE_IMAGE_CONCURRENCY: ${AUTO_UPDATE_IMAGE_CONCURRENCY:-4}
       # Administrador criado só quando o banco não tem usuários (sem senha: gerada e gravada em storage/admin-inicial.txt).
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@deckarium.local}

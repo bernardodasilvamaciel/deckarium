@@ -117,6 +117,30 @@ Confira a relação entre impressões e cartas únicas:
 docker compose exec db psql -U mtg -d mtg -c "SELECT count(*) AS impressoes, count(DISTINCT COALESCE(oracle_id,id)) AS cartas_unicas FROM cards;"
 ```
 
+## Atualização automática (cron)
+
+O container tem um cron próprio: **todos os dias às 06:10 e 18:10** ele roda `bin/auto_update.php`, que consulta o manifesto do Scryfall e compara com a última importação local. Sem publicação nova, nada é baixado. Havendo, ele importa o catálogo (`bin/sync_scryfall.php`) e, em seguida, baixa as imagens em tamanho normal (`bin/download_images.php`) — retomável, preservando o que já está no disco.
+
+Cada execução vira uma linha de `auto_update_runs` e aparece em **Status → Atualização automática**: horário da próxima verificação, resultado da última, cartas novas, imagens baixadas e o histórico completo com duração e link para as cartas adicionadas. O painel se atualiza sozinho enquanto a rotina trabalha; o progresso detalhado continua nos painéis de catálogo e de imagens logo abaixo. O botão **Executar agora** dispara a mesma rotina fora do horário (registrada como `manual`).
+
+Tudo é controlado por ambiente (veja `.env.example`); o entrypoint do container monta o crontab a partir desses valores:
+
+| Variável | Padrão | Para que serve |
+| --- | --- | --- |
+| `AUTO_UPDATE_ENABLED` | `1` | `0` desliga o cron (a página passa a mostrar "Desligada"). |
+| `AUTO_UPDATE_TIMES` | `06:10,18:10` | Horários `HH:MM` separados por vírgula. |
+| `AUTO_UPDATE_IMAGE_MODE` | `all` | `all` (todas as impressões) ou `unique` (uma por carta lógica). |
+| `AUTO_UPDATE_IMAGE_CONCURRENCY` | `4` | Downloads simultâneos de imagem. |
+| `TZ` | `America/Sao_Paulo` | Fuso do cron e do PHP — os horários acima seguem ele. |
+
+A saída fica em `storage/auto-update.log`. Uma trava (`storage/auto-update.lock`) impede duas rotinas ao mesmo tempo; se uma sincronização ou um download manual já estiver rodando, a execução é registrada como *adiada* e o próximo horário tenta de novo. Para rodar na mão:
+
+```bash
+docker compose exec app php bin/auto_update.php
+```
+
+Opções: `--force` (importa mesmo sem publicação nova), `--no-images` (só o catálogo), `--mode=unique|all` e `--source=manual`.
+
 ## Downloader rápido e deduplicado
 
 Novo formato:

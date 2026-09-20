@@ -846,6 +846,95 @@
     element.dataset.type = type;
   };
 
+  const autoPanel = document.querySelector('[data-auto-panel]');
+  if (autoPanel) {
+    const runButton = autoPanel.querySelector('[data-auto-run]');
+    const feedback = autoPanel.querySelector('[data-auto-feedback]');
+    const label = autoPanel.querySelector('[data-auto-label]');
+    const schedule = autoPanel.querySelector('[data-auto-schedule]');
+    const rows = autoPanel.querySelector('[data-auto-runs]');
+    const field = name => autoPanel.querySelector(`[data-auto-${name}]`);
+    let autoTimer = null;
+
+    const renderRuns = list => {
+      if (!rows || !Array.isArray(list)) return;
+      rows.replaceChildren(...(list.length ? list.map(run => {
+        const tr = document.createElement('tr');
+        const started = document.createElement('td');
+        started.textContent = run.started_at;
+        if (run.manual) {
+          const origin = document.createElement('span');
+          origin.className = 'run-origin';
+          origin.textContent = 'manual';
+          started.append(' ', origin);
+        }
+        const result = document.createElement('td');
+        const chip = document.createElement('span');
+        chip.className = 'run-state';
+        chip.dataset.runState = run.state;
+        chip.textContent = run.label;
+        result.append(chip);
+        const duration = document.createElement('td');
+        duration.textContent = run.duration;
+        const summary = document.createElement('td');
+        summary.textContent = run.summary;
+        if (run.sync_run_id) {
+          const link = document.createElement('a');
+          link.className = 'text-link';
+          link.href = `/sync_history.php?run=${run.sync_run_id}`;
+          link.textContent = 'Ver cartas';
+          summary.append(' ', link);
+        }
+        tr.append(started, result, duration, summary);
+        return tr;
+      }) : [Object.assign(document.createElement('tr'), { innerHTML: '<td colspan="4">Nenhuma execução registrada ainda. A primeira acontece no próximo horário agendado.</td>' })]));
+    };
+
+    const renderAuto = data => {
+      autoPanel.dataset.state = data.state || '';
+      autoPanel.dataset.active = data.active ? '1' : '0';
+      if (label) label.textContent = data.label || '';
+      if (schedule && data.schedule_text) schedule.textContent = data.schedule_text;
+      if (field('next')) field('next').textContent = data.next_run || '—';
+      if (field('last')) field('last').textContent = data.last_check || '—';
+      if (field('added')) field('added').textContent = data.last_cards_added == null ? '—' : formatNumber(data.last_cards_added);
+      if (field('images')) field('images').textContent = data.last_images == null ? '—' : formatNumber(data.last_images);
+      if (runButton) {
+        runButton.disabled = Boolean(data.active);
+        runButton.textContent = data.active ? 'Rotina em andamento…' : 'Executar agora';
+      }
+      renderRuns(data.runs);
+    };
+
+    const pollAuto = async () => {
+      window.clearTimeout(autoTimer);
+      try {
+        const data = await requestJson('/auto_update_progress.php');
+        renderAuto(data);
+        // Enquanto a rotina trabalha, os painéis de catálogo e de imagens mostram o detalhe;
+        // aqui basta acompanhar o estado geral sem pesar a página.
+        autoTimer = window.setTimeout(pollAuto, data.active ? 5000 : 60000);
+      } catch (error) {
+        autoTimer = window.setTimeout(pollAuto, 60000);
+      }
+    };
+
+    runButton?.addEventListener('click', async () => {
+      runButton.disabled = true;
+      setFeedback(feedback, 'Consultando o Scryfall…');
+      try {
+        const data = await requestJson('/auto_update_control.php', { method: 'POST' });
+        setFeedback(feedback, data.message, 'success');
+      } catch (error) {
+        setFeedback(feedback, error.message, 'error');
+        runButton.disabled = false;
+      }
+      await pollAuto();
+    });
+
+    autoTimer = window.setTimeout(pollAuto, autoPanel.dataset.active === '1' ? 3000 : 60000);
+  }
+
   const downloadPanel = document.querySelector('[data-download-status]');
   if (downloadPanel) {
     const startButton = downloadPanel.querySelector('[data-download-start]');

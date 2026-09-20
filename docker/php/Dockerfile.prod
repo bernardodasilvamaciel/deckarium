@@ -3,7 +3,7 @@
 FROM php:8.3-apache
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libpq-dev ca-certificates curl \
+    && apt-get install -y --no-install-recommends libpq-dev ca-certificates curl cron tzdata \
     && docker-php-ext-install pdo_pgsql \
     && rm -rf /var/lib/apt/lists/*
 
@@ -21,9 +21,16 @@ RUN sed -ri 's/^Listen 80$/Listen ${APACHE_LISTEN}/' /etc/apache2/ports.conf \
     && sed -ri 's/<VirtualHost \*:80>/<VirtualHost *>/' /etc/apache2/sites-available/000-default.conf \
     && grep -q 'Listen ${APACHE_LISTEN}' /etc/apache2/ports.conf
 
+# Rotina automática do acervo: o entrypoint monta o cron a partir de AUTO_UPDATE_* e TZ.
+ENV TZ=America/Sao_Paulo
+COPY docker/php/entrypoint.sh /usr/local/bin/deckarium-entrypoint
+RUN chmod +x /usr/local/bin/deckarium-entrypoint
+
 COPY app/ /var/www/html/
 
 RUN mkdir -p /var/www/storage/bulk /var/www/storage/images \
     && chown -R www-data:www-data /var/www/storage
 
 WORKDIR /var/www/html
+ENTRYPOINT ["deckarium-entrypoint"]
+CMD ["apache2-foreground"]
