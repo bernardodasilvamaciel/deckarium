@@ -139,7 +139,6 @@ $publicCollectionUrl='/public_collection.php?u='.rawurlencode((string)$authUser[
 pageHeader('Minha coleção');
 ?>
 <section class="hero"><div><h1><?= te('Minha coleção') ?></h1><p><?= number_format((int)$summary['total'],0,',','.') ?> <?= te('cartas em') ?> <?= number_format((int)$summary['finishes'],0,',','.') ?> <?= te('versões de impressão e acabamento. Gerencie as cópias físicas usadas nos seus decks.') ?></p></div><a href="/decks.php"><?= te('Criar ou planejar decks') ?></a></section>
-<section class="collection-share <?= $collectionPublic?'is-public':'' ?>" aria-label="<?= te('Compartilhar coleção') ?>"><p><strong><?= $collectionPublic?te('Coleção pública'):te('Coleção privada') ?></strong> <?= $collectionPublic?te('Qualquer pessoa com o link vê suas cartas e quantidades, sem os decks em que estão.'):te('Só você vê suas cartas.') ?><?php if($collectionPublic): ?> <a href="<?= h($publicCollectionUrl) ?>"><?= te('Ver página pública') ?></a> · <button type="button" class="text-button" data-copy-share="<?= h($publicCollectionUrl) ?>"><?= te('Copiar link') ?></button><?php endif; ?></p><form method="post"><input type="hidden" name="csrf" value="<?= h($csrf) ?>"><input type="hidden" name="action" value="visibility"><input type="hidden" name="public" value="<?= $collectionPublic?'0':'1' ?>"><button class="<?= $collectionPublic?'secondary-link':'primary-link' ?>"><?= $collectionPublic?te('Tornar privada'):te('Tornar pública') ?></button></form></section>
 <?php if($message):?><p class="notice ok" role="status"><?=h($message)?></p><?php endif;if($error):?><p class="notice error" role="alert"><?=h($error)?></p><?php endif;?>
 <?php if(is_array($failedImport) && $failedImport['lines']): $failedShown=array_slice($failedImport['lines'],0,300); ?>
 <section class="import-failures" aria-labelledby="import-failures-title">
@@ -153,12 +152,99 @@ pageHeader('Minha coleção');
     <?php if(count($failedImport['lines'])>count($failedShown)): ?><p class="muted"><?= te('Mostrando as primeiras :count. Baixe o CSV para ver todas.', ['count' => count($failedShown)]) ?></p><?php endif; ?>
 </section>
 <?php endif; ?>
-<details class="collection-manage" <?= is_array($failedImport)?'open':'' ?>><summary><?= te('Gerenciar coleção: importar ou subtrair por CSV e filtros') ?></summary><section class="collection-import-panel"><div><h2><?= te('Importar ou subtrair cartas por CSV') ?></h2><p><?= te('Use uma exportação do ManaBox ou um arquivo com estas colunas:') ?></p><code>Name,Scryfall ID,Quantity,Foil</code><p class="muted"><?= te('Foil aceita “foil” e “normal”. Sem essa coluna, as cartas são tratadas como normais.') ?> <?= te('Ao substituir, qualquer linha com erro cancela tudo; ao somar ou subtrair, as linhas corretas são aplicadas e as com erro aparecem numa lista com o número da linha.') ?></p><a href="?template=csv"><?= te('Baixar modelo CSV') ?></a></div><form method="post" enctype="multipart/form-data" class="collection-manage-form"><input type="hidden" name="csrf" value="<?=h($csrf)?>"><input type="hidden" name="action" value="import"><label><?= te('Arquivo CSV') ?><input type="file" name="collection" accept=".csv,text/csv" required></label><fieldset><legend><?= te('Como importar') ?></legend><label><input type="radio" name="mode" value="replace" checked> <?= te('Substituir pela coleção completa') ?></label><label><input type="radio" name="mode" value="add"> <?= te('Somar estas quantidades ao acervo atual') ?></label><label><input type="radio" name="mode" value="subtract"> <?= te('Subtrair estas quantidades da coleção (vendas, trocas, cartas perdidas)') ?></label></fieldset><button class="primary-link"><?= te('Enviar CSV') ?></button></form></section><?php cardFilterForm($f,deckQuery('SELECT c.set_code,MAX(c.set_name) set_name FROM builder_collection o JOIN cards c ON c.id=o.scryfall_id GROUP BY c.set_code ORDER BY MAX(c.set_name)')->fetchAll(),'/collection.php'); ?></details>
-<div class="collection-toolbar"><span><?= te('Organizar coleção') ?></span><form method="get"><?php foreach($sortParams as $key=>$value): if(in_array($key,['finish','usage','export'],true))continue; foreach(is_array($value)?$value:[$value] as $v): ?><input type="hidden" name="<?= h($key.(is_array($value)?'[]':'')) ?>" value="<?= h($v) ?>"><?php endforeach; endforeach; ?><select name="finish" aria-label="<?= te('Filtrar acabamento') ?>"><option value="" <?= $finish===''?'selected':'' ?>><?= te('Todos os acabamentos') ?></option><option value="normal" <?= $finish==='normal'?'selected':'' ?>><?= te('Somente normais') ?></option><option value="foil" <?= $finish==='foil'?'selected':'' ?>><?= te('Somente foil') ?></option></select><select name="usage" aria-label="<?= te('Filtrar por uso em decks') ?>"><option value="" <?= $usage===''?'selected':'' ?>><?= te('Em decks ou não') ?></option><option value="in_decks" <?= $usage==='in_decks'?'selected':'' ?>><?= te('Usadas em decks') ?></option><option value="not_in_decks" <?= $usage==='not_in_decks'?'selected':'' ?>><?= te('Fora de qualquer deck') ?></option><option value="free" <?= $usage==='free'?'selected':'' ?>><?= te('Com cópia livre') ?></option></select><select name="sort" aria-label="<?= te('Ordenar coleção') ?>"><option value="name" <?= $sort==='name'?'selected':'' ?>><?= te('Nome') ?></option><option value="color" <?= $sort==='color'?'selected':'' ?>><?= te('Cor') ?></option><option value="price" <?= $sort==='price'?'selected':'' ?>><?= te('Preço') ?></option></select><button class="secondary-link"><?= te('Aplicar') ?></button></form></div>
-<?php $exportParams=array_filter(array_merge($f,['sort'=>$sort,'finish'=>$finish,'usage'=>$usage,'export'=>'csv']),fn($v)=>$v!==''&&$v!==[]); ?>
-<div class="collection-results-bar"><p class="muted"><?= number_format($count,0,',','.') ?> <?= $count===1?t('versão encontrada'):t('versões encontradas') ?>. <a href="/collection.php"><?= te('Limpar filtros') ?></a></p><?php if($count): ?><a class="secondary-link" href="/collection.php?<?= h(http_build_query($exportParams)) ?>" download><?= te('Exportar') ?> <?= $count===(int)$summary['finishes']?te('coleção'):te('resultado') ?> (CSV)</a><?php endif; ?></div>
-<?php if (!$cards): ?><p class="empty-state"><?= $summary['finishes'] ? te('Nenhuma carta corresponde à busca. Altere os termos ou limpe os filtros.') : te('Sua coleção ainda está vazia. Importe um CSV acima para começar.') ?></p><?php endif; ?>
-<div class="grid collection-grid"><?php foreach ($cards as $card): $isFoil=deckIsFoil($card['foil']); ?><div class="collection-item <?= $isFoil?'is-foil':'' ?>"><?php if($isFoil): ?><span class="foil-label">Foil</span><?php endif; ?><?php cardTile($card); ?><div class="collection-item-footer"><p class="collection-quantity"><?= (int)$card['quantity'] ?> cópia(s) · <?= $isFoil?'FOIL':'NORMAL' ?> · <?= h(strtoupper($card['lang'])) ?></p><?php $itemUsage=$cardUsage[(string)($card['oracle_id']?:$card['id'])]['decks']??[]; $itemFree=max(0,(int)$card['owned_logical']-(int)$card['used_in_decks']); ?><p class="collection-usage <?= !$itemUsage?'is-free':($itemFree?'is-partial':'is-used') ?>"><?php if(!$itemUsage): ?><?= te('Fora de decks') ?><?php else: ?><?= $itemFree?$itemFree.' livre'.($itemFree===1?'':'s').' · ':'Sem cópia livre · ' ?>em <?= implode(', ',array_map(fn($d)=>'<a href="/decks.php?deck='.$d['id'].'&amp;view=selection&amp;stage=deck">'.h($d['name']).'</a>',$itemUsage)) ?><?php endif; ?></p><form method="post" onsubmit="return confirm('Remover todas as cópias desta versão da coleção?')"><input type="hidden" name="csrf" value="<?=h($csrf)?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="card" value="<?=h($card['id'])?>"><input type="hidden" name="foil" value="<?= $isFoil?'1':'0' ?>"><button class="collection-delete" aria-label="<?= te('Remover :name (:finish) da coleção', ['name' => $card['name'], 'finish' => $isFoil ? t('foil') : t('normal')]) ?>"><?= te('Remover versão') ?></button></form></div></div><?php endforeach; ?></div>
+
+<dl class="collection-stats">
+    <div class="is-value"><dt><?= te('Valor estimado') ?></dt><dd>R$ <?= number_format((float)$summary['total_value'],2,',','.') ?></dd><span><?= (int)$summary['unpriced'] ? te(':count sem cotação', ['count' => number_format((int)$summary['unpriced'],0,',','.')]) : te('Todas com cotação') ?></span></div>
+    <div><dt><?= te('Cartas') ?></dt><dd><?= number_format((int)$summary['total'],0,',','.') ?></dd><span><?= te('cópias no total') ?></span></div>
+    <div><dt><?= te('Versões') ?></dt><dd><?= number_format((int)$summary['finishes'],0,',','.') ?></dd><span><?= te('impressões diferentes') ?></span></div>
+    <div><dt><?= te('Foils') ?></dt><dd><?= number_format((int)$summary['foils'],0,',','.') ?></dd><span><?= te(':count normais', ['count' => number_format((int)$summary['normals'],0,',','.')]) ?></span></div>
+</dl>
+
+<?php if((int)$summary['finishes']): ?>
+<details class="collection-breakdown">
+    <summary><?= te('Divisão por raridade e tipo') ?></summary>
+    <div class="collection-breakdown-grid">
+        <?php foreach([t('Míticas')=>'mythics',t('Raras')=>'rares',t('Incomuns')=>'uncommons',t('Comuns')=>'commons',t('Criaturas')=>'creatures',t('Feitiços')=>'sorceries',t('Instantâneas')=>'instants',t('Terrenos')=>'lands',t('Artefatos')=>'artifacts',t('Encantamentos')=>'enchantments',t('Planeswalkers')=>'planeswalkers'] as $label=>$key): ?>
+        <span><b><?= number_format((int)$summary[$key],0,',','.') ?></b><?= h($label) ?></span>
+        <?php endforeach; ?>
+    </div>
+</details>
+<?php endif; ?>
+
+<section class="collection-share <?= $collectionPublic?'is-public':'' ?>" aria-label="<?= te('Compartilhar coleção') ?>">
+    <div>
+        <strong><?= $collectionPublic?te('Coleção pública'):te('Coleção privada') ?></strong>
+        <p><?= $collectionPublic?te('Qualquer pessoa com o link vê suas cartas e quantidades, sem os decks em que estão.'):te('Só você vê suas cartas.') ?></p>
+        <?php if($collectionPublic): ?><p class="collection-share-links"><a href="<?= h($publicCollectionUrl) ?>"><?= te('Ver página pública') ?></a><button type="button" class="text-button" data-copy-share="<?= h($publicCollectionUrl) ?>"><?= te('Copiar link') ?></button></p><?php endif; ?>
+    </div>
+    <form method="post"><input type="hidden" name="csrf" value="<?= h($csrf) ?>"><input type="hidden" name="action" value="visibility"><input type="hidden" name="public" value="<?= $collectionPublic?'0':'1' ?>"><button class="<?= $collectionPublic?'secondary-link':'primary-link' ?>"><?= $collectionPublic?te('Tornar privada'):te('Tornar pública') ?></button></form>
+</section>
+
+<?php
+// Controles sempre à vista, ao lado do botão que abre os filtros.
+$exportParams = array_filter(array_merge($f,['sort'=>$sort,'finish'=>$finish,'usage'=>$usage,'export'=>'csv']), fn($v)=>$v!==''&&$v!==[]);
+ob_start();
+?>
+<form class="filters-sort collection-controls" method="get" action="/collection.php">
+    <?php foreach($sortParams as $key=>$value): if(in_array($key,['finish','usage','export'],true))continue; foreach(is_array($value)?$value:[$value] as $v): ?><input type="hidden" name="<?= h($key.(is_array($value)?'[]':'')) ?>" value="<?= h($v) ?>"><?php endforeach; endforeach; ?>
+    <label><?= te('Acabamento') ?><select name="finish" data-auto-submit><option value="" <?= $finish===''?'selected':'' ?>><?= te('Todos') ?></option><option value="normal" <?= $finish==='normal'?'selected':'' ?>><?= te('Somente normais') ?></option><option value="foil" <?= $finish==='foil'?'selected':'' ?>><?= te('Somente foil') ?></option></select></label>
+    <label><?= te('Uso em decks') ?><select name="usage" data-auto-submit><option value="" <?= $usage===''?'selected':'' ?>><?= te('Todas') ?></option><option value="in_decks" <?= $usage==='in_decks'?'selected':'' ?>><?= te('Usadas em decks') ?></option><option value="not_in_decks" <?= $usage==='not_in_decks'?'selected':'' ?>><?= te('Fora de qualquer deck') ?></option><option value="free" <?= $usage==='free'?'selected':'' ?>><?= te('Com cópia livre') ?></option></select></label>
+    <label><?= te('Ordenar') ?><select name="sort" data-auto-submit><option value="name" <?= $sort==='name'?'selected':'' ?>><?= te('Nome') ?></option><option value="color" <?= $sort==='color'?'selected':'' ?>><?= te('Cor') ?></option><option value="price" <?= $sort==='price'?'selected':'' ?>><?= te('Preço') ?></option></select></label>
+</form>
+<div class="collection-actions">
+    <button type="button" class="secondary-link" data-dialog-open="collection-import"><?= te('Importar CSV') ?></button>
+    <?php if($count): ?><a class="secondary-link" href="/collection.php?<?= h(http_build_query($exportParams)) ?>" download><?= te('Exportar CSV') ?></a><?php endif; ?>
+</div>
+<?php
+$collectionControls = ob_get_clean();
+cardFilterForm($f, deckQuery('SELECT c.set_code,MAX(c.set_name) set_name FROM builder_collection o JOIN cards c ON c.id=o.scryfall_id GROUP BY c.set_code ORDER BY MAX(c.set_name)')->fetchAll(), '/collection.php', '', $collectionControls);
+?>
+
+<dialog class="filters-dialog" id="collection-import" aria-label="<?= te('Importar ou subtrair cartas por CSV') ?>"<?= is_array($failedImport)?' data-open-on-load':'' ?>>
+    <div class="filters-dialog-head"><h2><?= te('Importar ou subtrair cartas por CSV') ?></h2><button type="button" class="filters-dialog-close" data-dialog-close aria-label="<?= te('Fechar') ?>">&times;</button></div>
+    <div class="filters-dialog-body collection-import-panel">
+        <p><?= te('Use uma exportação do ManaBox ou um arquivo com estas colunas:') ?></p>
+        <code>Name,Scryfall ID,Quantity,Foil</code>
+        <p class="muted"><?= te('Foil aceita “foil” e “normal”. Sem essa coluna, as cartas são tratadas como normais.') ?> <?= te('Ao substituir, qualquer linha com erro cancela tudo; ao somar ou subtrair, as linhas corretas são aplicadas e as com erro aparecem numa lista com o número da linha.') ?></p>
+        <form method="post" enctype="multipart/form-data" class="collection-manage-form">
+            <input type="hidden" name="csrf" value="<?= h($csrf) ?>"><input type="hidden" name="action" value="import">
+            <label><?= te('Arquivo CSV') ?><input type="file" name="collection" accept=".csv,text/csv" required></label>
+            <fieldset><legend><?= te('Como importar') ?></legend>
+                <label><input type="radio" name="mode" value="replace" checked> <?= te('Substituir pela coleção completa') ?></label>
+                <label><input type="radio" name="mode" value="add"> <?= te('Somar estas quantidades ao acervo atual') ?></label>
+                <label><input type="radio" name="mode" value="subtract"> <?= te('Subtrair estas quantidades da coleção (vendas, trocas, cartas perdidas)') ?></label>
+            </fieldset>
+            <div class="collection-import-foot"><a href="?template=csv"><?= te('Baixar modelo CSV') ?></a><button class="primary-link"><?= te('Enviar CSV') ?></button></div>
+        </form>
+    </div>
+</dialog>
+
+<p class="collection-results"><?= number_format($count,0,',','.') ?> <?= $count===1?te('versão encontrada'):te('versões encontradas') ?><?php if(array_filter([$finish,$usage]) || array_filter($f)): ?> · <a href="/collection.php"><?= te('Limpar filtros') ?></a><?php endif; ?></p>
+
+<?php if (!$cards): ?>
+<div class="empty-state">
+    <h2><?= $summary['finishes'] ? te('Nenhuma carta com esses filtros') : te('Sua coleção está vazia') ?></h2>
+    <p><?= $summary['finishes'] ? te('Altere os termos da busca ou limpe os filtros.') : te('Importe o CSV do ManaBox ou use o botão Guardar nas cartas do catálogo para começar.') ?></p>
+    <?php if(!$summary['finishes']): ?><button type="button" class="primary-link" data-dialog-open="collection-import"><?= te('Importar CSV') ?></button><?php endif; ?>
+</div>
+<?php endif; ?>
+
+<div class="grid collection-grid"><?php foreach ($cards as $card): $isFoil=deckIsFoil($card['foil']); $itemUsage=$cardUsage[(string)($card['oracle_id']?:$card['id'])]['decks']??[]; $itemFree=max(0,(int)$card['owned_logical']-(int)$card['used_in_decks']); ?>
+<article class="collection-item <?= $isFoil?'is-foil':'' ?>">
+    <?php cardTile($card); ?>
+    <div class="collection-item-footer">
+        <p class="collection-badges"><b><?= (int)$card['quantity'] ?>×</b><span class="collection-finish <?= $isFoil?'is-foil':'' ?>"><?= $isFoil?te('Foil'):te('Normal') ?></span><span><?= h(strtoupper((string)$card['lang'])) ?></span></p>
+        <p class="collection-usage <?= !$itemUsage?'is-free':($itemFree?'is-partial':'is-used') ?>">
+            <?php if(!$itemUsage): ?><?= te('Fora de decks') ?>
+            <?php else: ?><?= $itemFree?te(':count livre(s)', ['count'=>$itemFree]).' · ':te('Sem cópia livre').' · ' ?><?= te('em') ?> <?= implode(', ',array_map(fn($d)=>'<a href="/decks.php?deck='.$d['id'].'&amp;view=selection&amp;stage=deck">'.h($d['name']).'</a>',$itemUsage)) ?><?php endif; ?>
+        </p>
+        <form method="post" onsubmit="return confirm('<?= te('Remover todas as cópias desta versão da coleção?') ?>')">
+            <input type="hidden" name="csrf" value="<?=h($csrf)?>"><input type="hidden" name="action" value="delete">
+            <input type="hidden" name="card" value="<?=h($card['id'])?>"><input type="hidden" name="foil" value="<?= $isFoil?'1':'0' ?>">
+            <button class="collection-delete" aria-label="<?= te('Remover :name (:finish) da coleção', ['name' => $card['name'], 'finish' => $isFoil ? t('foil') : t('normal')]) ?>"><?= te('Remover versão') ?></button>
+        </form>
+    </div>
+</article>
+<?php endforeach; ?></div>
 <?php numberedPager($page,$pages,array_merge($f,['sort'=>$sort,'finish'=>$finish,'usage'=>$usage])); ?>
-<div class="collection-summary-spacer" aria-hidden="true"></div><aside class="collection-summary-bar" aria-label="<?= te('Resumo da coleção') ?>"><div class="collection-summary-value"><span><?= te('Valor estimado') ?></span><strong>R$ <?= number_format((float)$summary['total_value'],2,',','.') ?></strong><?php if((int)$summary['unpriced']): ?><small><?= number_format((int)$summary['unpriced'],0,',','.') ?> sem cotação</small><?php endif; ?></div><div class="collection-summary-stats"><?php foreach([t('Cartas')=>'total',t('Foil')=>'foils',t('Normais')=>'normals',t('Míticas')=>'mythics',t('Raras')=>'rares',t('Incomuns')=>'uncommons',t('Comuns')=>'commons',t('Criaturas')=>'creatures',t('Feitiços')=>'sorceries',t('Instantâneas')=>'instants',t('Terrenos')=>'lands',t('Artefatos')=>'artifacts',t('Encantamentos')=>'enchantments',t('Planeswalkers')=>'planeswalkers'] as $label=>$key): ?><span><b><?= number_format((int)$summary[$key],0,',','.') ?></b><?= h($label) ?></span><?php endforeach; ?></div></aside>
 <?php pageFooter(); ?>

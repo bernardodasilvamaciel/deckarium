@@ -322,4 +322,54 @@ return [
         => 'Oracle: every term separated by semicolons. Power, toughness and loyalty: numbers only.',
     'Tornar pública' => 'Make public',
     'Tornar privada' => 'Make private',
+
+    // Lista de desejos
+    'Lista de desejos' => 'Wishlist',
+    'Cartas guardadas para comprar depois. Salve daqui do catálogo, das edições ou da página da carta.'
+        => 'Cards saved to buy later. Add them from the catalog, the sets or a card page.',
+    'Cartas que você quer comprar, guardadas do catálogo e das edições.' => 'Cards you want to buy, saved from the catalog and the sets.',
+    'Na lista de desejos' => 'In my wishlist',
+    'Salvar na lista' => 'Save to wishlist',
+    'Tirar da lista' => 'Remove from wishlist',
+    'Tirar :name da lista' => 'Remove :name from the wishlist',
+    'Guarda a carta para comprar depois, mesmo sem ter nenhuma cópia.' => 'Keeps the card to buy later, even with no copies.',
+    ':card entrou na lista de desejos.' => ':card was added to your wishlist.',
+    ':card saiu da lista de desejos.' => ':card was removed from your wishlist.',
+    'Sua lista está vazia' => 'Your wishlist is empty',
+    'No catálogo, nas edições ou na página de uma carta, abra Guardar e escolha “Salvar na lista”. A carta fica aqui com o preço atualizado, mesmo que você não tenha nenhuma cópia.'
+        => 'In the catalog, the sets or a card page, open Keep and choose “Save to wishlist”. The card stays here with an updated price, even if you own no copies.',
+    'Procurar cartas' => 'Find cards',
+    'Já na coleção' => 'Already owned',
+    'cópias que você já comprou' => 'copies you already bought',
+    ':count na coleção' => ':count owned',
+    ':count sem cotação' => ':count with no price',
+    'Todas com cotação' => 'All priced',
+
+    // Minha coleção
+    'Versões' => 'Versions',
+    'Foils' => 'Foils',
+    'cópias no total' => 'copies in total',
+    'impressões diferentes' => 'different printings',
+    ':count normais' => ':count non-foil',
+    'Divisão por raridade e tipo' => 'Breakdown by rarity and type',
+    'Acabamento' => 'Finish',
+    'Uso em decks' => 'Deck usage',
+    'Todas' => 'All',
+    'Normal' => 'Non-foil',
+    'Importar CSV' => 'Import CSV',
+    'Exportar CSV' => 'Export CSV',
+    'Nenhuma carta com esses filtros' => 'No cards match these filters',
+    'Altere os termos da busca ou limpe os filtros.' => 'Change the search terms or clear the filters.',
+    'Sua coleção está vazia' => 'Your collection is empty',
+    'Importe o CSV do ManaBox ou use o botão Guardar nas cartas do catálogo para começar.'
+        => 'Import your ManaBox CSV, or use the Keep button on catalog cards to get started.',
+    'Remover todas as cópias desta versão da coleção?' => 'Remove every copy of this version from the collection?',
+    ':count livre(s)' => ':count free',
+    'Sem cópia livre' => 'No free copy',
+    'em' => 'in',
+
+    // Filtros em modal
+    ':count filtro ativo' => ':count active filter',
+    ':count filtros ativos' => ':count active filters',
+    'Fechar' => 'Close',
 ];

@@ -48,15 +48,28 @@ function cardFilterSql(array $f): array {
  * Fechado por padrão em todas as telas: no celular os campos ocupavam
  * quase toda a altura antes dos resultados.
  */
-function filterPanelStart(int $active=0, string $label=''): void {
+function filterPanelStart(int $active = 0, string $label = '', string $extraHtml = ''): void {
+    static $counter = 0;
     if ($label === '') $label = t('Filtros e busca');
-    echo '<details class="filters-shell"><summary data-show="' . te('Mostrar') . '" data-hide="' . te('Ocultar') . '"><span class="filters-shell-label">' . h($label) . '</span>'
-        . '<span class="filters-shell-count">' . ($active ? $active . ($active === 1 ? ' ' . t('filtro ativo') : ' ' . t('filtros ativos')) : t('Nenhum filtro ativo')) . '</span></summary>'
-        . '<div class="filters-shell-body">';
+    $id = 'filters-dialog-' . (++$counter);
+    $resumo = $active
+        ? ($active === 1 ? t(':count filtro ativo', ['count' => $active]) : t(':count filtros ativos', ['count' => $active]))
+        : t('Nenhum filtro ativo');
+    echo '<div class="filters-bar">'
+        . '<button type="button" class="filters-open" data-dialog-open="' . $id . '">'
+        . '<span class="filters-open-label">' . h($label) . '</span>'
+        . '<span class="filters-open-count' . ($active ? ' is-active' : '') . '">' . h($resumo) . '</span>'
+        . '</button>'
+        . $extraHtml
+        . '</div>'
+        . '<dialog class="filters-dialog" id="' . $id . '" aria-label="' . h($label) . '">'
+        . '<div class="filters-dialog-head"><h2>' . h($label) . '</h2>'
+        . '<button type="button" class="filters-dialog-close" data-dialog-close aria-label="' . te('Fechar') . '">&times;</button></div>'
+        . '<div class="filters-dialog-body">';
 }
 
 function filterPanelEnd(): void {
-    echo '</div></details>';
+    echo '</div></dialog>';
 }
 
 /** Quantos filtros do formulário compartilhado estão preenchidos. */
@@ -69,13 +82,13 @@ function cardFilterActiveCount(array $f): int {
     return $active;
 }
 
-function cardFilterForm(array $f,array $sets,string $action,string $view=''): void {
+function cardFilterForm(array $f,array $sets,string $action,string $view='',string $extraHtml=''): void {
     $advanced=false;foreach($f as $k=>$v)if(!in_array($k,['q','oracle'])&&$v!==''&&$v!==[])$advanced=true;
-    filterPanelStart(cardFilterActiveCount($f));
+    filterPanelStart(cardFilterActiveCount($f), '', $extraHtml);
     ?><form class="card-filters" method="get" action="<?= h($action) ?>" role="search">
     <?php if($view): ?><input type="hidden" name="view" value="<?= h($view) ?>"><?php endif; ?>
     <div class="filter-main"><label class="field"><?= te('Nome da carta') ?><input type="search" name="q" value="<?= h($f['q']) ?>" placeholder="<?= te('Nome em inglês ou português') ?>"></label><label class="field"><?= te('Texto Oracle') ?><input name="oracle" value="<?= h($f['oracle']) ?>" placeholder="draw a card; sacrifice"></label><button><?= te('Buscar cartas') ?></button></div>
-    <details <?= $advanced?'open':'' ?>><summary><?= te('Filtros avançados') ?></summary><div class="filter-grid">
+    <details open><summary><?= te('Filtros avançados') ?></summary><div class="filter-grid">
     <label class="field"><?= te('Edição') ?><select name="set"><option value=""><?= te('Todas as edições') ?></option><?php foreach($sets as $set): ?><option value="<?= h($set['set_code']) ?>" <?= $f['set']===$set['set_code']?'selected':'' ?>><?= h($set['set_name'].' · '.strtoupper($set['set_code'])) ?></option><?php endforeach; ?></select></label>
     <label class="field"><?= te('Tipos e temas') ?><input name="type" value="<?= h($f['type']) ?>" placeholder="pirate; assassin; vehicle; treasure"><small><?= te('Qualquer termo no tipo ou Oracle.') ?></small></label>
     <?php foreach(['colors'=>t('Cores da carta'),'identity'=>t('Identidade de cor')] as $key=>$label): ?><fieldset><legend><?= $label ?></legend><div class="filter-colors"><?php foreach(['W'=>t('Branco'),'U'=>t('Azul'),'B'=>t('Preto'),'R'=>t('Vermelho'),'G'=>t('Verde'),'C'=>t('Incolor')] as $color=>$name): ?><label title="<?= $name ?>"><input type="checkbox" name="<?= $key ?>[]" value="<?= $color ?>" <?= in_array($color,$f[$key],true)?'checked':'' ?> aria-label="<?= $name ?>"><?= manaSymbols('{'.$color.'}') ?></label><?php endforeach; ?></div><select name="<?= $key ?>_mode" aria-label="Combinação: <?= $label ?>"><?php foreach(['all'=>t('Contém todas as cores'),'any'=>t('Contém qualquer cor'),'exact'=>t('Exatamente as cores'),'within'=>t('Somente essas cores e incolores')] as $value=>$text): ?><option value="<?= $value ?>" <?= $f[$key.'_mode']===$value?'selected':'' ?>><?= $text ?></option><?php endforeach; ?></select><small><?= te('Incolor sozinho busca cartas sem cores.') ?></small></fieldset><?php endforeach; ?>

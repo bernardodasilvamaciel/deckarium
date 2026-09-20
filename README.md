@@ -243,6 +243,20 @@ No catálogo, nas edições, nos comandantes e na página da carta, cada carta t
 - **Na minha coleção:** guarda aquela impressão exata (edição e número), com quantidade e a opção foil, do mesmo jeito que o CSV do ManaBox registra.
 - **Nas candidatas de um deck:** manda a carta para as candidatas. Só ficam liberados os decks cuja comandante aceita as cores da carta; os demais aparecem marcados como fora da identidade, com o motivo. Deck ainda sem comandante aceita qualquer carta.
 
+## Lista de desejos
+
+Em **Lista de desejos** ficam as cartas que você quer comprar, mesmo sem ter nenhuma cópia. No catálogo, nas edições, nos comandantes e na página da carta, o botão **Guardar** tem a opção **Salvar na lista**; a carta some da lista quando você escolhe **Tirar da lista**.
+
+A página mostra o total estimado, quantas cartas já entraram na sua coleção (com selo na arte) e ordena por data, preço ou nome. A lista é privada e fica fora dos buscadores.
+
+## Filtros e ordenação
+
+Os filtros de todas as telas abrem numa janela, e o botão informa quantos estão ativos. Fora da janela ficam só os controles de uso constante: a ordenação e, na coleção, acabamento, uso em decks, importar e exportar.
+
+O catálogo ordena por lançamento (mais novas ou mais antigas), nome e **preço**, maior ou menor primeiro. O preço da ordenação é o menor entre normal e foil, convertido em reais.
+
+O idioma do site usa o parâmetro `hl` (`?hl=en`), e não `lang`, porque `lang` já filtra o idioma impresso na carta.
+
 ## Contas e acesso
 
 O Deckarium tem contas de usuário. Qualquer visitante consulta o **catálogo**, as **edições**, os **comandantes** e a **Comunidade** (decks e coleções que os donos tornaram públicos); **Minha coleção**, **Meus decks** e **Upgrades** exigem login, e cada conta enxerga apenas os próprios dados. **Status** e **Usuários** são exclusivos de administradores (inclusive os endpoints de download e sincronização).

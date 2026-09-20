@@ -10,9 +10,30 @@ require __DIR__ . '/card_actions.php';
 $cardActionsUser = (int)(authUser()['id'] ?? 0);
 cardActionHandlePost($cardActionsUser);
 $GLOBALS['cardActionsContext'] = ['user_id' => $cardActionsUser, 'decks' => cardActionDecks($cardActionsUser),
+    'wishlist' => wishlistLogicalIds($cardActionsUser),
     'back' => authSafeNext((string)($_SERVER['REQUEST_URI'] ?? '/'), '/')];
 $f=cardFilters();
-$isHome = !array_filter($f) && !isset($_GET['catalog']) && !isset($_GET['view']) && !isset($_GET['page']);
+// Ordenação do catálogo: preço usa o menor valor entre normal e foil, convertido em reais.
+$catalogSorts = ['new'=>'Lançamento (mais novas)','old'=>'Lançamento (mais antigas)','name'=>'Nome (A–Z)',
+    'price_desc'=>'Preço: maior primeiro','price_asc'=>'Preço: menor primeiro'];
+$sort = is_string($_GET['sort'] ?? null) && isset($catalogSorts[$_GET['sort']]) ? (string)$_GET['sort'] : 'new';
+$priceExpr = deckCheapestPriceSql('c');
+$catalogOrder = [
+    'new' => 'c.released_at DESC NULLS LAST, c.name, c.id',
+    'old' => 'c.released_at ASC NULLS LAST, c.name, c.id',
+    'name' => 'c.name ASC, c.released_at DESC NULLS LAST, c.id',
+    'price_desc' => "{$priceExpr} DESC NULLS LAST, c.name, c.id",
+    'price_asc' => "{$priceExpr} ASC NULLS LAST, c.name, c.id",
+][$sort];
+// A mesma ordem aplicada dentro do CTE de cartas únicas, onde o preço já vem calculado.
+$rankedOrder = [
+    'new' => 'released_at DESC NULLS LAST, name, id',
+    'old' => 'released_at ASC NULLS LAST, name, id',
+    'name' => 'name ASC, released_at DESC NULLS LAST, id',
+    'price_desc' => 'cheapest DESC NULLS LAST, name, id',
+    'price_asc' => 'cheapest ASC NULLS LAST, name, id',
+][$sort];
+$isHome = !array_filter($f) && !isset($_GET['catalog']) && !isset($_GET['view']) && !isset($_GET['page']) && !isset($_GET['sort']);
 if ($isHome) {
     header('Location: /commanders.php', true, 302);
     exit;
@@ -55,7 +76,7 @@ $pages=max(1,(int)ceil($total/$perPage));$page=min($page,$pages);$offset=($page-
 if ($view === 'unique') {
     $sql = <<<SQL
 WITH ranked AS (
-    SELECT c.id,c.name,c.lang,c.oracle_id,c.image_uri,c.released_at,
+    SELECT c.id,c.name,c.released_at,{$priceExpr} AS cheapest,
            row_number() OVER (
                PARTITION BY COALESCE(c.oracle_id, c.id)
                ORDER BY
@@ -68,8 +89,8 @@ WITH ranked AS (
     {$whereSql}
 )
 SELECT c.* FROM (
-    SELECT id FROM ranked WHERE rn = 1 ORDER BY released_at DESC NULLS LAST, name, id LIMIT {$perPage} OFFSET {$offset}
-) selected JOIN cards c USING(id) ORDER BY c.released_at DESC NULLS LAST, c.name, c.id
+    SELECT id FROM ranked WHERE rn = 1 ORDER BY {$rankedOrder} LIMIT {$perPage} OFFSET {$offset}
+) selected JOIN cards c USING(id) ORDER BY {$catalogOrder}
 SQL;
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
@@ -77,7 +98,7 @@ SQL;
 
 
 } else {
-    $sql = "SELECT id,name,mana_cost,type_line,oracle_text,set_code,set_name,collector_number,rarity,released_at,local_image,local_image_back,image_uri,image_uri_back,raw,oracle_id FROM cards c {$whereSql} ORDER BY released_at DESC NULLS LAST, name ASC LIMIT {$perPage} OFFSET {$offset}";
+    $sql = "SELECT id,name,mana_cost,type_line,oracle_text,set_code,set_name,collector_number,rarity,released_at,local_image,local_image_back,image_uri,image_uri_back,raw,oracle_id FROM cards c {$whereSql} ORDER BY {$catalogOrder} LIMIT {$perPage} OFFSET {$offset}";
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
     $cards = $stmt->fetchAll();
@@ -105,7 +126,19 @@ echo cardActionNotice();
       <?php if ($q === '' && $set === ''): ?><p class="muted"><?= te('As cartas mais recentes do acervo, ordenadas pela data de lançamento.') ?></p><?php endif; ?>
     </div>
   </div>
-  <?php cardFilterForm($f, catalogCached('filter-sets',fn()=>db()->query('SELECT set_code,MAX(set_name) set_name FROM cards GROUP BY set_code ORDER BY MAX(set_name)')->fetchAll()), '/#catalogo', $view); ?>
+  <?php
+  $sortForm = '<form class="filters-sort" method="get" action="/#catalogo">';
+  foreach (array_filter($f, fn($v) => $v !== '' && $v !== []) as $key => $value) {
+      foreach (is_array($value) ? $value : [$value] as $item) $sortForm .= '<input type="hidden" name="' . h($key . (is_array($value) ? '[]' : '')) . '" value="' . h((string)$item) . '">';
+  }
+  $sortForm .= '<input type="hidden" name="catalog" value="1"><input type="hidden" name="view" value="' . h($view) . '">'
+      . '<label>' . te('Ordenar') . '<select name="sort" data-auto-submit>';
+  foreach ($catalogSorts as $sortKey => $sortLabel) {
+      $sortForm .= '<option value="' . h($sortKey) . '"' . ($sort === $sortKey ? ' selected' : '') . '>' . te($sortLabel) . '</option>';
+  }
+  $sortForm .= '</select></label></form>';
+  cardFilterForm($f, catalogCached('filter-sets',fn()=>db()->query('SELECT set_code,MAX(set_name) set_name FROM cards GROUP BY set_code ORDER BY MAX(set_name)')->fetchAll()), '/#catalogo', $view, $sortForm);
+  ?>
   <div class="view-toggle">
     <a class="<?= $view === 'unique' ? 'active' : '' ?>" href="?<?= h(http_build_query(array_merge($f,['view'=>'unique']))) ?>#catalogo"><?= te('Cartas únicas') ?></a>
     <a class="<?= $view === 'printings' ? 'active' : '' ?>" href="?<?= h(http_build_query(array_merge($f,['view'=>'printings']))) ?>#catalogo"><?= te('Todas as impressões') ?></a>
