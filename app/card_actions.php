@@ -87,6 +87,16 @@ function cardActionHandlePost(int $userId): void
                  'set' => strtoupper((string)$card['set_code']), 'number' => $card['collector_number'], 'total' => $total]), true);
         }
 
+        if ($_POST['card_action'] === 'wishlist_add' || $_POST['card_action'] === 'wishlist_remove') {
+            wishlistSchema();
+            if ($_POST['card_action'] === 'wishlist_remove') {
+                deckQuery('DELETE FROM wishlist WHERE user_id=? AND card_id=?', [$userId, $card['id']]);
+                $redirect(t(':card saiu da lista de desejos.', ['card' => $card['name']]), true);
+            }
+            deckQuery('INSERT INTO wishlist(user_id,card_id) VALUES (?,?) ON CONFLICT DO NOTHING', [$userId, $card['id']]);
+            $redirect(t(':card entrou na lista de desejos.', ['card' => $card['name']]), true);
+        }
+
         if ($_POST['card_action'] === 'deck_add') {
             $deckId = max(0, (int)($_POST['deck'] ?? 0));
             $deck = deckQuery("SELECT d.*, c.name AS commander, c.color_identity FROM builder_decks d
@@ -123,7 +133,7 @@ function cardActionNotice(): string
 }
 
 /** Botões de coleção e deck de uma carta. Sem login, convida a entrar. */
-function cardActionsMenu(array $card, array $decks, int $userId, string $back): void
+function cardActionsMenu(array $card, array $decks, int $userId, string $back, array $wishlist = []): void
 {
     $cardId = h((string)$card['id']);
     if ($userId < 1) {
@@ -148,6 +158,15 @@ function cardActionsMenu(array $card, array $decks, int $userId, string $back): 
             <button class="secondary-link"><?= te('Adicionar') ?></button>
           </span>
           <small><?= te('Guarda esta impressão:') ?> <?= h(strtoupper((string)$card['set_code'])) ?> #<?= h((string)$card['collector_number']) ?>.</small>
+        </form>
+        <form method="post" class="card-actions-form">
+          <?php $naLista = isset($wishlist[mb_strtolower((string)($card['oracle_id'] ?: $card['id']))]); ?>
+          <?= $hidden ?><input type="hidden" name="card_action" value="<?= $naLista ? 'wishlist_remove' : 'wishlist_add' ?>">
+          <span class="card-actions-title"><?= te('Na lista de desejos') ?></span>
+          <span class="card-actions-row">
+            <button class="secondary-link<?= $naLista ? ' is-on' : '' ?>"><?= $naLista ? te('Tirar da lista') : te('Salvar na lista') ?></button>
+          </span>
+          <small><?= te('Guarda a carta para comprar depois, mesmo sem ter nenhuma cópia.') ?></small>
         </form>
         <form method="post" class="card-actions-form">
           <?= $hidden ?><input type="hidden" name="card_action" value="deck_add">

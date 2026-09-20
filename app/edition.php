@@ -15,6 +15,7 @@ require __DIR__ . '/card_actions.php';
 $cardActionsUser = (int)(authUser()['id'] ?? 0);
 cardActionHandlePost($cardActionsUser);
 $GLOBALS['cardActionsContext'] = ['user_id' => $cardActionsUser, 'decks' => cardActionDecks($cardActionsUser),
+    'wishlist' => wishlistLogicalIds($cardActionsUser),
     'back' => authSafeNext((string)($_SERVER['REQUEST_URI'] ?? '/'), '/')];
 
 $set = strtolower(trim((string)($_GET['set'] ?? '')));

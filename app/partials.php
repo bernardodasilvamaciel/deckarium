@@ -9,6 +9,7 @@ function uiIcon(string $name): string
         'home'=>'<path d="m3 10 9-7 9 7v11h-6v-7H9v7H3Z"/>',
         'cards'=>'<path d="M13 20H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4M7 7h6M7 10.5h3"/><circle cx="16" cy="15" r="3.5"/><path d="m18.6 17.6 2.9 2.9"/>',
         'collection'=>'<rect x="5" y="3" width="15" height="18" rx="2"/><path d="M12.5 3v18M5 12h15M3 7.5h2M3 16.5h2"/>',
+        'wishlist'=>'<path d="M12 20.3 4.6 13a4.6 4.6 0 0 1 6.5-6.5l.9.9.9-.9a4.6 4.6 0 0 1 6.5 6.5Z"/>',
         'decks'=>'<mask id="ui-icon-decks-front"><rect width="24" height="24" fill="#fff"/><rect x="10" y="4" width="10" height="14" rx="1.8" transform="rotate(10 15 11)" fill="#000" stroke="#000" stroke-width="3.2"/></mask><g mask="url(#ui-icon-decks-front)"><rect x="3.2" y="5.8" width="10" height="14" rx="1.8" transform="rotate(-14 8.2 12.8)"/></g><rect x="10" y="4" width="10" height="14" rx="1.8" transform="rotate(10 15 11)"/><path d="m15 8.6 2 2.4-2 2.4-2-2.4Z" transform="rotate(10 15 11)"/>',
         'sets'=>'<path d="M12 5C8 2 4 3 2 4v15c3-1 6-1 10 2 4-3 7-3 10-2V4c-2-1-6-2-10 1Zm0 0v16"/>',
         'commanders'=>'<path d="M3.5 19.5h17M5 19.5V6l4.5 3.5L12 4l2.5 5.5L19 6v13.5M5 15h14"/>',
@@ -33,7 +34,7 @@ function uiIcon(string $name): string
 function pageHeader(string $title, string $description = '', array $meta = []): void
 {
     $route = basename($_SERVER['SCRIPT_NAME'] ?? 'index.php');
-    $section = !empty($GLOBALS['isHome']) ? 'home' : match ($route) { 'editions.php','edition.php'=>'sets', 'commanders.php'=>'commanders', 'collection.php'=>'collection', 'decks.php','upgrades.php','deck_board.php'=>'decks','status.php','sync_history.php'=>'status','public.php','public_deck.php','public_collection.php','profile.php'=>'community','users.php'=>'users','account.php'=>'account','login.php','register.php'=>'auth',default=>'cards' };
+    $section = !empty($GLOBALS['isHome']) ? 'home' : match ($route) { 'editions.php','edition.php'=>'sets', 'commanders.php'=>'commanders', 'collection.php'=>'collection','wishlist.php'=>'wishlist', 'decks.php','upgrades.php','deck_board.php'=>'decks','status.php','sync_history.php'=>'status','public.php','public_deck.php','public_collection.php','profile.php'=>'community','users.php'=>'users','account.php'=>'account','login.php','register.php'=>'auth',default=>'cards' };
     $user = authUser();
     $version = (string)filemtime(__DIR__ . '/assets/style.css');
     echo '<!doctype html><html lang="' . h(appLocale()) . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
@@ -49,7 +50,7 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
     ];
     $pageDescription = t($description !== '' ? $description : ($descriptions[$section] ?? 'Deckarium: catálogo de Magic, oficina de decks de Commander e controle da sua coleção.'));
     $pageDescription = mb_substr(trim(preg_replace('/\s+/u', ' ', $pageDescription) ?? ''), 0, 300);
-    $privateRoutes = ['login.php','register.php','logout.php','account.php','collection.php','decks.php','deck_board.php','upgrades.php','users.php','status.php','sync_history.php'];
+    $privateRoutes = ['login.php','register.php','logout.php','account.php','collection.php','decks.php','deck_board.php','upgrades.php','users.php','status.php','sync_history.php','wishlist.php'];
     $noindex = $meta['noindex'] ?? in_array($route, $privateRoutes, true);
     $scheme = (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'http') ? 'http' : 'https';
     $host = (string)($_SERVER['HTTP_HOST'] ?? 'deckarium.bernas.shop');
@@ -87,7 +88,7 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
     echo '<a class="skip-link" href="#main">' . te('Pular para o conteúdo') . '</a>';
     echo '<header class="sidebar" data-sidebar><div class="sidebar-header"><a class="brand" href="/commanders.php" aria-label="Deckarium — início"><img class="brand-mark" src="/assets/deckarium-logo.png" alt="Deckarium" width="512" height="512"></a><button type="button" class="sidebar-toggle" data-sidebar-toggle aria-expanded="true"><span class="sr-only" data-sidebar-toggle-label>' . te('Recolher navegação') . '</span><span class="sidebar-toggle-open">' . uiIcon('menu') . '</span><span class="sidebar-toggle-close">' . uiIcon('close') . '</span><span class="sidebar-toggle-collapse">' . uiIcon('collapse') . '</span><span class="sidebar-toggle-expand">' . uiIcon('expand') . '</span></button></div>';
     echo '<nav aria-label="Navegação principal">';
-    $links = [['commanders','/commanders.php',t('Comandantes')],['cards','/?catalog=1#catalogo',t('Catálogo')],['sets','/editions.php',t('Edições')],['collection','/collection.php',t('Minha coleção')],['decks','/decks.php',t('Meus decks')],['community','/public.php',t('Comunidade')]];
+    $links = [['commanders','/commanders.php',t('Comandantes')],['cards','/?catalog=1#catalogo',t('Catálogo')],['sets','/editions.php',t('Edições')],['collection','/collection.php',t('Minha coleção')],['wishlist','/wishlist.php',t('Lista de desejos')],['decks','/decks.php',t('Meus decks')],['community','/public.php',t('Comunidade')]];
     if (($user['role'] ?? '') === 'admin') {
         $links[] = ['status','/status.php',t('Status')];
         $links[] = ['users','/users.php',t('Usuários')];

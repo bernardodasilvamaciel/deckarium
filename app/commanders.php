@@ -9,6 +9,7 @@ require __DIR__ . '/card_actions.php';
 $cardActionsUser = (int)(authUser()['id'] ?? 0);
 cardActionHandlePost($cardActionsUser);
 $GLOBALS['cardActionsContext'] = ['user_id' => $cardActionsUser, 'decks' => cardActionDecks($cardActionsUser),
+    'wishlist' => wishlistLogicalIds($cardActionsUser),
     'back' => authSafeNext((string)($_SERVER['REQUEST_URI'] ?? '/'), '/')];
 
 $query = is_string($_GET['q'] ?? null) ? mb_substr(trim($_GET['q']), 0, 120) : '';
@@ -118,7 +119,7 @@ echo cardActionNotice();
                                 </span>
                                 <h3><?= h($card['name']) ?></h3>
                             </a>
-                            <?php cardActionsMenu($card, $GLOBALS['cardActionsContext']['decks'], $GLOBALS['cardActionsContext']['user_id'], $GLOBALS['cardActionsContext']['back']); ?>
+                            <?php cardActionsMenu($card, $GLOBALS['cardActionsContext']['decks'], $GLOBALS['cardActionsContext']['user_id'], $GLOBALS['cardActionsContext']['back'], $GLOBALS['cardActionsContext']['wishlist']); ?>
                             <p><?= h($card['set_name']) ?><?php if ($sort === 'new' && $card['first_released']): ?> · desde <?= h(substr((string)$card['first_released'], 0, 4)) ?><?php elseif ($sort === 'popular' && $card['best_rank'] !== null): ?> · EDHREC #<?= number_format((int)$card['best_rank'], 0, ',', '.') ?><?php endif; ?></p>
                         </article>
                     <?php endforeach; ?>

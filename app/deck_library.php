@@ -438,6 +438,36 @@ function deckImport(string $path, bool|string $mode = 'replace'): array {
  * @param string[] $names
  * @return array<string,array{set_name:string,set_code:string,collector_number:string}>
  */
+/** Lista de desejos: cartas que a pessoa quer, mesmo sem ter. Criada sob demanda. */
+function wishlistSchema(): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    db()->exec("CREATE TABLE IF NOT EXISTS wishlist (
+        user_id bigint NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        card_id uuid NOT NULL REFERENCES cards(id),
+        note text NOT NULL DEFAULT '',
+        created_at timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (user_id, card_id));
+        CREATE INDEX IF NOT EXISTS wishlist_user_idx ON wishlist (user_id, created_at DESC)");
+}
+
+function wishlistCount(int $userId): int {
+    if ($userId < 1) return 0;
+    try { wishlistSchema(); return (int)deckQuery('SELECT COUNT(*) FROM wishlist WHERE user_id=?', [$userId])->fetchColumn(); }
+    catch (Throwable) { return 0; }
+}
+
+/** Cartas lógicas já na lista, para o botão mostrar "salva" em qualquer impressão dela. */
+function wishlistLogicalIds(int $userId): array {
+    if ($userId < 1) return [];
+    try {
+        wishlistSchema();
+        $rows = deckQuery('SELECT DISTINCT COALESCE(c.oracle_id,c.id)::text FROM wishlist w JOIN cards c ON c.id=w.card_id WHERE w.user_id=?', [$userId])->fetchAll(PDO::FETCH_COLUMN);
+        return array_flip(array_map('strtolower', $rows));
+    } catch (Throwable) { return []; }
+}
+
 function deckLigaPrintings(array $names): array {
     $names = array_values(array_unique(array_filter(array_map('strval', $names))));
     if (!$names) return [];

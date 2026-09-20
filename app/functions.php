@@ -158,7 +158,7 @@ function cardTile(array $card): void
     if (!empty($GLOBALS['cardActionsContext'])) {
         $context = $GLOBALS['cardActionsContext'];
         echo '<div class="card-tile-actions">';
-        cardActionsMenu($card, $context['decks'], $context['user_id'], $context['back']);
+        cardActionsMenu($card, $context['decks'], $context['user_id'], $context['back'], $context['wishlist'] ?? []);
         echo '</div>';
     }
     echo '<div class="card-meta"><a href="' . h($url) . '">' . h($card['name']) . '</a><small>' . h(strtoupper((string)$card['set_code'])) . ' · #' . h((string)$card['collector_number']) . '</small><small class="card-price">' . h($priceLabel) . '</small></div></article>';
