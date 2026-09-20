@@ -104,6 +104,31 @@ CREATE TABLE IF NOT EXISTS builder_collection (
     PRIMARY KEY (scryfall_id, foil)
 );
 
+-- Lista de venda e troca de cada usuário, com link público (mantida também por app/trade_lib.php).
+CREATE TABLE IF NOT EXISTS trade_lists (
+    user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    token TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL DEFAULT '',
+    intro TEXT NOT NULL DEFAULT '',
+    contact TEXT NOT NULL DEFAULT '',
+    mode TEXT NOT NULL DEFAULT 'free' CHECK (mode IN ('free','manual')),
+    is_public BOOLEAN NOT NULL DEFAULT false,
+    show_prices BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS trade_items (
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    scryfall_id UUID NOT NULL REFERENCES cards(id),
+    foil BOOLEAN NOT NULL DEFAULT false,
+    quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+    price NUMERIC(10,2) NULL CHECK (price IS NULL OR price >= 0),
+    note TEXT NOT NULL DEFAULT '',
+    added_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, scryfall_id, foil)
+);
+CREATE INDEX IF NOT EXISTS trade_items_user_idx ON trade_items (user_id);
+
 CREATE TABLE IF NOT EXISTS upgrade_items (
     id BIGSERIAL PRIMARY KEY,
     deck_slug TEXT NOT NULL,

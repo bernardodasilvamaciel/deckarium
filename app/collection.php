@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__ . '/functions.php';
 require __DIR__ . '/partials.php';
 require __DIR__ . '/deck_library.php';
+require __DIR__ . '/trade_lib.php';
 $authUser=authRequireLogin();
 $userId=(int)$authUser['id'];
 $_SESSION['collection_csrf'] ??= bin2hex(random_bytes(24));
@@ -53,6 +54,13 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
             $deleted=deckQuery('DELETE FROM builder_collection WHERE user_id=? AND scryfall_id=? AND foil=? RETURNING name,quantity,foil',[$userId,$cardId,$foil?'true':'false'])->fetch();
             if(!$deleted) throw new RuntimeException('Essa impressão já não está na coleção.');
             $message=(int)$deleted['quantity'].' cópia(s) '.(deckIsFoil($deleted['foil'])?'foil ':'').'de '.$deleted['name'].' removida(s) da coleção.';
+        }elseif($action==='trade'){
+            $cardId=(string)($_POST['card']??'');
+            if(!preg_match('/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i',$cardId)) throw new RuntimeException('Impressão inválida.');
+            $foil=($_POST['foil']??'0')==='1';
+            tradeListFor($userId,true);
+            $listed=tradeToggleItem($userId,$cardId,$foil);
+            $message=$listed?'Carta marcada à venda. Ajuste preço e quantidade em À venda.':'Carta retirada da lista de venda.';
         }else throw new RuntimeException('Ação inválida.');
         $_SESSION['collection_message']=$message; header('Location: /collection.php',true,303); exit;
     }catch(Throwable $e){
@@ -135,6 +143,11 @@ $summary = deckQuery("SELECT COALESCE(SUM(o.quantity),0) total,COUNT(*) finishes
     COALESCE(SUM(o.quantity) FILTER(WHERE ({$finishPrice}) IS NULL),0) unpriced
     FROM builder_collection o LEFT JOIN cards c ON c.id=o.scryfall_id WHERE o.user_id=?",[$userId])->fetch();
 $collectionPublic=(bool)deckQuery('SELECT collection_public FROM users WHERE id=?',[$userId])->fetchColumn();
+// Marcar "à venda" direto daqui só faz sentido na lista de cartas escolhidas;
+// no modo automático quem manda são as cópias soltas.
+$tradeList=tradeListFor($userId);
+$tradeManual=$tradeList!==null && tradeMode($tradeList)==='manual';
+$tradeKeys=$tradeManual?tradeItemKeys($userId):[];
 $publicCollectionUrl='/public_collection.php?u='.rawurlencode((string)$authUser['username']);
 pageHeader('Minha coleção');
 ?>
@@ -179,6 +192,7 @@ pageHeader('Minha coleção');
     </div>
     <form method="post"><input type="hidden" name="csrf" value="<?= h($csrf) ?>"><input type="hidden" name="action" value="visibility"><input type="hidden" name="public" value="<?= $collectionPublic?'0':'1' ?>"><button class="<?= $collectionPublic?'secondary-link':'primary-link' ?>"><?= $collectionPublic?te('Tornar privada'):te('Tornar pública') ?></button></form>
 </section>
+<p class="muted collection-trade-hint"><?= te('Quer negociar o que está sobrando?') ?> <a href="/trade.php"><?= te('Monte a lista À venda') ?></a> — <?= $tradeManual?te('marque as cartas por aqui mesmo.'):te('ela pode pegar sozinha todas as cópias fora dos decks.') ?></p>
 
 <?php
 // Controles sempre à vista, ao lado do botão que abre os filtros.
@@ -238,6 +252,13 @@ cardFilterForm($f, deckQuery('SELECT c.set_code,MAX(c.set_name) set_name FROM bu
             <?php if(!$itemUsage): ?><?= te('Fora de decks') ?>
             <?php else: ?><?= $itemFree?te(':count livre(s)', ['count'=>$itemFree]).' · ':te('Sem cópia livre').' · ' ?><?= te('em') ?> <?= implode(', ',array_map(fn($d)=>'<a href="/decks.php?deck='.$d['id'].'&amp;view=selection&amp;stage=deck">'.h($d['name']).'</a>',$itemUsage)) ?><?php endif; ?>
         </p>
+        <?php if($tradeManual): $tradeListed=isset($tradeKeys[$card['id'].':'.($isFoil?'1':'0')]); ?>
+        <form method="post" class="collection-trade">
+            <input type="hidden" name="csrf" value="<?=h($csrf)?>"><input type="hidden" name="action" value="trade">
+            <input type="hidden" name="card" value="<?=h($card['id'])?>"><input type="hidden" name="foil" value="<?= $isFoil?'1':'0' ?>">
+            <button class="trade-toggle <?= $tradeListed?'is-listed':'' ?>" aria-pressed="<?= $tradeListed?'true':'false' ?>"><?= $tradeListed?te('Na lista de venda'):te('Colocar à venda') ?></button>
+        </form>
+        <?php endif; ?>
         <form method="post" onsubmit="return confirm('<?= te('Remover todas as cópias desta versão da coleção?') ?>')">
             <input type="hidden" name="csrf" value="<?=h($csrf)?>"><input type="hidden" name="action" value="delete">
             <input type="hidden" name="card" value="<?=h($card['id'])?>"><input type="hidden" name="foil" value="<?= $isFoil?'1':'0' ?>">

@@ -122,6 +122,28 @@ Cartas que entraram no catálogo em cada execução. Gravadas na mesma transaç�
 | `run_id` | bigint | não | | **PK**, FK → `sync_runs.id` (apaga em cascata). |
 | `card_id` | uuid | não | | **PK.** Impressão inserida (`cards.id`, sem FK). |
 
+### `auto_update_runs`
+
+Uma linha por execução da rotina automática (cron às 06:10 e 18:10, ou o botão “Executar agora” em Status). Base do histórico em **Status → Atualização automática**.
+
+| Coluna | Tipo | Nulo | Padrão | Descrição |
+|---|---|---|---|---|
+| `id` | bigint | não | sequência | **PK.** |
+| `trigger_source` | text | não | `'cron'` | `cron` (horário agendado) ou `manual` (botão em Status). |
+| `state` | text | não | `'checking'` | `checking`, `syncing`, `downloading_images`, `up_to_date`, `completed`, `images_pending`, `skipped`, `error` ou `interrupted`. |
+| `started_at` | timestamptz | não | `now()` | Início da rotina. |
+| `finished_at` | timestamptz | sim | | Fim (nulo enquanto roda). |
+| `bulk_type` | text | não | `''` | Conjunto consultado no Scryfall. |
+| `remote_updated_at` | timestamptz | sim | | Publicação encontrada no manifesto. |
+| `had_update` | boolean | não | `false` | Havia dados novos para importar. |
+| `sync_run_id` | bigint | sim | | Execução correspondente em `sync_runs`. |
+| `cards_imported` | integer | não | `0` | Registros lidos na importação. |
+| `cards_added` | integer | não | `0` | Cartas novas no catálogo. |
+| `images_downloaded` | integer | não | `0` | Imagens baixadas na passagem. |
+| `images_failed` | integer | não | `0` | Imagens que falharam. |
+| `images_bytes` | bigint | não | `0` | Bytes transferidos. |
+| `error` | text | não | `''` | Mensagem de erro ou interrupção. |
+
 ### `card_tags`
 
 Tags de função do Scryfall Tagger (opcional, `php bin/sync_tagger.php`). Complementam as relações detectadas no texto.
@@ -229,6 +251,36 @@ Cartas de cada deck, nas etapas da seleção.
 
 Só `stage = 'deck'` e a comandante contam para as 100 cartas, reservam cópias da coleção e aparecem na página pública e no quadro de relações.
 
+### `trade_lists`
+
+A lista de venda e troca de cada usuário e o link público dela (`/public_trade.php?t=token`).
+
+| Coluna | Tipo | Nulo | Padrão | Descrição |
+|---|---|---|---|---|
+| `user_id` | bigint | não | | **PK**, FK → `users.id` (apaga em cascata). Uma lista por conta. |
+| `token` | text | não | | Único. Endereço do link público; trocá-lo derruba o link anterior. |
+| `title` | text | não | `''` | Título da página pública. |
+| `intro` | text | não | `''` | Recado para quem abre o link. |
+| `contact` | text | não | `''` | Contato exibido na página. |
+| `mode` | text | não | `'free'` | `free` (cópias soltas, calculadas a cada visita) ou `manual` (cartas escolhidas). |
+| `is_public` | boolean | não | `false` | Link ligado. Desligado, só o dono vê a página (prévia). |
+| `show_prices` | boolean | não | `true` | Mostrar preços na página pública. |
+| `created_at` / `updated_at` | timestamptz | não | `now()` | Criação e última alteração. |
+
+### `trade_items`
+
+Cartas marcadas à mão no modo `manual`. No modo `free` a lista não usa esta tabela: ela é calculada da coleção menos o que os decks usam.
+
+| Coluna | Tipo | Nulo | Padrão | Descrição |
+|---|---|---|---|---|
+| `user_id` | bigint | não | | **PK**, FK → `users.id` (apaga em cascata). |
+| `scryfall_id` | uuid | não | | **PK**, FK → `cards.id`. Impressão anunciada. |
+| `foil` | boolean | não | `false` | **PK.** Acabamento, como na coleção. |
+| `quantity` | integer | não | `1` | Cópias anunciadas (limitadas pelo que existe na coleção). |
+| `price` | numeric(10,2) | sim | | Preço pedido em reais; nulo usa a referência do Scryfall ou “a combinar”. |
+| `note` | text | não | `''` | Estado, idioma ou detalhe da cópia. |
+| `added_at` | timestamptz | não | `now()` | Quando entrou na lista. |
+
 ### `deck_upgrades`
 
 Trocas planejadas em decks fechados (100 + 1).
@@ -311,5 +363,7 @@ Com `builder_decks.is_public` ou `users.collection_public` ligados, as páginas 
 
 - **Deck:** nome, `@username`, comandante, `strategy` e as cartas com `stage = 'deck'` (nome, imagem, quantidade).
 - **Coleção:** impressões, quantidades, edição, número, idioma e foil.
+
+Com `trade_lists.is_public` ligado, o link `/public_trade.php?t=token` mostra as cartas à venda: impressão, quantidade disponível, acabamento, idioma, preço (quando `show_prices`), observação da cópia e o `contact` que o dono escreveu. Continuam fora os decks em que as cartas estão, o restante da coleção e os dados da conta.
 
 Nunca são expostos: `full_name`, `email`, candidatas, `role`/`notes` das cartas, preços, nem em quais decks cada carta está.

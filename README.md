@@ -31,7 +31,9 @@ Projeto local para pesquisar cartas, planejar decks de Commander a partir da sua
 | Perfil de jogador | `/profile.php?u=usuario` | Todos (decks e coleção só se forem públicos) |
 | Deck público | `/public_deck.php?id=ID` | Todos, se o deck for público |
 | Coleção pública | `/public_collection.php?u=usuario` | Todos, se a coleção for pública |
+| Cartas à venda (link) | `/public_trade.php?t=token` | Todos, se o link estiver ativo |
 | Minha coleção | `/collection.php` | Login |
+| À venda | `/trade.php` | Login |
 | Meus decks | `/decks.php` | Login |
 | Status do acervo | `/status.php` | Administrador |
 | Histórico de atualizações | `/sync_history.php` | Administrador |
@@ -273,6 +275,15 @@ Em **Lista de desejos** ficam as cartas que você quer comprar, mesmo sem ter ne
 
 A página mostra o total estimado, quantas cartas já entraram na sua coleção (com selo na arte) e ordena por data, preço ou nome. A lista é privada e fica fora dos buscadores.
 
+## Cartas à venda: link público de negociação
+
+Em **À venda** (`/trade.php`) cada conta monta uma lista de negociação e recebe um link próprio — `/public_trade.php?t=token`, que abre sem login e some quando o dono desliga ou gera um token novo. A lista pode ser montada de duas formas:
+
+- **Cópias soltas (automático)** — tudo que sobra da coleção depois do que os decks reservam, recalculado a cada visita. Como os decks reservam por carta lógica (oracle) e não por impressão, as cópias livres são distribuídas entre as impressões numa ordem fixa: nenhuma versão anuncia a cópia que outra já contou. Montou um deck novo? A carta sai do link sozinha.
+- **Cartas escolhidas** — só o que você marcar, com quantidade, preço em reais e observação (estado, idioma) por carta. Dá para marcar pelo botão **Colocar à venda** em Minha coleção ou trazer todas as cópias soltas de uma vez com **Adicionar as cópias soltas**. Cartas que saíram da coleção ficam visíveis para o dono como pendentes e não aparecem no link.
+
+A página pública mostra título, recado, contato, busca, ordenação por preço e exportação em CSV — útil para colar a lista em grupos de negociação. Sem preço definido, a carta sai como “a combinar”; com preço em branco e a referência do Scryfall disponível, aparece o valor convertido em reais. O dono escolhe se os preços aparecem (`Mostrar preços na página pública`) e a página nunca revela em quais decks as outras cartas estão nem o resto da coleção. Tabelas: `trade_lists` e `trade_items` (veja o [dicionário de dados](docs/banco-de-dados.md)).
+
 ## Filtros e ordenação
 
 Os filtros de todas as telas abrem numa janela, e o botão informa quantos estão ativos. Fora da janela ficam só os controles de uso constante: a ordenação e, na coleção, acabamento, uso em decks, importar e exportar.
@@ -283,7 +294,7 @@ O idioma do site usa o parâmetro `hl` (`?hl=en`), e não `lang`, porque `lang` 
 
 ## Contas e acesso
 
-O Deckarium tem contas de usuário. Qualquer visitante consulta o **catálogo**, as **edições**, os **comandantes** e a **Comunidade** (decks e coleções que os donos tornaram públicos); **Minha coleção**, **Meus decks** e **Upgrades** exigem login, e cada conta enxerga apenas os próprios dados. **Status** e **Usuários** são exclusivos de administradores (inclusive os endpoints de download e sincronização).
+O Deckarium tem contas de usuário. Qualquer visitante consulta o **catálogo**, as **edições**, os **comandantes** e a **Comunidade** (decks e coleções que os donos tornaram públicos); **Minha coleção**, **À venda**, **Meus decks** e **Upgrades** exigem login, e cada conta enxerga apenas os próprios dados. **Status** e **Usuários** são exclusivos de administradores (inclusive os endpoints de download e sincronização).
 
 - **Criar conta:** `/register.php` — nome completo, nome de usuário, email e senha (mínimo de 10 caracteres).
 - **Entrar:** `/login.php` — aceita usuário ou email; "Manter conectado" guarda a sessão por 30 dias (sem ele, 12 horas de inatividade).
