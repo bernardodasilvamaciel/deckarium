@@ -19,7 +19,8 @@ function appLocale(): string
     static $locale = null;
     if ($locale !== null) return $locale;
 
-    $requested = is_string($_GET['lang'] ?? null) ? appNormalizeLocale($_GET['lang']) : null;
+    // "hl" e não "lang": o catálogo já usa lang= para o idioma impresso na carta.
+    $requested = is_string($_GET['hl'] ?? null) ? appNormalizeLocale($_GET['hl']) : null;
     if ($requested) {
         $locale = $requested;
         if (session_status() === PHP_SESSION_ACTIVE) $_SESSION['locale'] = $locale;
@@ -99,6 +100,6 @@ function appLocaleUrl(string $locale): string
 {
     $path = strtok((string)($_SERVER['REQUEST_URI'] ?? '/'), '?') ?: '/';
     $params = $_GET;
-    $params['lang'] = $locale;
+    $params['hl'] = $locale;
     return $path . '?' . http_build_query($params);
 }
