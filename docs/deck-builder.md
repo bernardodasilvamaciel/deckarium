@@ -52,7 +52,7 @@ Cada deck tem abas curtas em vez de uma página longa (`decks.php?deck=ID&view=�
 | O que falta | `needs` | Metas por função e sugestões |
 | Explorar | `explore` | Filtros e resultados, inclusive “Encaixa no deck” |
 | Minha seleção | `selection` | Candidatas e deck; em **No deck**, a Análise do deck (`#deck-analysis`) |
-| Quadro de relações | `deck_board.php` | Setas entre as cartas |
+| Quadro de relações | `deck_board.php` | Constelação 3D (ou plano) de quem fornece e quem aproveita, equilíbrio dos temas e sugestões da coleção |
 
 Links antigos com `view=discover` abrem a Visão geral, ou o Explorar quando trazem parâmetros de busca (`q`, `oracle`, `sort`, `page`…). Sem comandante, o deck mostra só a escolha da comandante e a seleção. As abas vêm de `deckSectionNav()`.
 
@@ -127,14 +127,24 @@ Na Minha seleção, o diálogo de cada carta lista as relações com o deck e co
 
 ![Quadro de relações](images/quadro.png)
 
-`deck_board.php?deck=ID` (aba **Quadro de relações** do deck) mostra **só a comandante e as cartas aprovadas no deck**; candidatas ficam de fora para o quadro continuar leve.
+`deck_board.php?deck=ID` (aba **Quadro de relações** do deck) mostra **só a comandante e as cartas aprovadas no deck**; candidatas ficam de fora para o quadro continuar leve. O quadro ocupa toda a largura da página; o painel de detalhes flutua à direita e pode ser recolhido (**Ocultar painel**), e **Tela cheia** usa a tela inteira (ou a janela inteira, quando o navegador não permite).
 
-- **Blocos por tema:** cada carta vai para o bloco do grupo de relação em que mais se liga (Criaturas e mortes, Marcadores, Cemitério, Terrenos…). Cada bloco é um painel com a cor do grupo, nome e contagem; dentro dele as cartas ficam em grade, primeiro as que mais **fornecem** e depois as que mais **aproveitam**. A comandante tem bloco próprio; com “Mostrar cartas sem relação”, surge o bloco “Sem relação”.
-- **Setas sob demanda:** passe o mouse numa carta para ver as setas dela; clique para fixar e ver no painel o que ela **fornece para** e **aproveita de** cada carta, com os trechos. **Mostrar todas as setas** exibe todas, em tom suave. `?focus=<id>` abre com a carta em foco (link no diálogo da seleção, só para cartas do deck).
-- **Agrupar por tema:** quando uma relação se repete 7 vezes ou mais, as cartas se ligam a um quadro do tema no topo do bloco. **Agrupar terrenos:** terrenos que só fornecem “terrenos entrando” viram um bloco.
-- Filtros por grupo de relação, busca de carta, zoom, arrastar cartas (posições lembradas no navegador; chave `deckarium-board-v2-<deck>`) e **Reorganizar**.
-- **Combos no Commander Spellbook:** botão no painel consulta o *Find My Combos* (`SPELLBOOK_API_BASE`, padrão `https://backend.commanderspellbook.com`) e guarda o resultado em `deck_spellbook_cache`. Combos completos viram setas; os que “faltam 1 carta” mostram se você tem a peça na coleção.
-- Assets próprios: `assets/board.js` e `assets/board.css`.
+Há duas vistas, com os mesmos filtros, foco e painel (a escolha fica lembrada no navegador):
+
+- **Constelação 3D** (padrão, `assets/board3d.js`, three.js de `assets/vendor`): as cartas flutuam sobre um tapete de jogo escuro. A comandante fica no centro, maior e com brilho dourado; cada tema (o grupo de relação em que a carta mais se liga) é um território em volta dela, com o nome impresso no tapete e as cartas mais conectadas no miolo. Arcos coloridos ligam quem **fornece** a quem **aproveita**, e faíscas correm nesse sentido; uma ponta de seta marca o destino. Os nós de tema (“Agrupar por tema”) são esferas com uma placa `fornecem → aproveitam`.
+  - Arrastar gira; botão direito ou Shift + arrastar move; roda do mouse (ou pinça no celular) aproxima. Clicar numa carta a coloca em foco: a câmera voa até ela e as vizinhas, o resto escurece. Passar o mouse mostra o nome e acende as linhas da carta.
+  - As miniaturas carregam primeiro; a imagem normal é trocada quando a carta fica grande na tela. A constelação gira devagar quando ninguém mexe (desligável em **Exibição**) e para com `prefers-reduced-motion`. O módulo só é baixado quando a vista 3D é aberta; sem WebGL, o quadro volta para o plano.
+- **Plano** (SVG): blocos por tema com as cartas em grade, primeiro as que mais **fornecem** e depois as que mais **aproveitam**. Setas sob demanda (**Todas as setas no plano** exibe todas em tom suave), cartas arrastáveis (posições lembradas; chave `deckarium-board-v2-<deck>`) e **Reorganizar**.
+
+Nas duas vistas:
+
+- **Foco:** clique para ver no painel o que a carta **fornece para** e **aproveita de** cada carta, com os trechos do texto. `?focus=<id>` abre com a carta em foco (link no diálogo da seleção, só para cartas do deck). Passar o mouse num nome do painel acende a carta no palco.
+- **Exibição:** **Agrupar por tema** (uma relação repetida 7 vezes ou mais passa por um nó do tema), **Agrupar terrenos** (terrenos que só fornecem “terrenos entrando” viram um bloco), **Mostrar cartas sem relação**. Filtros por grupo de relação e busca de carta.
+- **Equilíbrio dos temas** (painel, `boardBalance()`): para cada característica do deck, quantas cartas fornecem e quantas aproveitam, numa barra dupla. Pontas soltas vêm primeiro — **Falta fonte** (alguém aproveita e ninguém fornece), **Fonte única** (uma carta sustenta duas ou mais) e **Sem retorno** (três ou mais fornecem e ninguém aproveita; não vale para o que vem do próprio tipo da carta, como ser artefato ou terreno) — e depois os **Motores**. Clicar num tema destaca as cartas e linhas dele.
+- **Sem relação:** cartas do deck (fora terrenos) que não fornecem nem aproveitam nada das outras — em geral remoção e compra genéricas, ou as primeiras a sair num upgrade.
+- **Sugestões da coleção:** o botão pede ao servidor (`POST action=suggest`, `boardSuggestions()`) as 14 cartas da sua coleção — na identidade da comandante, legais no Commander, fora da seleção — que mais se ligariam ao deck, pela mesma conta do “Encaixa no deck” (`deckRelationPreview`). Elas aparecem translúcidas numa órbita externa (ou num bloco próprio no plano), com linhas discretas até serem focadas; o painel mostra as relações e o botão **Adicionar às candidatas**.
+- **Combos no Commander Spellbook:** botão no painel consulta o *Find My Combos* (`SPELLBOOK_API_BASE`, padrão `https://backend.commanderspellbook.com`) e guarda o resultado em `deck_spellbook_cache`. Combos completos viram linhas; os que “faltam 1 carta” mostram se você tem a peça na coleção.
+- Assets próprios: `assets/board.js` (grafo, painel e plano), `assets/board3d.js` (constelação) e `assets/board.css`.
 
 ## Metas automáticas por comandante
 
