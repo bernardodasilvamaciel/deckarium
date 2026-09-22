@@ -34,22 +34,23 @@ $rankedOrder = [
     'price_asc' => 'cheapest ASC NULLS LAST, name, id',
 ][$sort];
 $isHome = !array_filter($f) && !isset($_GET['catalog']) && !isset($_GET['view']) && !isset($_GET['page']) && !isset($_GET['sort']);
+// "/" sem busca nem filtros é a página inicial, que explica cada módulo do site.
 if ($isHome) {
-    header('Location: /commanders.php', true, 302);
+    $GLOBALS['isHome'] = true;
+    require __DIR__ . '/home.php';
     exit;
 }
-$GLOBALS['isHome'] = $isHome;
 
 $q = trim((string)($_GET['q'] ?? ''));
 $set = trim((string)($_GET['set'] ?? ''));
 $view = (string)($_GET['view'] ?? 'unique');
 $view = $view === 'printings' ? 'printings' : 'unique';
 $page = max(1, min(1000000, (int)($_GET['page'] ?? 1)));
-$perPage = $isHome ? 6 : 36;
+$perPage = 36;
 $offset = ($page - 1) * $perPage;
 
 
-// Pequeno resumo de edições recentes para a home.
+// Pequeno resumo das edições recentes, abaixo dos resultados.
 $recentSetsSql = <<<'SQL'
 SELECT set_code,
        MAX(set_name) AS set_name,
@@ -106,10 +107,9 @@ SQL;
 
 }
 
-pageHeader($isHome ? 'Início' : 'Cartas');
+pageHeader('Cartas');
 echo cardActionNotice();
 ?>
-<?php if ($isHome): require __DIR__ . '/home.php'; else: ?>
 <section class="hero">
   <div>
     <h1><?= te('Encontre sua próxima carta.') ?></h1>
@@ -117,7 +117,6 @@ echo cardActionNotice();
   </div>
   <a class="primary-link" href="/editions.php"><?= te('Explorar por edição') ?> →</a>
 </section>
-<?php endif; ?>
 
 <section id="catalogo" class="catalog-section">
   <div class="section-heading">
@@ -151,9 +150,8 @@ echo cardActionNotice();
     <?php cardTile($card); ?>
   <?php endforeach; ?>
   </div>
-  <?php if ($isHome): ?><p class="home-catalog-more"><a class="primary-link" href="/?catalog=1#catalogo"><?= te('Abrir catálogo completo') ?> →</a></p><?php else: numberedPager($page,$pages,array_merge($f,['view'=>$view]),'#catalogo'); endif; ?>
+  <?php numberedPager($page,$pages,array_merge($f,['view'=>$view]),'#catalogo'); ?>
 </section>
-<?php if (!$isHome): ?>
 <section class="section-block">
   <div class="section-heading inline-heading">
     <div>
@@ -173,7 +171,7 @@ echo cardActionNotice();
   </div>
 </section>
 
-<?php endif; pageFooter(); ?>
+<?php pageFooter(); ?>
 
 
 

@@ -1,60 +1,45 @@
 # Página inicial
 
-> **Situação atual:** `/` sem filtros redireciona para `/commanders.php`, que é a entrada do site; o item **Início** saiu do menu e a marca do Deckarium também leva a Comandantes. O conteúdo abaixo descreve a página inicial anterior (escultura 3D, prévia de seis cartas) e fica como referência. `tests/home-smoke.cjs` ainda espera essa página e precisa ser atualizado antes de ser usado. Veja a seção **Comandantes** no [README](../README.md).
+`/` sem busca nem filtros abre a página inicial (`app/home.php`, incluída por `app/index.php`). Ela explica o que é o Deckarium, como as partes se encaixam e o que cada módulo faz, com links para todos eles. O item **Início** é o primeiro do menu e a marca do Deckarium leva de volta para cá. Qualquer busca ou filtro (`q`, `set`, `catalog`, `view`, `page`, `sort`…) continua abrindo o catálogo na mesma rota.
 
-## Entrada e navegação
+![Página inicial](images/inicio.png)
 
-`app/index.php` apresenta a página inicial em `/` quando não há filtros ativos nem parâmetros `catalog`, `view` ou `page`. A navegação marca **Início** como página atual. A busca envia `q` para a mesma rota; os atalhos para Dragões, Lendárias e catálogo completo levam à listagem existente. `/?catalog=1#catalogo` abre o catálogo com paginação de 36 cartas.
+## Seções
 
-A inicial inclui busca, escultura interativa, links para coleção/decks/status, edições recentes e uma prévia de até **seis cartas únicas**, seguida do link para o catálogo completo. Os filtros e a alternância entre cartas únicas e impressões continuam disponíveis. `home.php` é um fragmento incluído pelo controlador, não uma rota independente.
+1. **Abertura:** título, resumo do site, busca de carta (envia `q` para o catálogo) e dois atalhos — para visitantes, **Criar conta** e **Já tenho conta**; com login, **Abrir meus decks** e **Minha coleção**. Abaixo, os números reais do acervo: cartas únicas, edições, comandantes, a sua coleção e os seus decks (com login) e a hora da última importação do catálogo.
+2. **A mão:** os cinco comandantes mais jogados no EDHREC (`edhrec_rank_cached`), em leque sobre um tapete escuro — o mesmo da constelação 3D do quadro de relações. Cada carta abre a página dela; passar o mouse abre o leque e levanta a carta.
+3. **Como funciona:** quatro passos, na ordem em que o site é usado — **Encontre**, **Guarde**, **Monte**, **Compartilhe**. Cada passo leva ao grupo de módulos correspondente.
+4. **Módulos**, agrupados pelos mesmos passos. Cada um tem o ícone do menu, a quem está aberto (**Aberto a todos**, **Com conta**, **Administração**), o que faz e o que dá para fazer nele:
+   - *Encontrar cartas:* Comandantes, Catálogo, Edições e a página da carta.
+   - *Guardar o que você tem:* Minha coleção, Lista de desejos e À venda.
+   - *Montar decks:* Meus decks, as seis abas de cada deck na ordem (Visão geral, Guia da comandante, O que falta, Explorar, Minha seleção, Quadro de relações) e um destaque do quadro de relações em 3D (`assets/home/quadro-constelacao.jpg`, captura de um deck real).
+   - *Compartilhar:* Comunidade e Perfil e conta.
+5. **De onde vêm os dados:** Scryfall, EDHREC, Commander Spellbook e Scryfall Tagger; a rotina automática das 06:10 e 18:10; o idioma do site. Administradores veem também os atalhos para Status, Histórico de atualizações e Usuários.
 
-## Dados reais
+Todos os textos passam por `t()`/`te()` e têm tradução em `lang/en.php`.
 
-As cartas e edições vêm da tabela PostgreSQL `cards`, sem números demonstrativos. A prévia usa a mesma seleção do catálogo: agrupa por `COALESCE(oracle_id,id)`, escolhe a impressão mais recente e desempata por idioma inglês, presença de imagem e identificador. Ordena os resultados por lançamento, nome e identificador.
+## Dados e cache
 
-As quatro edições recentes são agrupadas por `set_code`, considerando registros com data de lançamento até a data atual. Exibem nome, código, data e quantidade de cartas únicas. As consultas de resumo usam `catalogCached`, com validade padrão de 300 segundos e revisão da sincronização na chave. Um acervo vazio mostra os estados vazios existentes e um caminho para consultar o status; a página não promete que todas as imagens estejam disponíveis offline.
-
-## Escultura e procedência
-
-`app/assets/dragon.js` constrói uma escultura procedural de dragão, com materiais de cobre e ouro, asas, chifres, cauda e um pequeno tesouro. É um estudo estilizado inspirado na referência de Smaug fornecida pelo usuário; **não é um modelo oficial nem uma reconstrução realista**. A geometria é gerada no código, sem arquivo de modelo externo.
-
-O renderizador usa **Three.js 0.170.0**, distribuído localmente em `app/assets/vendor/three.module.min.js`. A licença MIT dos autores do Three.js está em `app/assets/vendor/three.LICENSE`. Não há dependência de CDN em tempo de execução para o 3D.
-
-O raster novo `app/assets/smaug-reference.png` é a referência de carta fornecida pelo usuário e serve como imagem estática de fallback. Foi copiado do PNG anexado, preservando os pixels, e recebeu metadados de procedência pelo utilitário `embed-prompt` do Impeccable. Não é uma imagem criada por IA nem arte original do projeto; a procedência do arquivo não transfere os direitos da arte da carta. As cartas do catálogo continuam usando o fluxo existente de dados e imagens do Scryfall.
-
-Sem JavaScript, durante a inicialização ou se o módulo/WebGL falhar, a referência permanece visível. Uma falha de inicialização atualiza a mensagem de status; a perda do contexto WebGL também restaura a referência e orienta recarregar. Busca e navegação independem do renderizador.
+As consultas usam `catalogCached` (chave inclui a revisão da sincronização): números do acervo por 6 horas (`home-stats-v1`), hora da última importação por 1 hora (`home-synced-v1`) e a mão de comandantes por 24 horas (`home-hand-v1`). Os comandantes seguem a regra da página Comandantes (sem cartas só digitais, fichas ou art series) e usam a impressão mais nova em inglês com imagem. Os números da sua coleção e dos seus decks são lidos a cada visita, só com login. Sem acervo sincronizado, a linha de números e a mão não aparecem; o resto da página continua.
 
 ## Acessibilidade e movimento
 
-- A busca tem rótulo visível; o HTML mantém títulos, regiões e navegação com nomes acessíveis.
-- A imagem de referência tem texto alternativo. O canvas é ocultado da árvore de acessibilidade, e o estágio mantém uma descrição textual da escultura.
-- Os botões de girar e pausar são controles HTML nativos: navegue com Tab e ative com Enter ou Espaço. Girar por botão também pausa a rotação automática. O foco usa o tratamento global existente.
-- **Pausar/Animar** informa o estado por texto e `aria-pressed`. Arrastar com ponteiro gira o modelo; o canvas permite rolagem vertical por toque.
-- `prefers-reduced-motion: reduce` inicia o modelo parado e mudanças dessa preferência são observadas. O usuário pode iniciar a animação explicitamente.
-- A animação automática para quando o estágio sai da área visível ou a aba fica oculta. O tamanho acompanha o contêiner e a densidade de pixels é limitada a 1,5.
-- Em telas de até 760px, texto e escultura ficam em uma coluna; atalhos viram linhas e edições permanecem em duas colunas.
+- A busca tem rótulo visível; cada grupo de módulos é uma região com título, e os passos são uma lista ordenada.
+- As cartas da mão são links com o nome da carta no texto alternativo; o foco pelo teclado levanta a carta como o mouse.
+- O leque flutua devagar; com `prefers-reduced-motion: reduce` fica parado e sem transições.
+- Até 980px a abertura vira uma coluna e os títulos dos grupos deixam de acompanhar a rolagem; até 760px os passos ficam em duas colunas (uma abaixo de 420px) e o leque encolhe, sem rolagem horizontal.
 
 ## Verificação
 
-Com Docker Compose instalado, inicie a aplicação e o banco em `http://localhost:8080`:
-
-```powershell
-docker compose up -d --build
-```
-
-O teste requer Node.js, Playwright com `chromium`, Google Chrome instalado e acervo sincronizado com pelo menos 36 cartas únicas, incluindo resultados para Smaug e Dragon. Se Playwright estiver fora da resolução padrão do Node, aponte `NODE_PATH` para a pasta `node_modules` que o contém.
+Com a aplicação em `http://localhost:8080` e o acervo sincronizado:
 
 ```powershell
 New-Item -ItemType Directory -Force .impeccable/review | Out-Null
 node tests/home-smoke.cjs
 ```
 
-`tests/home-smoke.cjs` verifica inicialização do 3D, estado inicial com movimento reduzido, botões, seis cartas na inicial, busca, catálogo com 36 cartas, filtro de dragões, indicação da navegação atual, ausência de overflow horizontal a 390px e fallback quando o módulo Three.js é bloqueado. Também registra erros JavaScript da página principal. Salva capturas desktop, viewport desktop e mobile em `.impeccable/review/`.
+O teste requer Node.js, Playwright e Google Chrome (aponte `NODE_PATH` para a pasta `node_modules` do Playwright, se preciso). Ele confere o item **Início** marcado no menu, os quatro passos e os quatro grupos de módulos, a mão de comandantes, a busca levando ao catálogo, o catálogo com 36 cartas e a ausência de rolagem horizontal a 390px, e salva capturas desktop e mobile em `.impeccable/review/`.
 
-Complemente o smoke test com inspeção visual das capturas e navegação por teclado. Mudanças de preferência de movimento, pausa ao ocultar a aba/sair do viewport e perda real de contexto WebGL são comportamentos implementados, mas não são verificações automatizadas desse teste.
+## Histórico
 
-## Escopo de design
-
-Esta é uma extensão da interface existente: reutiliza papel marfim, controles verdes e tipografia Spectral. Cobre, ouro e palco escuro pertencem à escultura. `home.css` e o módulo 3D são carregados somente na inicial. A direção da superfície está em `.impeccable/surfaces/app-index-php.md`; esta documentação não altera seu contrato nem os tokens globais.
-
-Existe uma divergência de nomenclatura anterior a esta extensão: `PRODUCT.md` e `DESIGN.md` dizem **MTG Local**, enquanto README, interface e brief da superfície usam **Deckarium**. Foi registrada sem renomear o produto ou reescrever os arquivos globais de design.
+A inicial anterior tinha uma escultura 3D de dragão (`assets/dragon.js`, com a referência `assets/smaug-reference.png`) e uma prévia de seis cartas; depois `/` passou a redirecionar para Comandantes. Os arquivos da escultura continuam no projeto, mas nenhuma página os carrega.

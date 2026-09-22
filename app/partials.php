@@ -43,7 +43,7 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
 
     // Resumo, endereço canônico e cartão de compartilhamento.
     $descriptions = [
-        'home' => 'Catálogo completo de Magic em português, com edições, comandantes, preços e oficina de decks de Commander.',
+        'home' => 'Catálogo completo de Magic, sua coleção e uma oficina de decks de Commander: veja o que cada parte do Deckarium faz e por onde começar.',
         'cards' => 'Pesquise qualquer carta de Magic pelo nome, texto Oracle, tipo, cores, raridade e edição.',
         'sets' => 'Todas as edições de Magic em linha do tempo, com cartas novas, reimpressões e proporção de cores.',
         'commanders' => 'Todos os comandantes do catálogo, com as cartas mais jogadas e as sinergias de cada um.',
@@ -87,9 +87,9 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
     if ($section==='decks') echo '<link rel="stylesheet" href="/assets/decks.css?v=' . filemtime(__DIR__ . '/assets/decks.css') . '">';
     echo '<script src="/assets/app.js?v=' . h((string)filemtime(__DIR__ . '/assets/app.js')) . '" defer></script></head><body>';
     echo '<a class="skip-link" href="#main">' . te('Pular para o conteúdo') . '</a>';
-    echo '<header class="sidebar" data-sidebar><div class="sidebar-header"><a class="brand" href="/commanders.php" aria-label="Deckarium — início"><img class="brand-mark" src="/assets/deckarium-logo.png" alt="Deckarium" width="512" height="512"></a><button type="button" class="sidebar-toggle" data-sidebar-toggle aria-expanded="true"><span class="sr-only" data-sidebar-toggle-label>' . te('Recolher navegação') . '</span><span class="sidebar-toggle-open">' . uiIcon('menu') . '</span><span class="sidebar-toggle-close">' . uiIcon('close') . '</span><span class="sidebar-toggle-collapse">' . uiIcon('collapse') . '</span><span class="sidebar-toggle-expand">' . uiIcon('expand') . '</span></button></div>';
+    echo '<header class="sidebar" data-sidebar><div class="sidebar-header"><a class="brand" href="/" aria-label="Deckarium — início"><img class="brand-mark" src="/assets/deckarium-logo.png" alt="Deckarium" width="512" height="512"></a><button type="button" class="sidebar-toggle" data-sidebar-toggle aria-expanded="true"><span class="sr-only" data-sidebar-toggle-label>' . te('Recolher navegação') . '</span><span class="sidebar-toggle-open">' . uiIcon('menu') . '</span><span class="sidebar-toggle-close">' . uiIcon('close') . '</span><span class="sidebar-toggle-collapse">' . uiIcon('collapse') . '</span><span class="sidebar-toggle-expand">' . uiIcon('expand') . '</span></button></div>';
     echo '<nav aria-label="Navegação principal">';
-    $links = [['commanders','/commanders.php',t('Comandantes')],['cards','/?catalog=1#catalogo',t('Catálogo')],['sets','/editions.php',t('Edições')],['collection','/collection.php',t('Minha coleção')],['wishlist','/wishlist.php',t('Lista de desejos')],['trade','/trade.php',t('À venda')],['decks','/decks.php',t('Meus decks')],['community','/public.php',t('Comunidade')]];
+    $links = [['home','/',t('Início')],['commanders','/commanders.php',t('Comandantes')],['cards','/?catalog=1#catalogo',t('Catálogo')],['sets','/editions.php',t('Edições')],['collection','/collection.php',t('Minha coleção')],['wishlist','/wishlist.php',t('Lista de desejos')],['trade','/trade.php',t('À venda')],['decks','/decks.php',t('Meus decks')],['community','/public.php',t('Comunidade')]];
     if (($user['role'] ?? '') === 'admin') {
         $links[] = ['status','/status.php',t('Status')];
         $links[] = ['users','/users.php',t('Usuários')];
