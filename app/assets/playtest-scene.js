@@ -420,6 +420,7 @@ export function createPlaytestScene(host, hooks) {
       pile.stack.visible = info.n > 0;
       pile.stack.scale.y = height;
       pile.stack.position.y = height / 2;
+      pile.height = info.n ? height : 0;
       pile.glow.position.y = height + 0.005;
       pile.count.position.y = height + 0.25;
       setSprite(pile.count, info.n ? String(info.n) : '');
@@ -453,6 +454,19 @@ export function createPlaytestScene(host, hooks) {
   commandCard.scale.setScalar(1.05);
   commandCard.visible = false;
   dais.add(commandCard);
+
+  // Topo revelado: uma carta vira em cima do grimório e se ergue, inclinada para a câmera.
+  const revealParts = makeCard();
+  revealParts.face.userData.zone = 'library'; revealParts.body.userData.zone = 'library';
+  revealParts.group.visible = false;
+  piles.library.group.add(revealParts.group);
+  const reveal = { want: null, url: null, open: 0 };
+  function setRevealFace(url) {
+    const material = revealParts.face.material;
+    const apply = (tex) => { material.map = tex; material.emissiveMap = tex; material.needsUpdate = true; };
+    apply(backTex);
+    texture(url, (tex) => { if (reveal.url === url) apply(tex); });
+  }
 
   /** Anima uma carta do campo até uma pilha e só então a tira da cena. */
   function depart(iid, to) {
@@ -573,6 +587,7 @@ export function createPlaytestScene(host, hooks) {
     const targets = [];
     cards.forEach((entry) => { targets.push(entry.parts.face, entry.parts.body); });
     ['library', 'graveyard', 'exile'].forEach((zone) => { if (piles[zone].stack.visible) targets.push(piles[zone].stack); });
+    if (revealParts.group.visible) targets.push(revealParts.face, revealParts.body);
     targets.push(daisHit, commandParts.face);
     const found = raycaster.intersectObjects(targets, false)[0];
     if (!found) return null;
@@ -594,6 +609,7 @@ export function createPlaytestScene(host, hooks) {
       setTimeout(() => {
         if (target?.iid) hooks.onCardContext?.(target.iid, clientX, clientY);
         else if (target?.zone) hooks.onPileContext?.(target.zone, clientX, clientY);
+        else hooks.onTableContext?.(clientX, clientY);
       });
       pointer = null;
     }
@@ -708,6 +724,16 @@ export function createPlaytestScene(host, hooks) {
       piles.library.stack.rotation.y = reduce ? 0 : Math.sin(shuffleAge * 28) * 0.18 * (1 - shuffleAge);
       piles.library.stack.position.x = reduce ? 0 : Math.sin(shuffleAge * 21) * 0.12 * (1 - shuffleAge);
     }
+    // Topo revelado: abre virando pelo verso; ao trocar de carta, fecha, troca a face e abre de novo.
+    if (reveal.want !== reveal.url && reveal.open < 0.03) { reveal.url = reveal.want; if (reveal.url) setRevealFace(reveal.url); }
+    const openTarget = reveal.want && reveal.want === reveal.url ? 1 : 0;
+    reveal.open += (openTarget - reveal.open) * (reduce ? 1 : 1 - Math.exp(-dt * 6));
+    if (reduce && reveal.want !== reveal.url) reveal.open = 0;
+    const o = reveal.open;
+    revealParts.group.visible = o > 0.005 && piles.library.height > 0;
+    revealParts.group.position.set(-o * 0.15, (piles.library.height || 0) + 0.02 + o * 1.45 + (reduce ? 0 : Math.sin(time * 1.4) * 0.04 * o), -o * 0.2);
+    revealParts.group.rotation.set(o * 0.95, 0, Math.PI * (1 - o));
+    revealParts.group.scale.setScalar(1 + o * 0.32);
     daisRing.material.emissiveIntensity = 0.45 + Math.sin(time * 1.6) * 0.2 + (hoverZone === 'command' || dropZone === 'command' ? 0.5 : 0);
     commandCard.position.y = 1.25 + (reduce ? 0 : Math.sin(time * 1.3) * 0.06);
     // Partículas.
@@ -763,6 +789,14 @@ export function createPlaytestScene(host, hooks) {
   return {
     sync,
     spawn(iid, from) { spawnFrom.set(iid, from); },
+    revealTop(url) {
+      const next = url || null;
+      if (next && next !== reveal.want) {
+        const lib = LAYOUT.zones.library;
+        emit(lib.x, (piles.library.height || 0) + 0.6, lib.z, 26, ['#fff1c9', '#d9b45a'], { speed: 1.2, up: 2.2, gravity: -1.5, life: 0.9, spread: 0.8 });
+      }
+      reveal.want = next;
+    },
     depart,
     fx,
     pick,

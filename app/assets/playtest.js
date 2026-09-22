@@ -83,6 +83,7 @@ async function start(data) {
       onPileContext: (zone, x, y) => openPileMenu(zone, x, y),
       onCardDrop: (iid, spot) => cardDrop(iid, spot),
       onDragStart: () => hidePreview(),
+      onTableContext: (x, y) => openTableMenu(x, y),
       onHover: (target) => hoverTarget(target),
       handHeight: () => $('[data-pt-hand]').getBoundingClientRect().height,
       topInset: () => $('.pt-tools').getBoundingClientRect().bottom - root.getBoundingClientRect().top + 8,
@@ -454,7 +455,8 @@ async function start(data) {
         { label: 'Buscar uma carta…', key: 'F', action: () => openZone('library') },
         { label: 'Moer 1', key: 'M', action: () => mill(1) },
         { label: 'Exilar o topo', action: () => act('exile-top', () => { const top = S.zones.library[0]; if (top) move(top, 'exile'); }) },
-        { label: 'Revelar o topo', action: () => { const top = S.zones.library[0]; if (top) { toast(`Topo do grimório: ${nameOf(top)}.`, { kind: 'info' }); showPreview(S.cards[top]); } } },
+        { label: 'Revelar o topo', key: 'R', action: revealTopOnce },
+        { label: S.revealTop ? 'Esconder o topo' : 'Jogar com o topo revelado', action: toggleRevealTop },
       ], x, y);
     } else if (zone === 'command') {
       openMenu([{ title: 'Zona de comando' }, { label: 'Lançar a comandante', action: castCommander, disabled: !S.zones.command.length }], x, y);
@@ -462,6 +464,52 @@ async function start(data) {
       openMenu([{ title: `${zone === 'graveyard' ? 'Cemitério' : 'Exílio'} · ${S.zones[zone].length}` }, { label: 'Ver as cartas…', action: () => openZone(zone) }], x, y);
     }
   }
+  /* ---------- Topo revelado ---------- */
+  // Avulso: a carta do topo vira sobre o grimório por alguns segundos (ou até o topo mudar).
+  // Sempre revelado: para cartas como Courser of Kruphix e Future Sight, o topo fica virado e acompanha as compras.
+  let revealOnce = null;
+  let revealTimer = 0;
+  function revealTopOnce() {
+    closeMenu();
+    const top = S.zones.library[0];
+    if (!top) { toast('O grimório está vazio.', { kind: 'info' }); return; }
+    revealOnce = top;
+    clearTimeout(revealTimer);
+    revealTimer = setTimeout(() => { revealOnce = null; syncReveal(); }, 6000);
+    log(`Revelou o topo do grimório: ${nameOf(top)}.`);
+    syncReveal(); renderLog(); save();
+    showPreview(S.cards[top], null, 'left');
+  }
+  function toggleRevealTop() {
+    act('reveal', () => { S.revealTop = !S.revealTop; log(S.revealTop ? 'Passou a jogar com o topo do grimório revelado.' : 'O topo do grimório voltou a ficar escondido.'); });
+  }
+  const topRevealed = () => { const top = S.zones.library[0]; return !!top && (S.revealTop || revealOnce === top); };
+  function syncReveal() {
+    const top = S.zones.library[0];
+    if (revealOnce && revealOnce !== top) revealOnce = null;
+    scene.revealTop(topRevealed() ? imageOf(S.cards[top]) : null);
+  }
+
+  /** Botão direito no tapete, fora das cartas e das pilhas: as ações da partida. */
+  function openTableMenu(x, y) {
+    const playing = S.stage === 'play';
+    openMenu([
+      { title: playing ? `Turno ${S.turn} · ${PHASES[S.phase]}` : 'Mão inicial' },
+      { label: 'Comprar', key: 'D', disabled: !playing, action: () => act('draw', () => drawCards(1)) },
+      { label: 'Desvirar tudo', key: 'U', disabled: !playing, action: () => act('untap', () => untapAll()) },
+      { label: 'Próxima fase', key: 'Espaço', disabled: !playing, action: () => act('phase', nextPhase) },
+      { label: 'Próximo turno', key: 'N', disabled: !playing, action: () => act('turn', nextTurn) },
+      '-',
+      { label: 'Criar fichas…', key: 'K', disabled: !playing, action: openTokens },
+      { label: 'Olhar o topo…', key: 'X', disabled: !playing, action: openScry },
+      { label: 'Revelar o topo', key: 'R', disabled: !playing, action: revealTopOnce },
+      { label: 'Embaralhar', key: 'S', disabled: !playing, action: shuffleLibrary },
+      '-',
+      { label: 'Dados e moeda…', action: openDice },
+      { label: 'Desfazer', key: 'Ctrl Z', action: undo },
+    ], x, y);
+  }
+
   function playFromHand(iid, at = null) {
     if (S.stage !== 'play') { toast('Primeiro, decida a mão inicial.', { kind: 'info' }); return; }
     act('play', () => move(iid, 'battlefield', { at }));
@@ -760,7 +808,7 @@ async function start(data) {
 
   /* ---------- Pré-visualização ---------- */
   const preview = $('[data-pt-preview]');
-  function showPreview(inst, anchor = null) {
+  function showPreview(inst, anchor = null, side = null) {
     if (!inst || !S.cards[inst.iid]) return;
     const face = faceOf(inst); const card = cardOf(inst);
     const pt = ptOf(inst);
@@ -772,8 +820,9 @@ async function start(data) {
     preview.hidden = false;
     const rect = root.getBoundingClientRect();
     const x = anchor ? anchor.getBoundingClientRect().left + anchor.getBoundingClientRect().width / 2 : lastPointer.x;
-    preview.classList.toggle('is-left', x > rect.left + rect.width * 0.55);
-    preview.classList.toggle('is-right', x <= rect.left + rect.width * 0.55);
+    const left = side ? side === 'left' : x > rect.left + rect.width * 0.55;
+    preview.classList.toggle('is-left', left);
+    preview.classList.toggle('is-right', !left);
   }
   function hidePreview() { preview.hidden = true; }
   const lastPointer = { x: 0, y: 0 };
@@ -784,6 +833,7 @@ async function start(data) {
     if (target?.iid) showPreview(S.cards[target.iid]);
     else if (target?.zone === 'graveyard' || target?.zone === 'exile') { const list = S.zones[target.zone]; if (list.length) showPreview(S.cards[list[list.length - 1]]); else hidePreview(); }
     else if (target?.zone === 'command' && S.zones.command.length) showPreview(S.cards[S.zones.command[0]]);
+    else if (target?.zone === 'library' && topRevealed()) showPreview(S.cards[S.zones.library[0]]);
     else hidePreview();
   }
 
@@ -882,6 +932,7 @@ async function start(data) {
     renderLog();
     // A pré-visualização acompanha a carta sob o mouse: marcadores, virada, P/R.
     if (!preview.hidden && hovered) { if (S.cards[hovered]?.zone === 'battlefield') showPreview(S.cards[hovered]); else hidePreview(); }
+    syncReveal();
   }
 
   /* ---------- Salvar no navegador ---------- */
@@ -968,9 +1019,13 @@ async function start(data) {
       if (cardKeys[key]) { event.preventDefault(); cardKeys[key](); return; }
     }
     if (S.stage !== 'play') return;
-    const keys = { d: () => act('draw', () => drawCards(1)), u: () => act('untap', () => untapAll()), n: () => act('turn', nextTurn), ' ': () => act('phase', nextPhase), s: shuffleLibrary, x: openScry, f: () => openZone('library'), m: () => mill(1), k: openTokens };
+    const keys = { d: () => act('draw', () => drawCards(1)), u: () => act('untap', () => untapAll()), n: () => act('turn', nextTurn), ' ': () => act('phase', nextPhase), s: shuffleLibrary, x: openScry, f: () => openZone('library'), m: () => mill(1), k: openTokens, r: revealTopOnce };
     if (key === ' ' && target.closest('button')) return;
     if (keys[key]) { event.preventDefault(); keys[key](); }
+  });
+
+  root.addEventListener('contextmenu', (event) => {
+    if (!(event.target instanceof Element) || !event.target.closest('input, textarea, select')) event.preventDefault();
   });
 
   /* ---------- Começo ---------- */
