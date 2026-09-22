@@ -55,7 +55,7 @@ pageHeader('Entrar');
     <label class="auth-field">Senha
       <span class="password-field"><input type="password" name="password" autocomplete="current-password" required <?= $identifier !== '' ? 'autofocus' : '' ?>><button type="button" data-password-toggle aria-pressed="false"><?= te('Mostrar') ?></button></span>
     </label>
-    <label class="auth-check"><input type="checkbox" name="remember" value="1"> Manter conectado por 30 dias</label>
+    <label class="auth-check"><input type="checkbox" name="remember" value="1" <?= ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && ($_POST['remember'] ?? '') !== '1' ? '' : 'checked' ?>> Manter conectado neste aparelho</label>
     <button class="primary-link auth-submit" type="submit">Entrar</button>
     <p class="auth-switch"><?= te('Ainda não tem conta? ') ?><a href="/register.php<?= $next !== '/' ? '?next=' . h(rawurlencode($next)) : '' ?>"><?= te('Criar conta') ?></a></p>
     <p class="auth-footnote"><?= te('Esqueceu a senha? Peça a um administrador do Deckarium para gerar uma senha temporária.') ?></p>

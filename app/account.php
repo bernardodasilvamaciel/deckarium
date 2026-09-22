@@ -96,6 +96,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 header('Location: /account.php', true, 303);
                 exit;
             }
+        } elseif ($action === 'device_revoke') {
+            if (!authRevokeDevice($userId, (int)($_POST['device'] ?? 0))) throw new RuntimeException('Esse aparelho já estava desconectado.');
+            $_SESSION['account_message'] = 'Aparelho desconectado. Ele vai precisar entrar de novo.';
+            header('Location: /account.php#aparelhos', true, 303);
+            exit;
+        } elseif ($action === 'devices_revoke_others') {
+            authRevokeOtherDevices($userId);
+            $_SESSION['account_message'] = 'Pronto: só este aparelho continua conectado.';
+            header('Location: /account.php#aparelhos', true, 303);
+            exit;
         } else {
             throw new RuntimeException('Ação inválida.');
         }
@@ -112,6 +122,15 @@ $stats = db()->prepare("SELECT
     (SELECT COUNT(*) FROM builder_collection WHERE user_id=?) AS printings");
 $stats->execute([$userId, $userId, $userId, $userId]);
 $stats = $stats->fetch();
+
+$devices = authDevices($userId);
+$when = static function (string $moment): string {
+    $diff = time() - strtotime($moment);
+    if ($diff < 3600) return 'agora há pouco';
+    if ($diff < 86400) return 'há ' . (int)floor($diff / 3600) . ' h';
+    if ($diff < 172800) return 'ontem';
+    return 'em ' . date('d/m/Y', strtotime($moment));
+};
 
 $error = static function (array $errors, string $name): string {
     return isset($errors[$name]) ? '<small class="field-error">' . h($errors[$name]) . '</small>' : '';
@@ -151,4 +170,31 @@ pageHeader('Minha conta');
     <button class="primary-link">Alterar senha</button>
   </form>
 </div>
+
+<section class="panel account-devices" id="aparelhos">
+  <div class="account-devices-head">
+    <div>
+      <h2>Aparelhos conectados</h2>
+      <p class="muted">Onde você entrou com "Manter conectado". Se não reconhecer algum, desconecte e troque a senha.</p>
+    </div>
+    <form method="post"><?= authCsrfField() ?><input type="hidden" name="action" value="devices_revoke_others"><button class="secondary-link">Sair de todos os outros aparelhos</button></form>
+  </div>
+  <?php if (!$devices): ?>
+  <p class="muted">Nenhum aparelho lembrado. Este acesso termina quando você fechar o navegador ou ficar 12 horas sem usar o site; para continuar conectado, saia e entre de novo marcando "Manter conectado neste aparelho".</p>
+  <?php else: ?>
+  <ul class="device-list">
+    <?php foreach ($devices as $device): ?>
+    <li class="<?= $device['is_current'] ? 'is-current' : '' ?>">
+      <div>
+        <strong><?= h($device['label']) ?><?php if ($device['is_current']): ?> <span class="role-pill">Este aparelho</span><?php endif; ?></strong>
+        <small>Último uso <?= h($when((string)$device['last_used_at'])) ?> · IP <?= h((string)$device['ip']) ?> · conectado desde <?= h(date('d/m/Y', strtotime((string)$device['created_at']))) ?></small>
+      </div>
+      <?php if (!$device['is_current']): ?>
+      <form method="post"><?= authCsrfField() ?><input type="hidden" name="action" value="device_revoke"><input type="hidden" name="device" value="<?= (int)$device['id'] ?>"><button class="text-button">Desconectar</button></form>
+      <?php endif; ?>
+    </li>
+    <?php endforeach; ?>
+  </ul>
+  <?php endif; ?>
+</section>
 <?php pageFooter(); ?>

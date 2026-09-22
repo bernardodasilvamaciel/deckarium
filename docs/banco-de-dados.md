@@ -7,7 +7,7 @@ Banco PostgreSQL do Deckarium (schema `public`). Gerado a partir do banco em exe
 | Grupo | Tabelas | Quem cria |
 |---|---|---|
 | Catálogo Scryfall | `cards`, `sync_status`, `sync_runs`, `sync_run_cards`, `card_tags` | `database/init.sql`, `app/sync_log.php`, `app/bin/sync_tagger.php` |
-| Contas e acesso | `users`, `auth_attempts`, `app_migrations` | `app/auth.php` (migração automática na primeira requisição) |
+| Contas e acesso | `users`, `auth_attempts`, `auth_remember_tokens`, `app_migrations` | `app/auth.php` (migração automática na primeira requisição) |
 | Coleção e decks | `builder_collection`, `builder_decks`, `builder_items`, `deck_upgrades` | `deckSchema()` em `app/deck_library.php` e `app/auth.php` |
 | Cache de fontes externas | `deck_synergy`, `deck_commander_insights`, `deck_spellbook_cache` | `deckSchema()` |
 | Legado | `upgrade_items` | `database/init.sql` |
@@ -172,6 +172,7 @@ Tags de função do Scryfall Tagger (opcional, `php bin/sync_tagger.php`). Compl
 | `updated_at` | timestamptz | não | `now()` | Última alteração do perfil. |
 | `password_changed_at` | timestamptz | não | `now()` | Troca de senha; invalida outras sessões. |
 | `last_login_at` | timestamptz | sim | | Último login. |
+| `session_version` | int | não | `0` | Sobe em "Sair de todos os outros aparelhos"; entra no fingerprint e derruba as outras sessões. |
 | `collection_public` | boolean | não | `false` | Coleção visível em `/public_collection.php?u=<usuario>`. |
 | `display_name` | text | não | `''` | Nome de exibição do perfil público; vazio mostra `@username`. O nome completo nunca é público. |
 | `bio` | text | não | `''` | Bio do perfil (até 600 caracteres). |
@@ -196,13 +197,30 @@ Tentativas de login e cadastro, para o bloqueio de 15 minutos após 8 falhas.
 | `succeeded` | boolean | não | | Se a tentativa deu certo. |
 | `created_at` | timestamptz | não | `now()` | Momento da tentativa (índice com `kind`). |
 
+### `auth_remember_tokens`
+
+"Manter conectado": um token por aparelho. O cookie `deckarium_remember` leva `seletor:validador`; o banco guarda só o hash do validador. Quando a sessão PHP some (deploy, reinício do container, navegador fechado), o token abre uma sessão nova e a validade de 90 dias é renovada a cada uso. Sair da conta apaga o token do aparelho; trocar a senha ou desativar a conta derruba todos. A sessão guarda o seletor e confere a cada requisição se o token ainda existe, então desconectar um aparelho em Minha conta → Aparelhos conectados derruba também a sessão aberta nele.
+
+| Coluna | Tipo | Nulo | Padrão | Descrição |
+|---|---|---|---|---|
+| `id` | bigint | não | sequência | **PK.** |
+| `user_id` | bigint | não | | FK → `users.id` (apaga em cascata). |
+| `selector` | text | não | | Parte pública do cookie, única. Localiza a linha. |
+| `validator_hash` | text | não | | SHA-256 da parte secreta do cookie. |
+| `fingerprint` | text | não | | Mesmo fingerprint da sessão (id, hash da senha, ativo, `session_version`); se mudar, o token não vale. |
+| `user_agent` | text | não | `''` | Navegador que entrou, para identificar o aparelho. |
+| `ip` | text | não | `''` | Último IP que usou o token. |
+| `created_at` | timestamptz | não | `now()` | Quando o aparelho entrou. |
+| `last_used_at` | timestamptz | não | `now()` | Última vez que o token reabriu a sessão. |
+| `expires_at` | timestamptz | não | | Vencimento; renovado a cada uso. |
+
 ### `app_migrations`
 
 Migrações já aplicadas por `authMigrate()`.
 
 | Coluna | Tipo | Nulo | Padrão | Descrição |
 |---|---|---|---|---|
-| `name` | text | não | | **PK.** Ex.: `auth_v1`, `ownership_v1`. |
+| `name` | text | não | | **PK.** Ex.: `auth_v1`, `ownership_v1`, `remember_v1`, `sessions_v1`. |
 | `applied_at` | timestamptz | não | `now()` | Quando foi aplicada. |
 
 ---

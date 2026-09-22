@@ -315,6 +315,16 @@ small.field-error{color:#963b32!important;font-weight:600!important}
 .account-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;align-items:start;margin-bottom:40px}
 .account-form{display:grid;gap:16px}
 .account-form h2{margin:0}
+.account-devices{margin-bottom:40px}
+.account-devices-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+.account-devices-head h2{margin:0 0 4px}
+.account-devices-head form{margin:0}
+.device-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+.device-list li{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid var(--line)}
+.device-list li>div{display:grid;gap:3px;min-width:0}
+.device-list strong{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.92rem}
+.device-list small{color:var(--muted);font-size:.78rem;overflow-wrap:anywhere}
+.device-list form{margin:0;flex:0 0 auto}
 .account-form label{display:grid;gap:6px;font-size:.85rem;font-weight:600}
 .account-form .muted{margin:-6px 0 0}
 .label-note{font-weight:400;color:var(--muted);font-size:.76rem}

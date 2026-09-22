@@ -13,7 +13,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/db.php';
 
 const AUTH_SESSION_NAME = 'deckarium_session';
-const AUTH_REMEMBER_SECONDS = 2592000; // 30 dias
+const AUTH_REMEMBER_SECONDS = 7776000; // 90 dias, renovados a cada visita
+const AUTH_REMEMBER_COOKIE = 'deckarium_remember';
 const AUTH_IDLE_SECONDS = 43200;       // 12 horas sem "manter conectado"
 const AUTH_MAX_FAILURES = 8;           // por usuário/IP em 15 minutos
 const AUTH_MIN_PASSWORD = 10;
@@ -37,8 +38,8 @@ function authMigrate(): void
     $done = true;
     $pdo = db();
     try {
-        $applied = $pdo->query("SELECT name FROM app_migrations WHERE name IN ('auth_v1','ownership_v1','locale_v1')")->fetchAll(PDO::FETCH_COLUMN);
-        if (count($applied) === 3) return;
+        $applied = $pdo->query("SELECT name FROM app_migrations WHERE name IN ('auth_v1','ownership_v1','locale_v1','remember_v1','sessions_v1')")->fetchAll(PDO::FETCH_COLUMN);
+        if (count($applied) === 5) return;
     } catch (PDOException) {
         // Tabela de migrações ainda não existe.
     }
@@ -81,6 +82,26 @@ function authMigrate(): void
         // Idioma escolhido por cada conta (pt-BR ou en); vazio = seguir o navegador.
         $pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS locale text NOT NULL DEFAULT '';
             INSERT INTO app_migrations(name) VALUES ('locale_v1') ON CONFLICT DO NOTHING;");
+
+        // "Manter conectado": um token por aparelho, guardado só como hash.
+        // Fica no banco, então sobrevive a deploys e reinícios do container.
+        $pdo->exec("CREATE TABLE IF NOT EXISTS auth_remember_tokens (
+                id bigserial PRIMARY KEY,
+                user_id bigint NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                selector text NOT NULL UNIQUE,
+                validator_hash text NOT NULL,
+                fingerprint text NOT NULL,
+                user_agent text NOT NULL DEFAULT '',
+                ip text NOT NULL DEFAULT '',
+                created_at timestamptz NOT NULL DEFAULT now(),
+                last_used_at timestamptz NOT NULL DEFAULT now(),
+                expires_at timestamptz NOT NULL);
+            CREATE INDEX IF NOT EXISTS auth_remember_tokens_user_idx ON auth_remember_tokens (user_id);
+            INSERT INTO app_migrations(name) VALUES ('remember_v1') ON CONFLICT DO NOTHING;");
+
+        // Sobe a cada "sair dos outros aparelhos": entra no fingerprint e derruba as outras sessões.
+        $pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version int NOT NULL DEFAULT 0;
+            INSERT INTO app_migrations(name) VALUES ('sessions_v1') ON CONFLICT DO NOTHING;");
 
         $owner = $pdo->query("SELECT id FROM users ORDER BY (role='admin') DESC, id LIMIT 1")->fetchColumn();
         $ownershipDone = (bool)$pdo->query("SELECT 1 FROM app_migrations WHERE name='ownership_v1'")->fetchColumn();
@@ -167,7 +188,7 @@ function authLoadUser(): ?array
     $loaded = true;
     $GLOBALS['authUser'] = null;
     $userId = (int)($_SESSION['auth_user_id'] ?? 0);
-    if ($userId < 1) return null;
+    if ($userId < 1) return authResumeFromCookie();
 
     $idleLimit = !empty($_SESSION['auth_remember']) ? AUTH_REMEMBER_SECONDS : AUTH_IDLE_SECONDS;
     if (time() - (int)($_SESSION['auth_seen_at'] ?? 0) > $idleLimit) {
@@ -183,14 +204,43 @@ function authLoadUser(): ?array
         authClearSession();
         return null;
     }
+    if (!authCheckSessionToken()) {
+        authClearSession();
+        return null;
+    }
     $_SESSION['auth_seen_at'] = time();
     unset($user['password_hash']);
     return $GLOBALS['authUser'] = $user;
 }
 
+/**
+ * Sessão aberta com "manter conectado": o token do aparelho ainda precisa existir.
+ * Assim, desconectar um aparelho em Minha conta derruba também a sessão aberta nele.
+ * De hora em hora, renova a validade do token e do cookie.
+ */
+function authCheckSessionToken(): bool
+{
+    $selector = (string)($_SESSION['auth_token_selector'] ?? '');
+    if ($selector === '') return true;
+    $stmt = db()->prepare("SELECT id, last_used_at < now() - interval '1 hour' AS stale FROM auth_remember_tokens WHERE selector=? AND user_id=? AND expires_at > now()");
+    $stmt->execute([$selector, (int)$_SESSION['auth_user_id']]);
+    $token = $stmt->fetch();
+    if (!$token) {
+        authSetRememberCookie('', time() - 3600);
+        return false;
+    }
+    if ($token['stale'] && $token['stale'] !== 'f') {
+        $expires = time() + AUTH_REMEMBER_SECONDS;
+        db()->prepare('UPDATE auth_remember_tokens SET last_used_at=now(),expires_at=to_timestamp(?),ip=? WHERE id=?')->execute([$expires, authClientIp(), $token['id']]);
+        $cookie = (string)($_COOKIE[AUTH_REMEMBER_COOKIE] ?? '');
+        if (str_starts_with($cookie, $selector . ':')) authSetRememberCookie($cookie, $expires);
+    }
+    return true;
+}
+
 function authFingerprint(array $user): string
 {
-    return hash_hmac('sha256', (string)$user['id'] . '|' . (string)$user['password_hash'] . '|' . ($user['is_active'] ? '1' : '0'), 'deckarium-session');
+    return hash_hmac('sha256', (string)$user['id'] . '|' . (string)$user['password_hash'] . '|' . ($user['is_active'] ? '1' : '0') . '|' . (string)($user['session_version'] ?? 0), 'deckarium-session');
 }
 
 function authUser(): ?array
@@ -356,7 +406,7 @@ function authRegister(array $input): array
     }
     // Registrado como "não concluído" para entrar no limite de cadastros por IP.
     authRecordAttempt('register', authClientIp(), false);
-    authSignIn($user, false);
+    authSignIn($user, true);
     return ['ok' => true, 'user' => $user];
 }
 
@@ -398,10 +448,8 @@ function authSignIn(array $user, bool $remember): void
     $_SESSION['auth_remember'] = $remember;
     $_SESSION['auth_seen_at'] = time();
     $_SESSION['auth_csrf'] = bin2hex(random_bytes(24));
-    if ($remember) {
-        $params = session_get_cookie_params();
-        setcookie(session_name(), session_id(), ['expires' => time() + AUTH_REMEMBER_SECONDS, 'path' => '/', 'secure' => $params['secure'], 'httponly' => true, 'samesite' => 'Lax']);
-    }
+    unset($_SESSION['auth_token_selector']);
+    if ($remember) authIssueRememberToken($user);
     db()->prepare('UPDATE users SET last_login_at=now() WHERE id=?')->execute([$user['id']]);
     unset($user['password_hash']);
     $GLOBALS['authUser'] = $user;
@@ -418,6 +466,7 @@ function authClearSession(): void
 
 function authSignOut(): void
 {
+    authForgetRememberToken();
     authClearSession();
     $_SESSION['auth_csrf'] = bin2hex(random_bytes(24));
 }
@@ -430,10 +479,149 @@ function authChangePassword(int $userId, string $newPassword): void
     $stmt = db()->prepare('SELECT * FROM users WHERE id=?');
     $stmt->execute([$userId]);
     $user = $stmt->fetch();
+    // Os aparelhos lembrados caem junto (o fingerprint deles não bate mais).
+    db()->prepare('DELETE FROM auth_remember_tokens WHERE user_id=?')->execute([$userId]);
     if ($user && authUserId() === $userId) {
         session_regenerate_id(true);
         $_SESSION['auth_fingerprint'] = authFingerprint($user);
+        if (!empty($_SESSION['auth_remember'])) authIssueRememberToken($user);
     }
+}
+
+function authSetRememberCookie(string $value, int $expires): void
+{
+    $params = session_get_cookie_params();
+    setcookie(AUTH_REMEMBER_COOKIE, $value, ['expires' => $expires, 'path' => '/', 'secure' => $params['secure'], 'httponly' => true, 'samesite' => 'Lax']);
+}
+
+/** Cria o token deste aparelho: seletor em claro para achar a linha, validador só como hash. */
+function authIssueRememberToken(array $user): void
+{
+    authForgetRememberToken();
+    $selector = bin2hex(random_bytes(12));
+    $validator = bin2hex(random_bytes(32));
+    $expires = time() + AUTH_REMEMBER_SECONDS;
+    db()->prepare('INSERT INTO auth_remember_tokens(user_id,selector,validator_hash,fingerprint,user_agent,ip,expires_at) VALUES (?,?,?,?,?,?,to_timestamp(?))')
+        ->execute([(int)$user['id'], $selector, hash('sha256', $validator), authFingerprint($user), mb_substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 300), authClientIp(), $expires]);
+    authSetRememberCookie($selector . ':' . $validator, $expires);
+    $_SESSION['auth_token_selector'] = $selector;
+    // Faxina ocasional dos tokens vencidos.
+    if (random_int(1, 50) === 1) db()->exec('DELETE FROM auth_remember_tokens WHERE expires_at < now()');
+}
+
+/** Apaga o token deste aparelho (sair da conta). */
+function authForgetRememberToken(): void
+{
+    $cookie = (string)($_COOKIE[AUTH_REMEMBER_COOKIE] ?? '');
+    if ($cookie === '') return;
+    $selector = explode(':', $cookie, 2)[0];
+    db()->prepare('DELETE FROM auth_remember_tokens WHERE selector=?')->execute([$selector]);
+    unset($_COOKIE[AUTH_REMEMBER_COOKIE]);
+    authSetRememberCookie('', time() - 3600);
+}
+
+/**
+ * Sem sessão, mas com o cookie de "manter conectado": confere o token no banco
+ * e abre uma sessão nova. A validade é renovada a cada uso (janela deslizante),
+ * então quem usa o site com frequência não precisa entrar de novo.
+ */
+function authResumeFromCookie(): ?array
+{
+    $cookie = (string)($_COOKIE[AUTH_REMEMBER_COOKIE] ?? '');
+    if (!preg_match('/^([a-f0-9]{24}):([a-f0-9]{64})$/', $cookie, $m)) return null;
+    $stmt = db()->prepare('SELECT t.id token_id,t.validator_hash,t.fingerprint,u.* FROM auth_remember_tokens t JOIN users u ON u.id=t.user_id WHERE t.selector=? AND t.expires_at > now()');
+    $stmt->execute([$m[1]]);
+    $row = $stmt->fetch();
+    if (!$row || !hash_equals((string)$row['validator_hash'], hash('sha256', $m[2]))
+        || !$row['is_active'] || !hash_equals((string)$row['fingerprint'], authFingerprint($row))) {
+        if ($row) db()->prepare('DELETE FROM auth_remember_tokens WHERE id=?')->execute([$row['token_id']]);
+        authSetRememberCookie('', time() - 3600);
+        return null;
+    }
+    $expires = time() + AUTH_REMEMBER_SECONDS;
+    db()->prepare('UPDATE auth_remember_tokens SET last_used_at=now(),expires_at=to_timestamp(?),ip=? WHERE id=?')->execute([$expires, authClientIp(), $row['token_id']]);
+    authSetRememberCookie($cookie, $expires);
+    $user = $row;
+    unset($user['token_id'], $user['validator_hash'], $user['fingerprint']);
+    session_regenerate_id(true);
+    $_SESSION['auth_user_id'] = (int)$user['id'];
+    $_SESSION['auth_fingerprint'] = authFingerprint($user);
+    $_SESSION['auth_remember'] = true;
+    $_SESSION['auth_token_selector'] = $m[1];
+    $_SESSION['auth_seen_at'] = time();
+    unset($user['password_hash']);
+    return $GLOBALS['authUser'] = $user;
+}
+
+/** Aparelhos com "manter conectado" desta conta, do uso mais recente para o mais antigo. */
+function authDevices(int $userId): array
+{
+    $stmt = db()->prepare('SELECT id,selector,user_agent,ip,created_at,last_used_at,expires_at FROM auth_remember_tokens WHERE user_id=? AND expires_at > now() ORDER BY last_used_at DESC');
+    $stmt->execute([$userId]);
+    $current = (string)($_SESSION['auth_token_selector'] ?? '');
+    $devices = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $row['is_current'] = $current !== '' && hash_equals($current, (string)$row['selector']);
+        $row['label'] = authDeviceLabel((string)$row['user_agent']);
+        unset($row['selector']);
+        $devices[] = $row;
+    }
+    return $devices;
+}
+
+/** "Chrome no Windows", "Safari no iPhone"... a partir do user agent. */
+function authDeviceLabel(string $agent): string
+{
+    $browser = match (true) {
+        str_contains($agent, 'Edg/') => 'Edge',
+        str_contains($agent, 'OPR/') || str_contains($agent, 'Opera') => 'Opera',
+        str_contains($agent, 'SamsungBrowser') => 'Samsung Internet',
+        str_contains($agent, 'Firefox/') || str_contains($agent, 'FxiOS') => 'Firefox',
+        str_contains($agent, 'Chrome/') || str_contains($agent, 'CriOS') => 'Chrome',
+        str_contains($agent, 'Safari/') => 'Safari',
+        default => 'Navegador',
+    };
+    $system = match (true) {
+        str_contains($agent, 'iPhone') => 'iPhone',
+        str_contains($agent, 'iPad') => 'iPad',
+        str_contains($agent, 'Android') => 'Android',
+        str_contains($agent, 'Windows') => 'Windows',
+        str_contains($agent, 'Mac OS X') || str_contains($agent, 'Macintosh') => 'Mac',
+        str_contains($agent, 'CrOS') => 'Chromebook',
+        str_contains($agent, 'Linux') => 'Linux',
+        default => '',
+    };
+    return $system !== '' ? $browser . ' no ' . $system : ($agent === '' ? 'Aparelho desconhecido' : $browser);
+}
+
+/** Desconecta um aparelho: o token some e a sessão aberta nele cai na próxima requisição. */
+function authRevokeDevice(int $userId, int $tokenId): bool
+{
+    $stmt = db()->prepare('DELETE FROM auth_remember_tokens WHERE id=? AND user_id=?');
+    $stmt->execute([$tokenId, $userId]);
+    return $stmt->rowCount() > 0;
+}
+
+/**
+ * Mantém só este aparelho: apaga os outros tokens e sobe session_version,
+ * o que derruba também as sessões abertas sem "manter conectado".
+ */
+function authRevokeOtherDevices(int $userId): int
+{
+    $selector = (string)($_SESSION['auth_token_selector'] ?? '');
+    $stmt = db()->prepare('DELETE FROM auth_remember_tokens WHERE user_id=? AND selector<>?');
+    $stmt->execute([$userId, $selector]);
+    $removed = $stmt->rowCount();
+    db()->prepare('UPDATE users SET session_version=session_version+1 WHERE id=?')->execute([$userId]);
+    $stmt = db()->prepare('SELECT * FROM users WHERE id=?');
+    $stmt->execute([$userId]);
+    $user = $stmt->fetch();
+    if ($user && authUserId() === $userId) {
+        session_regenerate_id(true);
+        $_SESSION['auth_fingerprint'] = authFingerprint($user);
+        if ($selector !== '') db()->prepare('UPDATE auth_remember_tokens SET fingerprint=? WHERE selector=?')->execute([authFingerprint($user), $selector]);
+    }
+    return $removed;
 }
 
 authBoot();

@@ -97,24 +97,33 @@ function tradeIsPublic(?array $list): bool
 function tradeFreeCopies(int $userId): array
 {
     tradeSchema();
+    return deckQuery('SELECT c.*, o.quantity, o.foil, f.used_in_decks, f.available
+        FROM ' . tradeFreeCopiesSql($userId) . ' f
+        JOIN builder_collection o ON o.user_id=? AND o.scryfall_id=f.scryfall_id AND o.foil=f.foil
+        JOIN cards c ON c.id=f.scryfall_id
+        WHERE f.available > 0
+        ORDER BY c.name, c.set_code, c.collector_number, o.foil', [$userId])->fetchAll();
+}
+
+/**
+ * Tabela derivada (scryfall_id, foil, available, used_in_decks) com as cópias soltas
+ * de cada impressão — também usada pela coleção pública para "só o que sobra".
+ */
+function tradeFreeCopiesSql(int $userId): string
+{
     $usage = deckUsageSql($userId);
-    return deckQuery("WITH owned AS (
-            SELECT c.*, o.quantity, o.foil, COALESCE(c.oracle_id,c.id) AS logical_id
-            FROM builder_collection o JOIN cards c ON c.id=o.scryfall_id WHERE o.user_id=?
-        ), totals AS (
-            SELECT logical_id, SUM(quantity)::int AS owned_total FROM owned GROUP BY logical_id
-        ), alloc AS (
-            SELECT ow.*, t.owned_total, COALESCE(u.used,0)::int AS used_in_decks,
-                GREATEST(0, t.owned_total - COALESCE(u.used,0))::int AS free_total,
-                COALESCE(SUM(ow.quantity) OVER (PARTITION BY ow.logical_id
-                    ORDER BY ow.foil, ow.set_code, ow.collector_number, ow.id
+    return "(SELECT a.scryfall_id, a.foil, a.used_in_decks,
+            LEAST(a.quantity, GREATEST(0, a.free_total - a.taken_before))::int AS available
+        FROM (
+            SELECT o.scryfall_id, o.foil, o.quantity, COALESCE(u.used,0)::int AS used_in_decks,
+                GREATEST(0, SUM(o.quantity) OVER (PARTITION BY COALESCE(c.oracle_id,c.id)) - COALESCE(u.used,0))::int AS free_total,
+                COALESCE(SUM(o.quantity) OVER (PARTITION BY COALESCE(c.oracle_id,c.id)
+                    ORDER BY o.foil, c.set_code, c.collector_number, c.id
                     ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0)::int AS taken_before
-            FROM owned ow JOIN totals t ON t.logical_id=ow.logical_id
-            LEFT JOIN {$usage} u ON u.logical_id=ow.logical_id
-        )
-        SELECT *, LEAST(quantity, GREATEST(0, free_total - taken_before))::int AS available FROM alloc
-        WHERE LEAST(quantity, GREATEST(0, free_total - taken_before)) > 0
-        ORDER BY name, set_code, collector_number, foil", [$userId])->fetchAll();
+            FROM builder_collection o JOIN cards c ON c.id=o.scryfall_id
+            LEFT JOIN {$usage} u ON u.logical_id=COALESCE(c.oracle_id,c.id)
+            WHERE o.user_id=" . $userId . "
+        ) a)";
 }
 
 /** Cartas marcadas à mão, com o que ainda existe na coleção e o que os decks usam. */

@@ -82,11 +82,28 @@ function cardFilterActiveCount(array $f): int {
     return $active;
 }
 
-function cardFilterForm(array $f,array $sets,string $action,string $view='',string $extraHtml=''): void {
+/**
+ * Só os filtros preenchidos, prontos para uma URL (links compartilháveis e paginação).
+ * Comparações e modos de cor entram apenas quando o campo correspondente tem valor.
+ */
+function cardFilterQuery(array $f): array {
+    $out=[];
+    foreach ($f as $key=>$value) {
+        if (str_ends_with($key,'_op')) $base=substr($key,0,-3);
+        elseif (str_ends_with($key,'_mode')) $base=substr($key,0,-5);
+        else $base=$key;
+        if ($f[$base]!=='' && $f[$base]!==[] && $value!=='' && $value!==[]) $out[$key]=$value;
+    }
+    return $out;
+}
+
+/** $hidden: parâmetros que o formulário precisa manter (ex.: u da coleção pública, t da lista à venda). */
+function cardFilterForm(array $f,array $sets,string $action,string $view='',string $extraHtml='',array $hidden=[]): void {
     $advanced=false;foreach($f as $k=>$v)if(!in_array($k,['q','oracle'])&&$v!==''&&$v!==[])$advanced=true;
     filterPanelStart(cardFilterActiveCount($f), '', $extraHtml);
     ?><form class="card-filters" method="get" action="<?= h($action) ?>" role="search">
     <?php if($view): ?><input type="hidden" name="view" value="<?= h($view) ?>"><?php endif; ?>
+    <?php foreach($hidden as $name=>$value): ?><input type="hidden" name="<?= h($name) ?>" value="<?= h((string)$value) ?>"><?php endforeach; ?>
     <div class="filter-main"><label class="field"><?= te('Nome da carta') ?><input type="search" name="q" value="<?= h($f['q']) ?>" placeholder="<?= te('Nome em inglês ou português') ?>"></label><label class="field"><?= te('Texto Oracle') ?><input name="oracle" value="<?= h($f['oracle']) ?>" placeholder="draw a card; sacrifice"></label><button><?= te('Buscar cartas') ?></button></div>
     <details open><summary><?= te('Filtros avançados') ?></summary><div class="filter-grid">
     <label class="field"><?= te('Edição') ?><select name="set"><option value=""><?= te('Todas as edições') ?></option><?php foreach($sets as $set): ?><option value="<?= h($set['set_code']) ?>" <?= $f['set']===$set['set_code']?'selected':'' ?>><?= h($set['set_name'].' · '.strtoupper($set['set_code'])) ?></option><?php endforeach; ?></select></label>
@@ -95,7 +112,7 @@ function cardFilterForm(array $f,array $sets,string $action,string $view='',stri
     <?php foreach(['mv'=>t('Valor de mana'),'power'=>t('Poder'),'toughness'=>t('Resistência'),'loyalty'=>t('Lealdade')] as $key=>$label): ?><label class="field"><?= $label ?><span class="filter-number"><select name="<?= $key ?>_op" aria-label="Comparação de <?= $label ?>"><?php foreach(['eq'=>t('Igual a'),'min'=>t('Pelo menos'),'max'=>t('No máximo')] as $value=>$text): ?><option value="<?= $value ?>" <?= $f[$key.'_op']===$value?'selected':'' ?>><?= $text ?></option><?php endforeach; ?></select><input type="number" step="any" name="<?= $key ?>" value="<?= h($f[$key]) ?>" aria-label="<?= $label ?>"></span></label><?php endforeach; ?>
     <label class="field"><?= te('Custo de mana') ?><input name="mana" value="<?= h($f['mana']) ?>" placeholder="{2}{G}{G}"><small><?= te('Sequência de símbolos no custo.') ?></small></label>
     <?php foreach(['rarity'=>[t('Raridade'),['common'=>t('Comum'),'uncommon'=>t('Incomum'),'rare'=>t('Rara'),'mythic'=>t('Mítica'),'special'=>t('Especial'),'bonus'=>t('Bônus')]], 'lang'=>[t('Idioma'),['en'=>t('Inglês'),'pt'=>t('Português'),'es'=>t('Espanhol'),'fr'=>t('Francês'),'de'=>t('Alemão'),'it'=>t('Italiano'),'ja'=>t('Japonês'),'ko'=>t('Coreano'),'ru'=>t('Russo'),'zhs'=>t('Chinês simplificado'),'zht'=>t('Chinês tradicional'),'la'=>t('Latim'),'grc'=>t('Grego antigo'),'ar'=>t('Árabe'),'he'=>t('Hebraico'),'sa'=>t('Sânscrito'),'ph'=>t('Phyrexiano')]]] as $key=>[$label,$options]): ?><label class="field"><?= $label ?><select name="<?= $key ?>"><option value=""><?= te('Todos') ?></option><?php foreach($options as $value=>$text): ?><option value="<?= $value ?>" <?= $f[$key]===$value?'selected':'' ?>><?= $text ?></option><?php endforeach; ?></select></label><?php endforeach; ?>
-    </div><p class="muted"><?= te('Oracle: todos os termos separados por ponto e vírgula. Poder, resistência e lealdade: apenas valores numéricos.') ?></p><button><?= te('Aplicar filtros') ?></button></details><a href="<?= h($action) ?>"><?= te('Limpar filtros') ?></a></form><?php
+    </div><p class="muted"><?= te('Oracle: todos os termos separados por ponto e vírgula. Poder, resistência e lealdade: apenas valores numéricos.') ?></p><button><?= te('Aplicar filtros') ?></button></details><a href="<?= h($action.($hidden?'?'.http_build_query($hidden):'')) ?>"><?= te('Limpar filtros') ?></a></form><?php
     filterPanelEnd();
 }
 function numberedPager(int $page,int $pages,array $params,string $anchor=''): void {
