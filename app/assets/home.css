@@ -68,9 +68,9 @@
 /* Dentro de cada deck: as abas, na ordem */
 .home-deck{margin-top:34px;padding:24px 26px;border-radius:14px;background:var(--surface);border:1px solid var(--line)}
 .home-deck h3{margin:0 0 16px;font-size:1rem}
-.home-deck-tabs{margin:0;padding:0;list-style:none;counter-reset:tab;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px 24px}
+.home-deck-tabs{margin:0;padding:0;list-style:none;counter-reset:tab;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px 24px}
 .home-deck-tabs li{counter-increment:tab;display:grid;gap:4px;padding-top:12px;border-top:2px solid var(--line)}
-.home-deck-tabs li:last-child{border-top-color:var(--accent)}
+.home-deck-tabs li:nth-last-child(-n+2){border-top-color:var(--accent)}
 .home-deck-tabs strong{font-size:.92rem}
 .home-deck-tabs strong::before{content:counter(tab) ' ';color:var(--accent);font-family:Spectral,Georgia,serif;margin-right:4px}
 .home-deck-tabs span{font-size:.82rem;line-height:1.5;color:var(--muted)}

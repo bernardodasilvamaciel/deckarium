@@ -12,7 +12,7 @@
 4. **Módulos**, agrupados pelos mesmos passos. Cada um tem o ícone do menu, a quem está aberto (**Aberto a todos**, **Com conta**, **Administração**), o que faz e o que dá para fazer nele:
    - *Encontrar cartas:* Comandantes, Catálogo, Edições e a página da carta.
    - *Guardar o que você tem:* Minha coleção, Lista de desejos e À venda.
-   - *Montar decks:* Meus decks, as seis abas de cada deck na ordem (Visão geral, Guia da comandante, O que falta, Explorar, Minha seleção, Quadro de relações) e um destaque do quadro de relações em 3D (`assets/home/quadro-constelacao.jpg`, captura de um deck real).
+   - *Montar decks:* Meus decks, as sete abas de cada deck na ordem (Visão geral, Guia da comandante, O que falta, Explorar, Minha seleção, Quadro de relações, Mesa de teste) e um destaque do quadro de relações em 3D (`assets/home/quadro-constelacao.jpg`, captura de um deck real).
    - *Compartilhar:* Comunidade e Perfil e conta.
 5. **De onde vêm os dados:** Scryfall, EDHREC, Commander Spellbook e Scryfall Tagger; a rotina automática das 06:10 e 18:10; o idioma do site. Administradores veem também os atalhos para Status, Histórico de atualizações e Usuários.
 

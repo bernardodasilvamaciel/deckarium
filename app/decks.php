@@ -695,6 +695,7 @@ $candidateCount = array_sum(array_map(fn($row) => $row['stage']==='candidate' ? 
     <a class="deck-overview-card" href="?deck=<?= $id ?>&amp;view=selection&amp;stage=candidate"><span>Minha seleção</span><strong><?= $finalCount ?>/100 no deck · <?= $candidateCount ?> candidata<?= $candidateCount===1?'':'s' ?></strong><small>Aprove candidatas e ajuste metas e regras.</small></a>
     <a class="deck-overview-card" href="?deck=<?= $id ?>&amp;view=selection&amp;stage=deck#deck-analysis"><span>Análise do deck</span><strong><?= $landCount ?> terrenos · R$ <?= number_format($deckPriceTotal,0,',','.') ?></strong><small>Curva de mana, cores, funções, alertas e exportação.</small></a>
     <a class="deck-overview-card" href="/deck_board.php?deck=<?= $id ?>"><span>Quadro de relações</span><strong>Constelação das cartas</strong><small>Quem fornece e quem aproveita cada recurso.</small></a>
+    <a class="deck-overview-card" href="/deck_playtest.php?deck=<?= $id ?>"><span>Mesa de teste</span><strong>Jogue uma partida</strong><small>Mulligan, terrenos, fichas e marcadores numa mesa 3D.</small></a>
 </section>
 <?php elseif($view==='guide'): ?>
 <?php require __DIR__.'/deck_guide_view.php'; ?>

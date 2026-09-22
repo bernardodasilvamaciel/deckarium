@@ -90,6 +90,7 @@ $deckTabs = [
     [t('Explorar'), t('O catálogo filtrado pela identidade da comandante, em ordem de sinergia ou “Encaixa no deck”.')],
     [t('Minha seleção'), t('Candidatas e deck, com análise, mapa de jogo, fichas e terrenos preenchidos sozinhos.')],
     [t('Quadro de relações'), t('A constelação 3D de quem fornece e quem aproveita, com equilíbrio dos temas e sugestões da coleção.')],
+    [t('Mesa de teste'), t('Uma partida solitária numa mesa 3D: mulligan, terrenos, fichas, marcadores e combate contra um oponente imaginário.')],
 ];
 $homeSources = [
     ['Scryfall', t('cartas, imagens, preços e legalidade')],

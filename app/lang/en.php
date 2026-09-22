@@ -537,4 +537,6 @@ return [
     'Histórico de atualizações' => 'Update history',
     'o que entrou em cada importação' => 'what came in with each import',
     'contas, papéis e acesso' => 'accounts, roles and access',
+    'Mesa de teste' => 'Playtest table',
+    'Uma partida solitária numa mesa 3D: mulligan, terrenos, fichas, marcadores e combate contra um oponente imaginário.' => 'A solo game on a 3D table: mulligan, lands, tokens, counters and combat against an imaginary opponent.',
 ];

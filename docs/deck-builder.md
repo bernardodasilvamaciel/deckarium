@@ -53,6 +53,7 @@ Cada deck tem abas curtas em vez de uma página longa (`decks.php?deck=ID&view=�
 | Explorar | `explore` | Filtros e resultados, inclusive “Encaixa no deck” |
 | Minha seleção | `selection` | Candidatas e deck; em **No deck**, a Análise do deck (`#deck-analysis`) |
 | Quadro de relações | `deck_board.php` | Constelação 3D (ou plano) de quem fornece e quem aproveita, equilíbrio dos temas e sugestões da coleção |
+| Mesa de teste | `deck_playtest.php` | Partida solitária numa mesa 3D: mulligan, terrenos, fichas, marcadores, combate e as regras que dá para conferir sozinho |
 
 Links antigos com `view=discover` abrem a Visão geral, ou o Explorar quando trazem parâmetros de busca (`q`, `oracle`, `sort`, `page`…). Sem comandante, o deck mostra só a escolha da comandante e a seleção. As abas vêm de `deckSectionNav()`.
 
@@ -145,6 +146,36 @@ Nas duas vistas:
 - **Sugestões da coleção:** o botão pede ao servidor (`POST action=suggest`, `boardSuggestions()`) as 14 cartas da sua coleção — na identidade da comandante, legais no Commander, fora da seleção — que mais se ligariam ao deck, pela mesma conta do “Encaixa no deck” (`deckRelationPreview`). Elas aparecem translúcidas numa órbita externa (ou num bloco próprio no plano), com linhas discretas até serem focadas; o painel mostra as relações e o botão **Adicionar às candidatas**.
 - **Combos no Commander Spellbook:** botão no painel consulta o *Find My Combos* (`SPELLBOOK_API_BASE`, padrão `https://backend.commanderspellbook.com`) e guarda o resultado em `deck_spellbook_cache`. Combos completos viram linhas; os que “faltam 1 carta” mostram se você tem a peça na coleção.
 - Assets próprios: `assets/board.js` (grafo, painel e plano), `assets/board3d.js` (constelação) e `assets/board.css`.
+
+## Mesa de teste
+
+![Mesa de teste](images/mesa-de-teste.png)
+
+`deck_playtest.php?deck=ID` (aba **Mesa de teste** do deck) é uma partida solitária e manual com a comandante e as cartas aprovadas no deck, numa mesa 3D. Candidatas ficam de fora. Os dados vêm do servidor (`playtestCard()`: face da frente e de trás, P/R, lealdade, cores, ímpeto; `deckTokenList()` para as fichas); a partida roda no navegador (`assets/playtest.js`) e o desenho em `assets/playtest-scene.js`, com o three.js de `assets/vendor`.
+
+**A mesa.** O tapete é a ilustração da comandante, desfocada e escurecida, com as zonas impressas: fileiras de criaturas, outras permanentes e terrenos no centro; grimório, cemitério e exílio em pilhas à direita (a altura acompanha a quantidade; o cemitério e o exílio mostram a carta de cima); a comandante em pé num pedestal dourado à esquerda. As cartas têm espessura e sombra de verdade, flutuam quando o mouse passa e se inclinam quando arrastadas. Arrastar o fundo gira um pouco a mesa, a roda do mouse aproxima e o duplo clique volta à vista inicial.
+
+**Como jogar.**
+
+- **Mão:** em leque na borda de baixo. Duplo clique (ou Enter) joga a carta numa vaga da fileira certa; arrastar solta onde quiser — na mesa, no cemitério, no exílio ou no grimório; um clique abre o menu (lançar, jogar virada para baixo, descartar, exilar, topo ou fundo do grimório).
+- **Campo:** clique vira/desvira; o botão direito abre o menu (marcadores, transformar dupla face, virar a face para baixo, criar cópia, mover para qualquer zona, abrir a página da carta). Com o mouse sobre a carta: **T** vira, **A** ataca, **C** marcadores, **+**/**−** +1/+1, **G** cemitério, **E** exílio, **H** mão. Arrastar reposiciona; soltar numa pilha muda de zona. Terrenos básicos iguais e fichas iguais se empilham com um selo “×N”.
+- **Pilhas:** clicar no grimório compra; o botão direito embaralha, olha o topo, busca, mói, exila ou revela o topo. Cemitério e exílio abrem a lista com os destinos de cada carta. Clicar no pedestal lança a comandante.
+- **Barra de cima:** turno e fases (**Próxima fase**, Espaço; **Próximo turno**, N — desvira tudo, manutenção e compra), vida, veneno e um **oponente imaginário** de 40 vidas. Ferramentas: comprar (D), desvirar tudo (U), embaralhar (S), olhar o topo (X — vidência, vigiar, “olhe N”: cada carta vai para topo, fundo, cemitério, mão ou exílio, com a ordem ajustável), buscar (F — embaralha ao fechar), moer (M), fichas (K — as que as cartas do deck criam, com a arte da impressão, ou uma personalizada), dados e moeda, desfazer (Ctrl+Z, até 80 passos), nova partida e tela cheia.
+- **Registro da partida:** tudo o que aconteceu, por turno.
+
+**Regras que a mesa aplica ou avisa** (com o número da regra nas Comprehensive Rules):
+
+- Mulligan de Londres com o primeiro grátis do multiplayer: compra 7 de novo e, ao manter, escolhe na mão as cartas que vão para o fundo (103.5). Em Commander ninguém pula a compra do 1º turno; “Partida a dois” em **Nova partida** faz quem começa pular (103.8a).
+- Um terreno por turno: o selo “Terreno 0/1” muda de cor e o segundo gera aviso (305.2).
+- Enjoo de invocação: criatura que entrou no turno (sem ímpeto) ganha um anel pulsante e um aviso ao virar ou atacar (302.6).
+- Combate: na fase de combate, clicar numa criatura declara o ataque (vira, exceto com vigilância); a barra soma a força dos atacantes e **Causar N ao oponente** tira a vida do oponente imaginário. Quando ele chega a 0, a mesa comemora e guarda o turno (“caiu no T5”) — um jeito rápido de medir a velocidade do deck.
+- Imposto do comandante: cada lançamento da zona de comando soma {2} ao próximo, mostrado no pedestal (903.8). Se a comandante iria para cemitério, exílio, mão ou grimório, a mesa pergunta se ela vai para a zona de comando (903.9).
+- Ao sair do campo, a carta perde marcadores e volta desvirada (400.7); fichas deixam de existir fora do campo (704.5d).
+- Verificações de estado: marcadores +1/+1 e −1/−1 se anulam (704.5q); criatura com resistência 0 ou menos vai para o cemitério (704.5f); planeswalker sem lealdade também (704.5i) — ele entra com a lealdade impressa; comprar de grimório vazio, 10 venenos ou vida 0 geram aviso de derrota (704.5b, 704.5c, 704.5a). Na limpeza, mais de 7 cartas na mão gera aviso de descarte (514.1).
+
+**Efeitos.** Cada carta que entra no campo solta faíscas nas cores dela (terrenos: nas cores de mana que produzem) e ondas no tapete; a comandante sobe do pedestal com partículas douradas; o exílio dissolve a carta em luz azulada; o cemitério deixa cinzas; fichas surgem num estalo; comprar faz uma carta voar do grimório para a mão, que recebe a carta deslizando; embaralhar sacode a pilha; marcadores viram fichas de pôquer empilhadas no canto da carta; atacantes brilham em vermelho e avançam; o dano ao oponente sobe em números. Com `prefers-reduced-motion`, as animações e partículas param.
+
+A partida fica guardada no navegador (`localStorage`, chave `deckarium-playtest-v1-<deck>`) e é retomada ao voltar, desde que as cartas do deck não tenham mudado. A mesa precisa de WebGL; sem ele, a página avisa.
 
 ## Metas automáticas por comandante
 

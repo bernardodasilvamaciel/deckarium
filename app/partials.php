@@ -35,7 +35,7 @@ function uiIcon(string $name): string
 function pageHeader(string $title, string $description = '', array $meta = []): void
 {
     $route = basename($_SERVER['SCRIPT_NAME'] ?? 'index.php');
-    $section = !empty($GLOBALS['isHome']) ? 'home' : match ($route) { 'editions.php','edition.php'=>'sets', 'commanders.php'=>'commanders', 'collection.php'=>'collection','wishlist.php'=>'wishlist','trade.php'=>'trade', 'decks.php','upgrades.php','deck_board.php'=>'decks','status.php','sync_history.php'=>'status','public.php','public_deck.php','public_collection.php','public_trade.php','profile.php'=>'community','users.php'=>'users','account.php'=>'account','login.php','register.php'=>'auth',default=>'cards' };
+    $section = !empty($GLOBALS['isHome']) ? 'home' : match ($route) { 'editions.php','edition.php'=>'sets', 'commanders.php'=>'commanders', 'collection.php'=>'collection','wishlist.php'=>'wishlist','trade.php'=>'trade', 'decks.php','upgrades.php','deck_board.php','deck_playtest.php'=>'decks','status.php','sync_history.php'=>'status','public.php','public_deck.php','public_collection.php','public_trade.php','profile.php'=>'community','users.php'=>'users','account.php'=>'account','login.php','register.php'=>'auth',default=>'cards' };
     $user = authUser();
     $version = (string)filemtime(__DIR__ . '/assets/style.css');
     echo '<!doctype html><html lang="' . h(appLocale()) . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
@@ -51,7 +51,7 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
     ];
     $pageDescription = t($description !== '' ? $description : ($descriptions[$section] ?? 'Deckarium: catálogo de Magic, oficina de decks de Commander e controle da sua coleção.'));
     $pageDescription = mb_substr(trim(preg_replace('/\s+/u', ' ', $pageDescription) ?? ''), 0, 300);
-    $privateRoutes = ['login.php','register.php','logout.php','account.php','collection.php','decks.php','deck_board.php','upgrades.php','users.php','status.php','sync_history.php','wishlist.php','trade.php'];
+    $privateRoutes = ['login.php','register.php','logout.php','account.php','collection.php','decks.php','deck_board.php','deck_playtest.php','upgrades.php','users.php','status.php','sync_history.php','wishlist.php','trade.php'];
     $noindex = $meta['noindex'] ?? in_array($route, $privateRoutes, true);
     $scheme = (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'http') ? 'http' : 'https';
     $host = (string)($_SERVER['HTTP_HOST'] ?? 'deckarium.bernas.shop');

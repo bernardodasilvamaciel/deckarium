@@ -12,12 +12,12 @@ Projeto local para pesquisar cartas, planejar decks de Commander a partir da sua
 <tr><td width="50%"><a href="docs/images/deck-visao-geral.png"><img src="docs/images/deck-visao-geral.png" alt="Visão geral do deck"></a><br><b>Visão geral do deck</b><br><sub>Comandante, intenção e atalhos para as subpáginas.</sub></td><td width="50%"><a href="docs/images/explorar.png"><img src="docs/images/explorar.png" alt="Explorar"></a><br><b>Explorar</b><br><sub>Resultados ordenados por sinergia EDHREC, com situação na coleção.</sub></td></tr>
 <tr><td width="50%"><a href="docs/images/selecao-cartas-grandes.png"><img src="docs/images/selecao-cartas-grandes.png" alt="Minha seleção · Cartas grandes"></a><br><b>Minha seleção · Cartas grandes</b><br><sub>Cartas em tamanho de leitura; informações abaixo da arte.</sub></td><td width="50%"><a href="docs/images/mapa-de-jogo.png"><img src="docs/images/mapa-de-jogo.png" alt="Minha seleção · Mapa de jogo"></a><br><b>Minha seleção · Mapa de jogo</b><br><sub>Função × valor de mana, com metas por linha e por coluna.</sub></td></tr>
 <tr><td width="50%"><a href="docs/images/fichas.png"><img src="docs/images/fichas.png" alt="Fichas e marcadores"></a><br><b>Fichas e marcadores</b><br><sub>Calculados automaticamente das cartas do deck.</sub></td><td width="50%"><a href="docs/images/terrenos.png"><img src="docs/images/terrenos.png" alt="Completar com terrenos"></a><br><b>Completar com terrenos</b><br><sub>Sugestão de quantidade pelo deck, não básicos da coleção e básicos pelas cores.</sub></td></tr>
-<tr><td width="50%"><a href="docs/images/analise.png"><img src="docs/images/analise.png" alt="Análise do deck"></a><br><b>Análise do deck</b><br><sub>Contagens, valor, curva de mana e cores dos custos.</sub></td><td width="50%"></td></tr>
+<tr><td width="50%"><a href="docs/images/analise.png"><img src="docs/images/analise.png" alt="Análise do deck"></a><br><b>Análise do deck</b><br><sub>Contagens, valor, curva de mana e cores dos custos.</sub></td><td width="50%"><a href="docs/images/mesa-de-teste.png"><img src="docs/images/mesa-de-teste.png" alt="Mesa de teste"></a><br><b>Mesa de teste</b><br><sub>Partida solitária numa mesa 3D com a arte da comandante: mulligan, fichas, marcadores, combate e regras.</sub></td></tr>
 </table>
 
 ## Documentação
 
-- [Oficina de decks](docs/deck-builder.md) — decks, coleção, EDHREC, quadro de relações (3D) e compartilhamento.
+- [Oficina de decks](docs/deck-builder.md) — decks, coleção, EDHREC, quadro de relações (3D), mesa de teste (3D) e compartilhamento.
 - [Dicionário de dados](docs/banco-de-dados.md) — todas as tabelas e colunas do PostgreSQL.
 - [Página inicial](docs/home.md) e [deploy](docs/deploy.md).
 

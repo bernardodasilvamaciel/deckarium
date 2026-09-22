@@ -549,11 +549,11 @@ function deckCommanderSql(): string {
 /** Abas das subpáginas de um deck (decks.php e deck_board.php). */
 function deckSectionNav(int $deckId, string $current, bool $hasCommander, int $finalCount): string {
     $tabs = $hasCommander
-        ? ['overview'=>'Visão geral','guide'=>'Guia da comandante','needs'=>'O que falta','explore'=>'Explorar','selection'=>'Minha seleção','board'=>'Quadro de relações']
+        ? ['overview'=>'Visão geral','guide'=>'Guia da comandante','needs'=>'O que falta','explore'=>'Explorar','selection'=>'Minha seleção','board'=>'Quadro de relações','playtest'=>'Mesa de teste']
         : ['explore'=>'Escolher comandante','selection'=>'Minha seleção'];
     $html = '<nav class="tabs deck-module-nav" aria-label="Seções do deck"><a href="/decks.php">← Biblioteca</a>';
     foreach ($tabs as $key => $label) {
-        $href = $key === 'board' ? '/deck_board.php?deck='.$deckId : '/decks.php?deck='.$deckId.'&amp;view='.$key;
+        $href = match ($key) { 'board' => '/deck_board.php?deck='.$deckId, 'playtest' => '/deck_playtest.php?deck='.$deckId, default => '/decks.php?deck='.$deckId.'&amp;view='.$key };
         $badge = $key === 'selection' ? ' <span class="deck-tab-badge">'.$finalCount.'/100</span>' : '';
         $html .= '<a href="'.$href.'"'.($current === $key ? ' aria-current="page"' : '').'>'.h($label).$badge.'</a>';
     }
