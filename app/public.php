@@ -20,7 +20,7 @@ if ($query !== '') {
     $like = '%' . strtr($query, ['\\' => '\\\\', '%' => '\\%', '_' => '\\_']) . '%';
     array_push($params, $like, $like);
 }
-$decks = deckQuery("SELECT d.id,d.name,d.status,u.username,c.id commander_card_id,c.name commander,c.color_identity,
+$decks = deckQuery("SELECT d.id,d.name,d.status,d.format,u.username,c.id commander_card_id,c.name commander,c.color_identity,
         (SELECT COALESCE(SUM(quantity),0) FROM builder_items WHERE deck_id=d.id AND stage='deck') + CASE WHEN d.commander_id IS NULL THEN 0 ELSE 1 END card_count
     FROM builder_decks d JOIN users u ON u.id=d.user_id LEFT JOIN cards c ON c.id=d.commander_id
     WHERE {$where} ORDER BY d.id DESC LIMIT 120", $params)->fetchAll();
@@ -64,7 +64,7 @@ pageHeader($username !== '' ? '@' . $username . ' · Comunidade' : 'Comunidade')
     <?php foreach ($decks as $d): $identity = json_decode((string)($d['color_identity'] ?? '[]'), true) ?: []; ?>
         <a class="public-deck-tile" href="/public_deck.php?id=<?= (int)$d['id'] ?>">
             <span class="public-deck-tile-art"><?php if ($d['commander_card_id']): ?><img src="/image.php?id=<?= h(rawurlencode((string)$d['commander_card_id'])) ?>&amp;size=small" alt="" loading="lazy" width="146" height="204"><?php endif; ?></span>
-            <span class="public-deck-tile-copy"><strong><?= h($d['name']) ?></strong><span><?= h($d['commander'] ?: 'Comandante a escolher') ?></span><small><?= $identity ? manaSymbols(implode('', array_map(fn($c) => '{' . $c . '}', $identity))) : '' ?> <?= (int)$d['card_count'] ?>/100 · @<?= h($d['username']) ?></small></span>
+            <span class="public-deck-tile-copy"><strong><?= h($d['name']) ?></strong><span><?php $deckFormat = deckFormatInfo((string)($d['format'] ?? '')); ?><b class="deck-format-chip"><?= h($deckFormat['name']) ?></b> <?= h(deckFormatHasLeader($deckFormat) ? ($d['commander'] ?: 'Comandante a escolher') : '') ?></span><small><?= $identity ? manaSymbols(implode('', array_map(fn($c) => '{' . $c . '}', $identity))) : '' ?> <?= (int)$d['card_count'] ?>/100 · @<?= h($d['username']) ?></small></span>
         </a>
     <?php endforeach; ?>
     </div>

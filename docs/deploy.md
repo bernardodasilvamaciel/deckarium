@@ -13,15 +13,17 @@ Também dá para rodar manualmente em **Actions > Deploy > Run workflow**, escol
 No servidor, o workflow faz:
 
 1. checkout da tag;
-2. build da imagem `deckarium-app` (código embutido);
+2. build das imagens `deckarium-app` (PHP/Apache, código embutido) e `deckarium-realtime` (Node.js, WebSocket da mesa compartilhada);
 3. cria as pastas de dados em `/opt/apps/deckarium/data/storage` e ajusta o dono das pastas de topo;
-4. `php -l` em todos os arquivos PHP dentro da imagem nova;
+4. `php -l` em todos os arquivos PHP dentro da imagem nova e `node --check` no serviço de tempo real;
 5. aplica `database/init.sql` e `database/performance.sql` no **PostgreSQL do próprio servidor** (scripts idempotentes);
 6. `docker compose -f docker-compose.prod.yml up -d --wait` — só troca o container se tudo acima passou;
 7. health check em `http://127.0.0.1:8000/`.
 
-O container usa a **rede do host** (`network_mode: host`): o Apache escuta **somente em 127.0.0.1:8000**, para o
+Os containers usam a **rede do host** (`network_mode: host`): o Apache escuta **somente em 127.0.0.1:8000**, para o
 cloudflared, e o banco é acessado em `127.0.0.1:5432`, sem mexer em `listen_addresses`/`pg_hba.conf`.
+O serviço de tempo real (`deckarium-realtime`) escuta em **127.0.0.1:8090** (`REALTIME_PORT`) e o Apache repassa
+`/realtime/` para ele — o WebSocket da mesa compartilhada sai pelo mesmo endereço do site, sem configurar nada a mais.
 Esse ambiente é separado do `docker-compose.yml` de desenvolvimento (porta 8080).
 
 ## Layout no servidor
@@ -98,6 +100,7 @@ SCRYFALL_BULK_TYPE=default_cards
 SCRYFALL_USER_AGENT=Deckarium/1.0
 # DECKARIUM_DATA_DIR=/opt/apps/deckarium/data
 # APP_LISTEN=127.0.0.1:8000
+# REALTIME_PORT=8090   # WebSocket da mesa compartilhada (só em 127.0.0.1)
 ```
 
 ### Permissões no PostgreSQL
@@ -181,6 +184,20 @@ ingress:
 
 Instale como serviço: `sudo cloudflared service install`.
 
+O WebSocket da mesa compartilhada (`/realtime/`) já funciona assim, passando pelo Apache (o Cloudflare aceita
+WebSocket sem configuração). Opcionalmente, mande esse caminho direto para o serviço de tempo real — cada mesa aberta
+deixa de ocupar um processo do Apache:
+
+```yaml
+ingress:
+  - hostname: deckarium.seudominio.com
+    path: ^/realtime/
+    service: http://localhost:8090
+  - hostname: deckarium.seudominio.com
+    service: http://localhost:8000
+  - service: http_status:404
+```
+
 > Se o cloudflared rodar **dentro de um container**, use `network_mode: host` nele.
 
 ## Operação
@@ -188,6 +205,8 @@ Instale como serviço: `sudo cloudflared service install`.
 ```bash
 docker ps --filter name=deckarium
 docker logs -f deckarium-app
+docker logs -f deckarium-realtime              # mesas compartilhadas (conexões, erros)
+curl -s http://127.0.0.1:8090/realtime/health  # {"ok":true,"rooms":…,"connections":…}
 sudo -u postgres pg_dump mtg | gzip > /opt/apps/deckarium/backup-$(date +%F).sql.gz
 du -sh /opt/apps/deckarium/data/*
 ```

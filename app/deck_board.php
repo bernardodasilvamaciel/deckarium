@@ -17,7 +17,13 @@ deckSchema();
 $id = max(0, (int)($_GET['deck'] ?? $_POST['deck'] ?? 0));
 $deck = $id ? deckQuery('SELECT * FROM builder_decks WHERE id=? AND user_id=?', [$id, $userId])->fetch() : null;
 if (!$deck) { http_response_code(404); pageHeader('Quadro de relações'); echo '<p class="empty-state">Deck não encontrado na sua conta. <a href="/decks.php">Voltar aos decks</a></p>'; pageFooter(); exit; }
-$commander = $deck['commander_id'] ? deckQuery('SELECT * FROM cards WHERE id=?', [$deck['commander_id']])->fetch() : null;
+$fmt = deckFormatOf($deck);
+deckCurrentFormat($fmt);
+$hasLeader = deckFormatHasLeader($fmt);
+$commander = $hasLeader && $deck['commander_id'] ? deckQuery('SELECT * FROM cards WHERE id=?', [$deck['commander_id']])->fetch() : null;
+$signatureCard = $fmt['signature'] && $deck['signature_id'] ? deckQuery('SELECT * FROM cards WHERE id=?', [$deck['signature_id']])->fetch() : null;
+// Construídos não têm comandante: o quadro fica pronto com as cartas do deck.
+$boardReady = $commander || !$hasLeader;
 $items = deckQuery(deckOwnedSql() . "SELECT c.*, i.stage, i.quantity, i.role, COALESCE(o.owned,0) owned FROM builder_items i JOIN cards c ON c.id=i.card_id
     LEFT JOIN owned o ON o.logical_id=COALESCE(c.oracle_id,c.id) WHERE i.deck_id=? AND i.stage='deck' ORDER BY c.name", [$id])->fetchAll();
 
@@ -27,10 +33,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         if (!hash_equals($csrf, (string)($_POST['csrf'] ?? ''))) throw new RuntimeException('Sessão expirada. Recarregue a página.');
         $action = (string)($_POST['action'] ?? '');
         if (!in_array($action, ['spellbook', 'suggest'], true)) throw new RuntimeException('Ação inválida.');
-        if (!$commander) throw new RuntimeException($action === 'spellbook' ? 'Escolha a comandante antes de buscar combos.' : 'Escolha a comandante antes de pedir sugestões.');
+        if (!$boardReady) throw new RuntimeException($action === 'spellbook' ? 'Escolha a comandante antes de buscar combos.' : 'Escolha a comandante antes de pedir sugestões.');
         session_write_close();
         $result = $action === 'spellbook'
-            ? boardCombosPayload(deckSpellbookFindCombos($id, $commander, $items), $items, $commander)
+            ? boardCombosPayload(deckSpellbookFindCombos($id, $commander, array_merge($items, $signatureCard ? [$signatureCard + ['quantity' => 1]] : [])), $items, $commander)
             : ['suggestions' => boardSuggestions($id, $userId, $commander, $items)];
         echo json_encode(['ok' => true] + $result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
     } catch (Throwable $e) {
@@ -121,20 +127,21 @@ function boardBalance(array $graph, array $features): array
  * Cartas da coleção que ainda não estão na seleção e mais se ligariam ao deck (a mesma conta do "Encaixa no deck").
  * Cada sugestão traz as setas que ela teria com as cartas do quadro.
  */
-function boardSuggestions(int $deckId, int $userId, array $commander, array $items, int $limit = 14): array
+function boardSuggestions(int $deckId, int $userId, ?array $commander, array $items, int $limit = 14): array
 {
-    $identity = json_decode((string)$commander['color_identity'], true) ?: [];
+    // Sem comandante (construídos), valem as cores das cartas do deck; com o deck ainda sem cor, qualquer cor.
+    $identity = $commander ? (json_decode((string)$commander['color_identity'], true) ?: []) : (deckColorsFromItems($items) ?: ['W', 'U', 'B', 'R', 'G']);
     $taken = deckQuery('SELECT DISTINCT COALESCE(c.oracle_id,c.id) FROM builder_items i JOIN cards c ON c.id=i.card_id WHERE i.deck_id=?', [$deckId])->fetchAll(PDO::FETCH_COLUMN);
-    $taken[] = (string)($commander['oracle_id'] ?: $commander['id']);
+    if ($commander) $taken[] = (string)($commander['oracle_id'] ?: $commander['id']);
     $rows = deckQuery("SELECT * FROM (SELECT DISTINCT ON (COALESCE(c.oracle_id,c.id)) c.*, b.quantity owned_printing
         FROM builder_collection b JOIN cards c ON c.id=b.scryfall_id
-        WHERE b.user_id=? AND c.color_identity <@ ?::jsonb AND c.legalities->>'commander'='legal'
+        WHERE b.user_id=? AND c.color_identity <@ ?::jsonb AND " . deckFormatLegalSql(deckCurrentFormat()) . "
           AND COALESCE(c.raw->>'digital','false')='false' AND c.layout <> 'art_series'
           AND COALESCE(c.type_line,'') NOT ILIKE 'Basic Land%' AND COALESCE(c.oracle_id,c.id) <> ALL(?::uuid[])
         ORDER BY COALESCE(c.oracle_id,c.id), b.quantity DESC, (c.lang='en') DESC, c.released_at DESC NULLS LAST) s LIMIT 6000",
         [$userId, json_encode($identity), '{' . implode(',', $taken) . '}'])->fetchAll();
     if (!$rows) return [];
-    $selection = [(string)$commander['id'] => $commander + ['stage' => 'commander']];
+    $selection = $commander ? [(string)$commander['id'] => $commander + ['stage' => 'commander']] : [];
     foreach ($items as $item) $selection[(string)$item['id']] = $item;
     $outsiders = [];
     foreach ($rows as $row) $outsiders[(string)$row['id']] = $row;
@@ -161,13 +168,14 @@ $features = deckRelationFeatures();
 $nodes = [];
 $graphNodes = [];
 if ($commander) $graphNodes[(string)$commander['id']] = $commander + ['stage' => 'commander', 'quantity' => 1, 'owned' => 0];
+if ($signatureCard) $graphNodes[(string)$signatureCard['id']] = $signatureCard + ['stage' => 'deck', 'quantity' => 1, 'owned' => 0];
 foreach ($items as $item) $graphNodes[(string)$item['id']] = $item;
 $graph = $graphNodes ? deckRelationGraph($graphNodes, $commander) : ['edges' => [], 'tribe' => null, 'profiles' => []];
 $combos = ['edges' => [], 'combos' => []];
 $spellbook = deckSpellbookCached($id);
-if ($commander) {
+if ($boardReady) {
     $known = [];
-    foreach ((array)(deckCommanderInsights($commander)['combos'] ?? []) as $combo) $known[] = $combo + ['source' => 'EDHREC'];
+    if ($commander && $fmt['edhrec']) foreach ((array)(deckCommanderInsights($commander)['combos'] ?? []) as $combo) $known[] = $combo + ['source' => 'EDHREC'];
     foreach ((array)($spellbook['included'] ?? []) as $combo) $known[] = $combo;
     $combos = deckRelationComboEdges($graphNodes, $known);
 }
@@ -192,12 +200,12 @@ $boardData = [
 pageHeader('Quadro de relações · ' . $deck['name']);
 ?>
 <link rel="stylesheet" href="/assets/board.css?v=<?= h($assetVersion('board.css')) ?>">
-<?= deckSectionNav($id, 'board', (bool)$commander, 1 + array_sum(array_map(fn($row) => $row['stage']==='deck' ? (int)$row['quantity'] : 0, $items)) - ($commander ? 0 : 1)) ?>
+<?= deckSectionNav($id, 'board', (bool)$boardReady, ($commander ? 1 : 0) + ($signatureCard ? 1 : 0) + array_sum(array_map(fn($row) => $row['stage']==='deck' ? (int)$row['quantity'] : 0, $items)), $fmt) ?>
 <section class="board-hero">
     <h1>Quadro de relações <span><?= h($deck['name']) ?></span></h1>
     <p>Cada carta flutua junto do tema em que mais se relaciona. As linhas vão de quem <strong>fornece</strong> para quem <strong>aproveita</strong>; clique numa carta para ver os motivos. <?php if (count($nodes) >= 2): ?><span class="board-hero-count">São <?= count($nodes) ?> cartas diferentes, com a comandante; as candidatas ficam de fora.</span><?php endif; ?></p>
 </section>
-<?php if (!$commander): ?>
+<?php if (!$boardReady): ?>
 <p class="notice warning">Escolha a comandante do deck para montar o quadro. <a href="/decks.php?deck=<?= $id ?>&amp;choose=1">Escolher comandante</a></p>
 <?php elseif (count($nodes) < 2): ?>
 <p class="empty-state">O quadro mostra só as cartas aprovadas no deck. Aprove candidatas em <a href="/decks.php?deck=<?= $id ?>&amp;view=selection&amp;stage=candidate">Minha seleção</a> para ver as relações.</p>
@@ -219,7 +227,7 @@ pageHeader('Quadro de relações · ' . $deck['name']);
                 <label class="board-toggle" data-board-only="3d"><input type="checkbox" data-board-spin checked> Girar a constelação devagar</label>
             </div>
         </details>
-        <button type="button" class="board-suggest" data-board-suggest aria-pressed="false" title="Cartas da sua coleção, na identidade da comandante, que mais se ligariam a este deck">Sugestões da coleção</button>
+        <button type="button" class="board-suggest" data-board-suggest aria-pressed="false" title="Cartas da sua coleção, <?= $commander ? 'na identidade da comandante' : 'nas cores do deck' ?> e legais no <?= h($fmt['name']) ?>, que mais se ligariam a este deck">Sugestões da coleção</button>
         <div class="board-zoom">
             <button type="button" data-board-zoom="-1" aria-label="Afastar">−</button>
             <button type="button" data-board-zoom="0">Enquadrar</button>

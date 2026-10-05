@@ -601,18 +601,22 @@ function deckSpellbookVariant(array $variant): array
  * Consulta o "Find My Combos" do Commander Spellbook para a lista (comandante + cartas) e guarda o resultado por deck.
  * Devolve ['included' => [...], 'almost' => [...], 'synced_at' => string].
  */
-function deckSpellbookFindCombos(int $deckId, array $commander, array $cards): array
+function deckSpellbookFindCombos(int $deckId, ?array $commander, array $cards): array
 {
     $main = [];
     foreach ($cards as $card) $main[] = ['card' => (string)$card['name'], 'quantity' => max(1, (int)($card['quantity'] ?? 1))];
-    [$status, $data] = deckHttpPostJson(deckSpellbookBase() . '/find-my-combos', ['commanders' => [['card' => (string)$commander['name'], 'quantity' => 1]], 'main' => $main]);
+    [$status, $data] = deckHttpPostJson(deckSpellbookBase() . '/find-my-combos', ['commanders' => $commander ? [['card' => (string)$commander['name'], 'quantity' => 1]] : [], 'main' => $main]);
     if ($status === 429) throw new RuntimeException('O Commander Spellbook pediu para esperar um pouco antes da próxima consulta. Tente de novo em 1 minuto.');
     if ($data === null || $status >= 400) throw new RuntimeException('O Commander Spellbook não respondeu agora' . ($status ? ' (HTTP ' . $status . ')' : '') . '. Os combos do EDHREC continuam no quadro.');
     $results = is_array($data['results'] ?? null) ? $data['results'] : $data;
-    $pick = static function (array $keys) use ($results): array {
+    // O Spellbook marca em quais formatos cada combo é legal; fora do Commander, só ficam os do formato do deck.
+    $legality = function_exists('deckCurrentFormat') ? (string)deckCurrentFormat()['legality'] : 'commander';
+    $legality = ['standardbrawl' => 'standardBrawl', 'paupercommander' => 'pauperCommander', 'duel' => 'commander'][$legality] ?? $legality;
+    $pick = static function (array $keys) use ($results, $legality): array {
         foreach ($keys as $key) {
             if (!isset($results[$key]) || !is_array($results[$key])) continue;
-            return array_values(array_filter(array_map(fn($v) => is_array($v) ? deckSpellbookVariant($v) : null, $results[$key]), fn($v) => $v && $v['cards']));
+            $variants = array_filter($results[$key], fn($v) => is_array($v) && (!isset($v['legalities'][$legality]) || $v['legalities'][$legality]));
+            return array_values(array_filter(array_map(fn($v) => deckSpellbookVariant($v), $variants), fn($v) => $v && $v['cards']));
         }
         return [];
     };

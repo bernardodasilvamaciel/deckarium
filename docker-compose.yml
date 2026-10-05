@@ -48,11 +48,41 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@deckarium.local}
       ADMIN_NAME: ${ADMIN_NAME:-Administrador}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # WebSocket da mesa compartilhada: o Apache repassa /realtime/ para o serviço abaixo.
+      REALTIME_UPSTREAM: realtime:8090
     ports:
       - "8080:80"
     volumes:
       - ./app:/var/www/html
       - ./storage:/var/www/storage
+
+  # Tempo real da Mesa de teste compartilhada (Node.js + WebSocket). Em desenvolvimento o código da pasta
+  # realtime/ é montado no container: depois de mudar, "docker compose restart realtime".
+  realtime:
+    build:
+      context: ./realtime
+    container_name: mtg-realtime
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-mtg}
+      DB_USER: ${POSTGRES_USER:-mtg}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-mtg_local_change_me}
+      REALTIME_HOST: 0.0.0.0
+      REALTIME_PORT: 8090
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - ./realtime/server.js:/app/server.js:ro
+      - ./realtime/rooms.js:/app/rooms.js:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8090/realtime/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
 
 volumes:
   postgres_data:

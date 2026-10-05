@@ -23,7 +23,7 @@ $needExploreUrl = static fn(string $role): string => '?' . http_build_query(['de
         <div>
             <span class="guide-kicker">O que o deck precisa</span>
             <h2><?= $needMissing ? count($needMissing) . (count($needMissing) === 1 ? ' função abaixo da meta' : ' funções abaixo da meta') : 'Todas as metas de função atingidas' ?></h2>
-            <p>Contagem das cartas já aprovadas no deck contra as metas calculadas para a comandante (<?= (int)$finalCount ?>/100 cartas). As sugestões respeitam a identidade da comandante, deixam de fora o que já está na seleção e vêm primeiro pela sinergia no EDHREC.</p>
+            <p><?php if($commander): ?>Contagem das cartas já aprovadas no deck contra as metas calculadas para <?= $fmt['leader']==='oathbreaker'?'o oathbreaker':'a comandante' ?> (<?= (int)$finalCount ?>/<?= deckFormatSizeLabel($fmt) ?> cartas). As sugestões respeitam a identidade de cor, são legais no <?= h($fmt['name']) ?>, deixam de fora o que já está na seleção e vêm primeiro pela <?= $fmt['edhrec'] ? 'sinergia no EDHREC' : 'popularidade' ?>.<?php else: ?>Contagem das cartas já aprovadas no deck contra as metas de um deck de <?= h($fmt['name']) ?> (<?= (int)$finalCount ?>/<?= deckFormatSizeLabel($fmt) ?> cartas)<?= ($needConfig['dynamic']['source'] ?? '') === 'meta' ? ', com terrenos e curva dos decks do meta parecidos com o seu' : '' ?>. As sugestões são legais no formato, ficam nas cores do deck e vêm primeiro pelas listas do MTGO parecidas com a sua.<?php endif; ?></p>
         </div>
         <a class="secondary-link" href="?deck=<?= (int)$id ?>&view=selection&stage=candidate#fit-panel">Ajustar metas</a>
     </div>
@@ -58,7 +58,7 @@ $needExploreUrl = static fn(string $role): string => '?' . http_build_query(['de
                     <?php if ($card['need_game_changer']): ?><b class="gc-badge deck-need-gc" title="Game Changer">GC</b><?php endif; ?>
                 </a>
                 <strong class="deck-need-name"><?= h($card['name']) ?></strong>
-                <small class="deck-need-meta"><?php if ($card['need_synergy'] !== null): ?><span class="is-synergy">Sinergia <?= sprintf('%+.0f', $card['need_synergy'] * 100) ?>%</span><?php elseif ($card['edhrec_rank_cached']): ?><span>#<?= number_format((int)$card['edhrec_rank_cached'], 0, ',', '.') ?> no EDHREC</span><?php endif; ?><span class="<?= $card['need_owned'] ? 'is-owned' : '' ?>"><?= $card['need_owned'] ? 'Na coleção' : 'Fora da coleção' ?></span></small>
+                <small class="deck-need-meta"><?php if ($card['need_synergy'] !== null): ?><span class="is-synergy"><?= $commander ? 'Sinergia '.sprintf('%+.0f', $card['need_synergy'] * 100).'%' : 'Meta '.max(1,(int)round($card['need_synergy'] * 100)).'%' ?></span><?php elseif ($card['edhrec_rank_cached']): ?><span>#<?= number_format((int)$card['edhrec_rank_cached'], 0, ',', '.') ?> no EDHREC</span><?php endif; ?><span class="<?= $card['need_owned'] ? 'is-owned' : '' ?>"><?= $card['need_owned'] ? 'Na coleção' : 'Fora da coleção' ?></span></small>
                 <form method="post"><?php $tokenFields('add', $card['id']); ?><button class="secondary-link">Adicionar às candidatas</button></form>
             </div>
             <?php endforeach; ?>

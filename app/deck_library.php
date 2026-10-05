@@ -4,8 +4,31 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/deck_insights.php';
 require_once __DIR__ . '/deck_scoring.php';
 require_once __DIR__ . '/deck_relations.php';
+require_once __DIR__ . '/deck_formats.php';
+require_once __DIR__ . '/catalog_cache.php';
+require_once __DIR__ . '/deck_meta.php';
 
+/**
+ * Esquema dos decks. Roda uma vez por versão (marcada em app_migrations): ALTER TABLE a cada requisição trava as
+ * tabelas e, com a mesa compartilhada consultando o servidor sem parar, chegava a causar deadlocks.
+ * Mudou o esquema? Suba a versão em DECK_SCHEMA_VERSION.
+ */
+const DECK_SCHEMA_VERSION = 'deck_schema_v2';
 function deckSchema(): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try { if (db()->query("SELECT 1 FROM app_migrations WHERE name='" . DECK_SCHEMA_VERSION . "'")->fetchColumn()) return; } catch (Throwable) {}
+    db()->exec("SELECT pg_advisory_lock(hashtext('deckarium-deck-schema'))");
+    try {
+        deckSchemaApply();
+        db()->exec("CREATE TABLE IF NOT EXISTS app_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());
+            INSERT INTO app_migrations(name) VALUES ('" . DECK_SCHEMA_VERSION . "') ON CONFLICT DO NOTHING");
+    } finally {
+        db()->exec("SELECT pg_advisory_unlock(hashtext('deckarium-deck-schema'))");
+    }
+}
+function deckSchemaApply(): void {
     db()->exec("ALTER TABLE cards ADD COLUMN IF NOT EXISTS edhrec_rank_cached int GENERATED ALWAYS AS (
             CASE WHEN COALESCE(raw->>'edhrec_rank','') ~ '^[0-9]+$' THEN (raw->>'edhrec_rank')::int END
         ) STORED;
@@ -59,6 +82,14 @@ function deckSchema(): void {
         CREATE INDEX IF NOT EXISTS cards_color_identity_gin_idx ON cards USING gin(color_identity);");
     // "Em avaliação" foi unificada com as candidatas.
     db()->exec("UPDATE builder_items SET stage='candidate' WHERE stage='review'");
+    // Formatos além do Commander: formato do deck, feitiço de assinatura (Oathbreaker) e sideboard (construídos).
+    db()->exec("ALTER TABLE builder_decks ADD COLUMN IF NOT EXISTS format text NOT NULL DEFAULT 'commander';
+        ALTER TABLE builder_decks ADD COLUMN IF NOT EXISTS signature_id uuid NULL REFERENCES cards(id)");
+    $stageCheck = (string)db()->query("SELECT COALESCE((SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='builder_items_stage_check' AND conrelid='builder_items'::regclass),'')")->fetchColumn();
+    if (!str_contains($stageCheck, 'sideboard')) {
+        db()->exec("ALTER TABLE builder_items DROP CONSTRAINT IF EXISTS builder_items_stage_check;
+            ALTER TABLE builder_items ADD CONSTRAINT builder_items_stage_check CHECK (stage IN ('candidate','review','deck','sideboard'))");
+    }
 }
 
 function deckCheapestPriceSql(string $alias='c'): string {
@@ -78,56 +109,80 @@ function deckFindPrinting(string $name): ?array {
 }
 
 /**
- * Importa uma lista como deck finalizado. A comandante pode vir no campo próprio ($commanderName)
- * ou, como no Moxfield, sob o cabeçalho "Commander" da lista; o campo próprio tem prioridade.
+ * Importa uma lista como deck. O formato define as regras: nos formatos com líder, a comandante vem no campo próprio
+ * ($commanderName) ou, como no Moxfield, sob o cabeçalho "Commander" da lista (o campo tem prioridade) e cada carta
+ * entra uma vez; nos construídos, as cópias são mantidas (até o limite do formato) e o que vier depois de "Sideboard"
+ * vai para o sideboard. "Maybeboard" vira candidata. No Oathbreaker, "Signature Spell" marca o feitiço de assinatura.
  */
-function deckImportList(string $name, string $text, string $commanderName = ''): array {
+function deckImportList(string $name, string $text, string $commanderName = '', string $formatKey = DECK_DEFAULT_FORMAT): array {
     $name=trim($name); $text=trim($text); $commanderName=trim($commanderName);
+    $format=deckFormatInfo($formatKey);
+    $hasLeader=deckFormatHasLeader($format);
     if ($name==='' || strlen($name)>160) throw new RuntimeException('Informe um nome de até 160 caracteres.');
     if ($text==='' || strlen($text)>200000) throw new RuntimeException('Cole uma lista de até 200.000 caracteres.');
+    $leaderLabel=mb_strtolower((string)($format['leader_label'] ?? 'comandante'));
     $chosenCommander=null;
-    if ($commanderName!=='') {
+    if ($hasLeader && $commanderName!=='') {
         // Aceita "Nome", "1 Nome" ou "1 Nome (SET) 123", como numa linha exportada.
         $commanderName=preg_replace('/^\d+\s+(?:x\s+)?/iu','',$commanderName) ?? $commanderName;
         $commanderName=trim(preg_replace('/\s+\([A-Z0-9]{2,8}\)\s+[^\s]+(?:\s+\*F\*)?$/i','',$commanderName) ?? $commanderName);
         $chosenCommander=deckFindPrinting($commanderName);
-        if(!$chosenCommander) throw new RuntimeException('Comandante “'.$commanderName.'” não encontrada no catálogo local. Confira o nome em inglês ou em português.');
-        if(!deckQuery('SELECT 1 FROM cards c WHERE c.id=? AND '.deckCommanderSql(),[$chosenCommander['id']])->fetchColumn()) throw new RuntimeException('“'.$chosenCommander['name'].'” não pode ser comandante: precisa ser uma criatura lendária ou dizer que pode ser sua comandante.');
+        if(!$chosenCommander) throw new RuntimeException(ucfirst($leaderLabel).' “'.$commanderName.'” não encontrada no catálogo local. Confira o nome em inglês ou em português.');
+        if(!deckQuery('SELECT 1 FROM cards c WHERE c.id=? AND '.deckLeaderSql($format),[$chosenCommander['id']])->fetchColumn()) throw new RuntimeException('“'.$chosenCommander['name'].'” não pode ser '.$leaderLabel.' em '.$format['name'].'. '.$format['leader_rule']);
     }
     $entries=[]; $section='deck'; $unmatched=[];
     foreach (preg_split('/\R/u',preg_replace('/^\xEF\xBB\xBF/','',$text)) ?: [] as $line) {
         $line=trim($line); if($line==='' || str_starts_with($line,'//')) continue;
         $heading=strtolower(rtrim($line,':'));
-        if(in_array($heading,['commander','commanders','comandante'],true)){ $section='commander'; continue; }
-        if(in_array($heading,['deck','mainboard','decklist','lista','sideboard','maybeboard'],true)){ $section='deck'; continue; }
+        if(in_array($heading,['commander','commanders','comandante','oathbreaker'],true)){ $section='commander'; continue; }
+        if(in_array($heading,['signature spell','signature','feitiço de assinatura'],true)){ $section='signature'; continue; }
+        if(in_array($heading,['sideboard','side','companion'],true)){ $section=$format['sideboard']?'sideboard':'candidate'; continue; }
+        if(in_array($heading,['maybeboard','considering','candidatas'],true)){ $section='candidate'; continue; }
+        if(in_array($heading,['deck','mainboard','main','decklist','lista'],true)){ $section='deck'; continue; }
         if(!preg_match('/^(\d+)\s+(?:x\s+)?(.+)$/iu',$line,$m)) continue;
         $qty=max(1,min(1000,(int)$m[1])); $cardName=trim(preg_replace('/\s+\([A-Z0-9]{2,8}\)\s+[^\s]+(?:\s+\*F\*)?$/i','',$m[2]) ?? $m[2]);
         $card=deckFindPrinting($cardName);
         if(!$card){$unmatched[]=$cardName;continue;}
         $entries[]=['section'=>$section,'quantity'=>$qty,'card'=>$card];
-        if($section==='commander') $section='deck';
+        if(in_array($section,['commander','signature'],true)) $section='deck';
     }
     if(!$entries && !$chosenCommander) throw new RuntimeException('Nenhuma carta da lista foi encontrada no catálogo local. Use o formato “1 Nome da carta”.');
     $chosenLogical=$chosenCommander ? (string)($chosenCommander['oracle_id'] ?: $chosenCommander['id']) : null;
+    $trimmed=[];
     db()->beginTransaction();
     try {
         if(deckOwnerId()<1) throw new RuntimeException('Entre na sua conta para importar um deck.');
-        $deckId=(int)deckQuery("INSERT INTO builder_decks(user_id,name,status) VALUES (?,?,'ready') RETURNING id",[deckOwnerId(),$name])->fetchColumn();
-        $commander=$chosenCommander['id'] ?? null; $logical=[];
+        $deckId=(int)deckQuery("INSERT INTO builder_decks(user_id,name,status,format) VALUES (?,?,'planning',?) RETURNING id",[deckOwnerId(),$name,$format['key']])->fetchColumn();
+        $commander=$chosenCommander['id'] ?? null; $signature=null; $logical=[];
         foreach($entries as $entry){
             $card=$entry['card']; $logicalId=(string)($card['oracle_id'] ?: $card['id']);
             // A comandante informada no campo próprio não entra de novo como carta do deck.
             if($logicalId===$chosenLogical) continue;
-            if(!str_contains((string)$card['type_line'],'Basic')) $entry['quantity']=1;
-            if($entry['section']==='commander' && $commander===null && deckQuery('SELECT 1 FROM cards c WHERE c.id=? AND '.deckCommanderSql(),[$card['id']])->fetchColumn()){$commander=$card['id'];continue;}
-            if(isset($logical[$logicalId])){$logical[$logicalId]['quantity']=min(1000,$logical[$logicalId]['quantity']+$entry['quantity']);continue;}
-            $logical[$logicalId]=['card_id'=>$card['id'],'quantity'=>$entry['quantity']];
+            $stage=$entry['section'];
+            if($hasLeader && in_array($stage,['commander','signature'],true)){
+                if($stage==='commander' && $commander===null && deckQuery('SELECT 1 FROM cards c WHERE c.id=? AND '.deckLeaderSql($format),[$card['id']])->fetchColumn()){$commander=$card['id'];continue;}
+                if($stage==='signature' && $format['signature'] && $signature===null && deckQuery('SELECT 1 FROM cards c WHERE c.id=? AND '.deckSignatureSql($format),[$card['id']])->fetchColumn()){$signature=$card['id'];continue;}
+                $stage='deck';
+            }
+            if(!$hasLeader && in_array($stage,['commander','signature'],true)) $stage='deck';
+            $limit=deckCopyLimit($card,$format);
+            $key=$stage.'|'.$logicalId;
+            $quantity=$entry['quantity']+($logical[$key]['quantity'] ?? 0);
+            if($limit!==null && $quantity>$limit && $stage!=='candidate'){ $trimmed[$card['name']]=$limit; $quantity=$limit; }
+            $logical[$key]=['card_id'=>$logical[$key]['card_id'] ?? $card['id'],'quantity'=>min(1000,$quantity),'stage'=>$stage,'logical'=>$logicalId];
         }
         if($commander) deckQuery('UPDATE builder_decks SET commander_id=? WHERE id=?',[$commander,$deckId]);
-        foreach($logical as $entry) deckQuery("INSERT INTO builder_items(deck_id,card_id,stage,quantity) VALUES (?,?,'deck',?)",[$deckId,$entry['card_id'],$entry['quantity']]);
+        if($signature) deckQuery('UPDATE builder_decks SET signature_id=? WHERE id=?',[$signature,$deckId]);
+        // Uma linha por carta: se a mesma carta aparece no deck e no sideboard, o deck fica com ela.
+        $saved=[];
+        foreach(['deck','sideboard','candidate'] as $stage) foreach($logical as $entry){
+            if($entry['stage']!==$stage || isset($saved[$entry['logical']])) continue;
+            $saved[$entry['logical']]=true;
+            deckQuery('INSERT INTO builder_items(deck_id,card_id,stage,quantity) VALUES (?,?,?,?) ON CONFLICT (deck_id,card_id) DO NOTHING',[$deckId,$entry['card_id'],$stage,$entry['quantity']]);
+        }
         db()->commit();
     } catch(Throwable $e){db()->rollBack();throw $e;}
-    return ['id'=>$deckId,'matched'=>count($entries),'unmatched'=>array_values(array_unique($unmatched)),'commander'=>$commander];
+    return ['id'=>$deckId,'matched'=>count($entries),'unmatched'=>array_values(array_unique($unmatched)),'commander'=>$commander,'trimmed'=>$trimmed,'format'=>$format];
 }
 
 function deckEdhrecSlug(string $name): string {
@@ -304,8 +359,8 @@ function deckOwnedSql(?int $excludeDeckId=null): string {
     if($excludeDeckId!==null){
         $deckId=max(0,$excludeDeckId);
         $sql.=", used AS (SELECT logical_id,SUM(quantity)::int used FROM (
-            SELECT COALESCE(c.oracle_id,c.id) logical_id,SUM(i.quantity)::int quantity FROM builder_items i JOIN builder_decks ud ON ud.id=i.deck_id AND ud.user_id={$userId} JOIN cards c ON c.id=i.card_id WHERE i.stage='deck' AND i.deck_id<>{$deckId} GROUP BY COALESCE(c.oracle_id,c.id)
-            UNION ALL SELECT COALESCE(c.oracle_id,c.id) logical_id,COUNT(*)::int quantity FROM builder_decks d JOIN cards c ON c.id=d.commander_id WHERE d.id<>{$deckId} AND d.user_id={$userId} GROUP BY COALESCE(c.oracle_id,c.id)
+            SELECT COALESCE(c.oracle_id,c.id) logical_id,SUM(i.quantity)::int quantity FROM builder_items i JOIN builder_decks ud ON ud.id=i.deck_id AND ud.user_id={$userId} JOIN cards c ON c.id=i.card_id WHERE i.stage IN ('deck','sideboard') AND i.deck_id<>{$deckId} GROUP BY COALESCE(c.oracle_id,c.id)
+            UNION ALL SELECT COALESCE(c.oracle_id,c.id) logical_id,COUNT(*)::int quantity FROM builder_decks d JOIN cards c ON c.id IN (d.commander_id,d.signature_id) WHERE d.id<>{$deckId} AND d.user_id={$userId} GROUP BY COALESCE(c.oracle_id,c.id)
         ) reservations GROUP BY logical_id)";
     }
     return $sql.' ';
@@ -320,8 +375,8 @@ function deckUsageElsewhere(int $deckId, array $logicalIds): array {
     if(!$logicalIds) return [];
     $userId=deckOwnerId();
     $rows=deckQuery("SELECT x.logical_id::text logical_id,d.id,d.name,SUM(x.quantity)::int quantity FROM (
-            SELECT i.deck_id,COALESCE(c.oracle_id,c.id) logical_id,i.quantity FROM builder_items i JOIN cards c ON c.id=i.card_id WHERE i.stage='deck'
-            UNION ALL SELECT d.id,COALESCE(c.oracle_id,c.id),1 FROM builder_decks d JOIN cards c ON c.id=d.commander_id
+            SELECT i.deck_id,COALESCE(c.oracle_id,c.id) logical_id,i.quantity FROM builder_items i JOIN cards c ON c.id=i.card_id WHERE i.stage IN ('deck','sideboard')
+            UNION ALL SELECT d.id,COALESCE(c.oracle_id,c.id),1 FROM builder_decks d JOIN cards c ON c.id IN (d.commander_id,d.signature_id)
         ) x JOIN builder_decks d ON d.id=x.deck_id
         WHERE d.user_id=? AND d.id<>? AND x.logical_id::text = ANY(?::text[])
         GROUP BY x.logical_id,d.id,d.name ORDER BY d.name",[$userId,$deckId,'{'.implode(',',$logicalIds).'}'])->fetchAll();
@@ -337,8 +392,8 @@ function deckUsageElsewhere(int $deckId, array $logicalIds): array {
 function deckUsageSql(?int $userId = null): string {
     $userId=$userId ?? deckOwnerId();
     return "(SELECT x.logical_id,SUM(x.quantity)::int used,COUNT(DISTINCT x.deck_id)::int decks FROM (
-            SELECT i.deck_id,COALESCE(c.oracle_id,c.id) logical_id,i.quantity FROM builder_items i JOIN builder_decks d ON d.id=i.deck_id AND d.user_id={$userId} JOIN cards c ON c.id=i.card_id WHERE i.stage='deck'
-            UNION ALL SELECT d.id,COALESCE(c.oracle_id,c.id),1 FROM builder_decks d JOIN cards c ON c.id=d.commander_id WHERE d.user_id={$userId}
+            SELECT i.deck_id,COALESCE(c.oracle_id,c.id) logical_id,i.quantity FROM builder_items i JOIN builder_decks d ON d.id=i.deck_id AND d.user_id={$userId} JOIN cards c ON c.id=i.card_id WHERE i.stage IN ('deck','sideboard')
+            UNION ALL SELECT d.id,COALESCE(c.oracle_id,c.id),1 FROM builder_decks d JOIN cards c ON c.id IN (d.commander_id,d.signature_id) WHERE d.user_id={$userId}
         ) x GROUP BY x.logical_id)";
 }
 function deckCollectionPrintingSql(): string {
@@ -542,21 +597,33 @@ function deckHighlight(?string $text, array $terms): string {
 function deckStageLabel(?string $stage): string {
     return ['candidate'=>'Candidatas','review'=>'Candidatas','deck'=>'No deck'][$stage ?? ''] ?? 'Já selecionada';
 }
-function deckCommanderSql(): string {
-    return 'c.commander_eligible';
+/** Cartas que podem liderar o deck no formato atual (comandante, oathbreaker). */
+function deckCommanderSql(?array $format = null): string {
+    return deckLeaderSql($format ?? deckCurrentFormat());
 }
 
-/** Abas das subpáginas de um deck (decks.php e deck_board.php). */
-function deckSectionNav(int $deckId, string $current, bool $hasCommander, int $finalCount): string {
+/**
+ * Abas das subpáginas de um deck (decks.php, deck_board.php e deck_playtest.php).
+ * $hasCommander: o deck já tem o que as outras abas precisam (a comandante nos formatos com líder; sempre nos construídos).
+ */
+function deckSectionNav(int $deckId, string $current, bool $hasCommander, int $finalCount, ?array $format = null): string {
+    $format ??= deckCurrentFormat();
     $tabs = $hasCommander
-        ? ['overview'=>'Visão geral','guide'=>'Guia da comandante','needs'=>'O que falta','explore'=>'Explorar','selection'=>'Minha seleção','board'=>'Quadro de relações','playtest'=>'Mesa de teste']
-        : ['explore'=>'Escolher comandante','selection'=>'Minha seleção'];
-    $html = '<nav class="tabs deck-module-nav" aria-label="Seções do deck"><a href="/decks.php">← Biblioteca</a>';
+        ? ['overview'=>'Visão geral','guide'=>deckGuideLabel($format),'needs'=>'O que falta','explore'=>'Explorar','selection'=>'Minha seleção','board'=>'Quadro de relações','playtest'=>'Mesa de teste']
+        : ['explore'=>'Escolher '.mb_strtolower((string)($format['leader_label'] ?? 'comandante')),'selection'=>'Minha seleção'];
+    $html = '<nav class="tabs deck-module-nav" aria-label="Seções do deck"><a href="/decks.php">← Biblioteca</a><span class="deck-format-tag" title="'.h($format['summary']).'">'.h($format['name']).'</span>';
     foreach ($tabs as $key => $label) {
         $href = match ($key) { 'board' => '/deck_board.php?deck='.$deckId, 'playtest' => '/deck_playtest.php?deck='.$deckId, default => '/decks.php?deck='.$deckId.'&amp;view='.$key };
-        $badge = $key === 'selection' ? ' <span class="deck-tab-badge">'.$finalCount.'/100</span>' : '';
+        $badge = $key === 'selection' ? ' <span class="deck-tab-badge">'.$finalCount.'/'.deckFormatSizeLabel($format).'</span>' : '';
         $html .= '<a href="'.$href.'"'.($current === $key ? ' aria-current="page"' : '').'>'.h($label).$badge.'</a>';
     }
     return $html.'</nav>';
+}
+
+/** Nome da aba de ajuda do formato: o guia da comandante (EDHREC) ou o meta do formato (MTGO). */
+function deckGuideLabel(array $format): string {
+    if (!deckFormatHasLeader($format)) return 'Meta do formato';
+    if ($format['leader'] === 'oathbreaker') return 'Guia do oathbreaker';
+    return 'Guia da comandante';
 }
 

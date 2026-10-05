@@ -38,6 +38,8 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@deckarium.local}
       ADMIN_NAME: ${ADMIN_NAME:-Administrador}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # WebSocket da mesa compartilhada: o Apache repassa /realtime/ para o serviço realtime.
+      REALTIME_UPSTREAM: 127.0.0.1:${REALTIME_PORT:-8090}
     volumes:
       # Bulk do Scryfall e imagens das cartas (~10 GB), em /opt.
       - ${DECKARIUM_DATA_DIR:-/opt/apps/deckarium/data}/storage:/var/www/storage
@@ -47,6 +49,31 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
+
+  # Tempo real da Mesa de teste compartilhada (Node.js + WebSocket em /realtime/mesa).
+  # Escuta só em 127.0.0.1: chega pelo Apache (/realtime/) ou direto pelo cloudflared.
+  realtime:
+    build:
+      context: ./realtime
+    image: deckarium-realtime:latest
+    container_name: deckarium-realtime
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      REALTIME_HOST: 127.0.0.1
+      REALTIME_PORT: ${REALTIME_PORT:-8090}
+      DB_HOST: ${DB_HOST:-127.0.0.1}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${POSTGRES_DB:?defina POSTGRES_DB no .env de deploy}
+      DB_USER: ${POSTGRES_USER:?defina POSTGRES_USER no .env de deploy}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env de deploy}
+      TZ: ${TZ:-America/Sao_Paulo}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${REALTIME_PORT:-8090}/realtime/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
 
   # Aplica database/init.sql e performance.sql no PostgreSQL do host (scripts idempotentes).
   # Não sobe com "up"; o deploy roda: docker compose run --rm migrate

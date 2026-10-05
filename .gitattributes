@@ -1,0 +1,2 @@
+# Scripts que rodam dentro dos containers Linux: sempre LF, mesmo com core.autocrlf=true no Windows.
+*.sh text eol=lf

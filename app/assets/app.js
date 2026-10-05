@@ -1190,3 +1190,45 @@ document.querySelectorAll('[data-profile-editor]').forEach(editor => {
   const count = editor.querySelector('[data-bio-count]');
   bio?.addEventListener('input', () => { if (count) count.textContent = String(bio.value.length); });
 });
+
+/* Formatos de deck: o resumo embaixo do seletor e o campo da comandante só nos formatos que têm uma. */
+(() => {
+  document.querySelectorAll('[data-format-select]').forEach((select) => {
+    const form = select.form;
+    const sync = () => {
+      const option = select.selectedOptions[0];
+      const summary = form?.querySelector('[data-format-summary]');
+      if (summary && option) summary.textContent = option.dataset.summary || '';
+      const leader = form?.querySelector('[data-leader-field]');
+      if (leader) leader.hidden = option?.parentElement?.label?.startsWith('Construído') ?? false;
+    };
+    select.addEventListener('change', sync);
+    sync();
+  });
+
+  // Listas do meta: a carta aparece ao passar o mouse no nome.
+  const lists = document.querySelectorAll('.meta-decklist');
+  if (!lists.length) return;
+  const preview = document.createElement('img');
+  preview.className = 'selection-text-preview';
+  preview.alt = '';
+  preview.hidden = true;
+  document.body.append(preview);
+  const place = (event) => {
+    const margin = 16; const width = preview.offsetWidth || 244; const height = preview.offsetHeight || 340;
+    const left = event.clientX + margin + width > window.innerWidth ? event.clientX - margin - width : event.clientX + margin;
+    const top = Math.min(Math.max(margin, event.clientY - height / 2), window.innerHeight - height - margin);
+    preview.style.transform = `translate(${Math.max(margin, left)}px, ${Math.max(margin, top)}px)`;
+  };
+  lists.forEach((list) => {
+    list.addEventListener('pointerover', (event) => {
+      if (event.pointerType !== 'mouse') return;
+      const row = event.target.closest('li[data-preview]');
+      if (!row) return;
+      preview.src = row.dataset.preview; preview.hidden = false; place(event);
+    });
+    list.addEventListener('pointermove', (event) => { if (!preview.hidden) place(event); });
+    list.addEventListener('pointerout', (event) => { if (!event.relatedTarget?.closest?.('li[data-preview]')) preview.hidden = true; });
+  });
+  window.addEventListener('scroll', () => { preview.hidden = true; }, { passive: true });
+})();

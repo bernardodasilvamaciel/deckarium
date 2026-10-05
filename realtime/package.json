@@ -1,0 +1,19 @@
+{
+  "name": "deckarium-realtime",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WebSocket da Mesa de teste compartilhada do Deckarium (até 4 jogadores por mesa).",
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js && node --check rooms.js"
+  },
+  "dependencies": {
+    "pg": "^8.13.1",
+    "ws": "^8.18.0"
+  }
+}

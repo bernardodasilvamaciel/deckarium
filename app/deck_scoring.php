@@ -46,15 +46,35 @@ function deckScorePresets(): array
     ];
 }
 
+/**
+ * Metas e curva de partida do formato: Commander (99 + comandante), os de 60 com comandante (Standard Brawl, Oathbreaker)
+ * e os construídos de 60 (mais interação barata e uma curva baixa; ramp quase não entra).
+ */
+function deckFormatBaseTargets(?array $format = null): array
+{
+    $format ??= deckCurrentFormat();
+    if (deckFormatHasLeader($format) && (int)$format['size'] >= 100) {
+        // Base comum para Commander: ~37 terrenos, 10 ramp, 10 compra, 8 remoções, 3 wipes.
+        return ['targets' => ['lands' => 37, 'ramp' => 10, 'draw' => 10, 'removal' => 8, 'wipe' => 3, 'protection' => 3, 'recursion' => 2, 'tutor' => 2],
+            'curve' => ['1' => 8, '2' => 14, '3' => 14, '4' => 10, '5' => 6, '6' => 4, '7' => 3]];
+    }
+    if (deckFormatHasLeader($format)) {
+        return ['targets' => ['lands' => 24, 'ramp' => 4, 'draw' => 5, 'removal' => 6, 'wipe' => 2, 'protection' => 2, 'recursion' => 1, 'tutor' => 1],
+            'curve' => ['1' => 5, '2' => 9, '3' => 8, '4' => 6, '5' => 3, '6' => 2, '7' => 1]];
+    }
+    return ['targets' => ['lands' => 24, 'ramp' => 2, 'draw' => 4, 'removal' => 8, 'wipe' => 1, 'protection' => 1, 'recursion' => 1, 'tutor' => 0],
+        'curve' => ['1' => 8, '2' => 11, '3' => 8, '4' => 5, '5' => 2, '6' => 1, '7' => 1]];
+}
+
 function deckScoreDefaultConfig(): array
 {
     $preset = deckScorePresets()['balanced'];
+    $base = deckFormatBaseTargets();
     return [
         'preset' => 'balanced',
         'weights' => $preset['weights'],
-        // Base comum para Commander: ~37 terrenos, 10 ramp, 10 compra, 8 remoções, 3 wipes.
-        'targets' => ['lands' => 37, 'ramp' => 10, 'draw' => 10, 'removal' => 8, 'wipe' => 3, 'protection' => 3, 'recursion' => 2, 'tutor' => 2],
-        'curve' => ['1' => 8, '2' => 14, '3' => 14, '4' => 10, '5' => 6, '6' => 4, '7' => 3],
+        'targets' => $base['targets'],
+        'curve' => $base['curve'],
         'bracket' => $preset['bracket'],
         'max_price' => 0,
         'thresholds' => ['advance' => 70, 'review' => 45],
@@ -93,7 +113,7 @@ function deckScoreConfig(mixed $raw): array
     $mode = (string)($raw['targets_mode'] ?? '');
     if (!in_array($mode, ['auto', 'manual'], true)) $mode = ($config['targets'] == $defaults['targets'] && $config['curve'] == $defaults['curve']) ? 'auto' : 'manual';
     $config['targets_mode'] = $mode;
-    if (isset($raw['land_fill']['total']) && is_numeric($raw['land_fill']['total'])) $config['land_fill']['total'] = max(20, min(60, (int)$raw['land_fill']['total']));
+    if (isset($raw['land_fill']['total']) && is_numeric($raw['land_fill']['total'])) $config['land_fill']['total'] = max(10, min(60, (int)$raw['land_fill']['total']));
     $config['land_fill']['buy'] = !empty($raw['land_fill']['buy']);
     if (isset($raw['land_fill']['basic_share']) && is_numeric($raw['land_fill']['basic_share'])) $config['land_fill']['basic_share'] = max(0.0, min(1.0, (float)$raw['land_fill']['basic_share']));
     return $config;
@@ -161,16 +181,66 @@ function deckDynamicTargets(array $commander): array
         $notes['curve'] = 'Curva média das listas desta comandante no EDHREC.';
         $source = 'edhrec';
     }
+    // Formatos de 60 cartas com comandante (Standard Brawl, Oathbreaker): as médias de Commander valem em proporção.
+    $format = deckCurrentFormat();
+    if ((int)$format['size'] < 100) {
+        $ratio = ((int)$format['size'] - 1) / 99;
+        foreach ($targets as $role => $value) $targets[$role] = (int)round($value * $ratio);
+        foreach ($curve as $bucket => $value) $curve[$bucket] = (int)round($value * $ratio);
+        $notes['lands'] = ($notes['lands'] ?? 'Base de Commander') . ' Proporcional a ' . $format['size'] . ' cartas.';
+    }
     foreach ($targets as $role => $value) $targets[$role] = max(0, min(60, (int)$value));
     foreach ($curve as $bucket => $value) $curve[$bucket] = max(0, min(40, (int)$value));
     return $cache[$key] = ['targets' => $targets, 'curve' => $curve, 'source' => $source, 'notes' => $notes, 'decks' => $decks];
 }
 
+/**
+ * Metas dos formatos construídos: a base de 60 cartas ajustada pelos decks do meta parecidos com o seu
+ * (média de terrenos e curva das mágicas). Sem decks parecidos, fica a base.
+ */
+function deckConstructedTargets(array $deck, array $items): array
+{
+    $format = deckCurrentFormat();
+    $base = deckFormatBaseTargets($format);
+    $targets = $base['targets']; $curve = $base['curve']; $notes = []; $source = 'text'; $decks = 0;
+    if (metaSlug($format) !== null) {
+        $mine = deckMetaMine($items);
+        $similar = $mine ? array_values(array_filter(metaSimilarDecks($format['key'], $mine, 10), fn($row) => $row['similarity'] >= 0.12)) : [];
+        if ($similar) {
+            $shape = metaDeckShape(array_map(fn($row) => (int)$row['id'], $similar));
+            if ($shape['decks'] > 0) {
+                $decks = $shape['decks'];
+                $source = 'meta';
+                $targets['lands'] = max(14, min(28, (int)round($shape['lands'])));
+                $notes['lands'] = 'Média de terrenos dos ' . $decks . ' decks do meta mais parecidos com o seu.';
+                $nonland = 60 - $targets['lands'];
+                $total = max(1, array_sum($shape['curve']));
+                foreach ($shape['curve'] as $bucket => $amount) $curve[(string)$bucket] = (int)round($amount / $total * $nonland);
+                $notes['curve'] = 'Curva média das mágicas desses decks.';
+            }
+        }
+    }
+    return ['targets' => $targets, 'curve' => $curve, 'source' => $source, 'notes' => $notes, 'decks' => $decks];
+}
+
+/** Cartas do deck (sem básicos) no formato usado pelo meta: [logical_id => cópias]. */
+function deckMetaMine(array $items): array
+{
+    $mine = [];
+    foreach ($items as $item) {
+        if (($item['stage'] ?? '') !== 'deck') continue;
+        if (str_contains((string)$item['type_line'], 'Basic') && str_contains((string)$item['type_line'], 'Land')) continue;
+        $lid = (string)($item['oracle_id'] ?: $item['id']);
+        $mine[$lid] = ($mine[$lid] ?? 0) + max(1, (int)$item['quantity']);
+    }
+    return $mine;
+}
+
 /** Configuração do deck com metas automáticas aplicadas quando o modo for "auto". */
-function deckScoreConfigFor(array $deck, ?array $commander): array
+function deckScoreConfigFor(array $deck, ?array $commander, array $items = []): array
 {
     $config = deckScoreConfig($deck['scoring_config'] ?? null);
-    $config['dynamic'] = $commander ? deckDynamicTargets($commander) : null;
+    $config['dynamic'] = $commander ? deckDynamicTargets($commander) : (deckFormatHasLeader(deckCurrentFormat()) ? null : deckConstructedTargets($deck, $items));
     if ($config['dynamic'] && $config['targets_mode'] === 'auto') {
         $config['targets'] = $config['dynamic']['targets'];
         $config['curve'] = $config['dynamic']['curve'];
@@ -423,12 +493,15 @@ function deckScoreSelection(array $deck, ?array $commander, array $items, array 
 {
     $result = ['cards' => [], 'needs' => [], 'bracket' => $config['bracket'],
         'game_changers' => 0, 'open_slots' => 0, 'deck_count' => 0];
-    if (!$commander) return $result;
+    $format = deckCurrentFormat();
+    $leader = deckFormatHasLeader($format);
+    if (!$commander && $leader) return $result;
 
     $gameChangers = array_flip(deckScoreGameChangers());
-    $commanderProfile = deckScoreProfile($commander);
+    $commanderProfile = $commander ? deckScoreProfile($commander) : ['pips' => [], 'identity' => ['W', 'U', 'B', 'R', 'G']];
     $identity = $commanderProfile['identity'];
     $bracket = (int)$config['bracket'];
+    $brackets = !empty($format['brackets']);
 
     // Estado atual do deck: só cartas aprovadas contam para metas e curva; candidatas são contadas à parte.
     $roleCounts = array_fill_keys(array_keys(DECK_SCORE_ROLES), 0.0);
@@ -436,7 +509,7 @@ function deckScoreSelection(array $deck, ?array $commander, array $items, array 
     $curveCounts = array_fill_keys(array_keys($config['curve']), 0.0);
     $pipTotals = array_fill_keys(['W', 'U', 'B', 'R', 'G'], 0.0);
     $gcCount = 0;
-    $deckCount = 1;
+    $deckCount = ($commander ? 1 : 0) + (!empty($deck['signature_id']) ? 1 : 0);
     foreach ($commanderProfile['pips'] as $color => $amount) $pipTotals[$color] += $amount;
     $profiles = [];
     foreach ($items as $item) {
@@ -455,13 +528,13 @@ function deckScoreSelection(array $deck, ?array $commander, array $items, array 
         if (isset($gameChangers[strtolower((string)$item['name'])])) $gcCount += $factor >= 1 ? 1 : 0;
     }
     $pipSum = max(1.0, array_sum($pipTotals));
-    $openSlots = max(0, 100 - $deckCount);
+    $openSlots = max(0, (int)$format['size'] - $deckCount);
     $result['open_slots'] = $openSlots;
     $result['deck_count'] = $deckCount;
     $result['game_changers'] = $gcCount;
 
     $targets = $config['targets'];
-    $targets['plan'] = max(0, 99 - array_sum($targets));
+    $targets['plan'] = max(0, (int)$format['size'] - ($leader ? 1 : 0) - array_sum($targets));
     foreach (DECK_SCORE_ROLES as $role => $label) {
         $result['needs'][$role] = ['label' => $label, 'target' => (int)$targets[$role], 'current' => $roleCounts[$role], 'candidates' => $candidateRoleCounts[$role], 'missing' => max(0, (int)ceil($targets[$role] - $roleCounts[$role]))];
     }
@@ -473,19 +546,20 @@ function deckScoreSelection(array $deck, ?array $commander, array $items, array 
         $quantity = max(1, (int)$item['quantity']);
         $notes = [];
         $blocked = null;
-        // Regras de Commander continuam como alertas, sem converter a carta numa nota.
-        if (array_diff($profile['identity'], $identity)) $blocked = 'Fora da identidade de cor da comandante.';
-        $legal = json_decode((string)($item['legalities'] ?? '{}'), true)['commander'] ?? 'legal';
-        if (in_array($legal, ['banned', 'not_legal'], true)) $blocked = $legal === 'banned' ? 'Banida no Commander.' : 'Não é legal no Commander.';
-        if ($quantity > 1 && !str_contains((string)$item['type_line'], 'Basic') && !preg_match('/deck can have (any number|up to)/i', deckText($item))) $blocked = 'Commander permite apenas 1 cópia desta carta.';
-        if (isset($gameChangers[strtolower((string)$item['name'])])) {
+        // Regras do formato continuam como alertas, sem converter a carta numa nota.
+        if ($leader && array_diff($profile['identity'], $identity)) $blocked = 'Fora da identidade de cor da ' . mb_strtolower((string)$format['leader_label']) . '.';
+        $legal = deckFormatLegality($item, $format);
+        if (in_array($legal, ['banned', 'not_legal'], true)) $blocked = $legal === 'banned' ? 'Banida no ' . $format['name'] . '.' : 'Não é legal no ' . $format['name'] . '.';
+        $limit = deckCopyLimit($item, $format);
+        if ($limit !== null && $quantity > $limit) $blocked = $format['name'] . ' permite ' . ($limit === 1 ? 'apenas 1 cópia' : 'até ' . $limit . ' cópias') . ' desta carta.';
+        if ($brackets && isset($gameChangers[strtolower((string)$item['name'])])) {
             $others = $gcCount - ($item['stage'] === 'deck' ? 1 : 0);
             if ($bracket <= 2) $notes[] = 'Game Changer: fora da proposta do bracket ' . $bracket . '.';
             elseif ($bracket === 3 && $others >= 3) $notes[] = 'Game Changer: o deck já atingiu o limite de 3.';
             elseif ($bracket === 3) $notes[] = $item['stage'] === 'deck' ? 'Game Changer: ocupa 1 dos 3 permitidos no bracket 3.' : 'Game Changer: seria o ' . ($others + 1) . 'º dos 3 permitidos no bracket 3.';
             else $notes[] = 'Game Changer.';
         }
-        if ($profile['mld']) {
+        if ($profile['mld'] && $brackets) {
             if ($bracket <= 3) $notes[] = 'Destruição de terrenos em massa: só a partir do bracket 4.';
             else $notes[] = 'Destruição de terrenos em massa.';
         }
@@ -499,8 +573,8 @@ function deckScoreSelection(array $deck, ?array $commander, array $items, array 
     }
 
     // Relações v2 (deck_relations.php): setas com motivo e trecho do texto de cada lado.
-    $graphNodes = [(string)$commander['id'] => $commander + ['stage' => 'commander']];
-    foreach ($items as $item) $graphNodes[(string)$item['id']] = $item;
+    $graphNodes = $commander ? [(string)$commander['id'] => $commander + ['stage' => 'commander']] : [];
+    foreach ($items as $item) if (in_array($item['stage'], ['deck', 'candidate'], true)) $graphNodes[(string)$item['id']] = $item;
     $graph = deckRelationGraph($graphNodes, $commander);
     $result['tribe'] = $graph['tribe'];
     $features = deckRelationFeatures();
@@ -514,6 +588,7 @@ function deckScoreSelection(array $deck, ?array $commander, array $items, array 
     $stageOf = static fn(string $nodeId): string => (string)($graphNodes[$nodeId]['stage'] ?? '');
     foreach ($items as $item) {
         $sourceId = (string)$item['id'];
+        if (!isset($graphNodes[$sourceId])) continue;
         $partners = array_unique(array_merge(array_keys($pairs[$sourceId] ?? []), array_keys(array_filter($pairs, fn($targets) => isset($targets[$sourceId])))));
         foreach ($partners as $otherId) {
             $otherId = (string)$otherId;
@@ -574,7 +649,7 @@ function deckIdentityMask(array $colors): int
  */
 function deckNeedRoleIndex(): array
 {
-    return catalogCached('need-role-index-v2', function (): array {
+    return catalogCached('need-role-index-v3', function (): array {
         $patterns = deckScoreRolePatterns();
         $columns = [];
         $params = [];
@@ -584,14 +659,15 @@ function deckNeedRoleIndex(): array
         }
         $rows = deckQuery("WITH base AS (
                 SELECT DISTINCT ON (COALESCE(c.oracle_id,c.id)) COALESCE(c.oracle_id,c.id)::text AS lid, c.name, c.color_identity, c.edhrec_rank_cached AS rank,
+                    " . deckLegalMaskSql() . " AS legal_mask,
                     split_part(COALESCE(c.type_line,''),' // ',1) AS front_type,
                     regexp_replace(lower(COALESCE(c.oracle_text,'') || ' ' || COALESCE((SELECT string_agg(f->>'oracle_text',' ') FROM jsonb_array_elements(c.card_faces) f),'')), '\\([^)]*\\)', '', 'g') AS t
-                FROM cards c WHERE c.legalities->>'commander'='legal'
+                FROM cards c WHERE " . deckLegalMaskSql() . " > 0 AND c.layout NOT IN ('token','double_faced_token','art_series','emblem')
                 ORDER BY COALESCE(c.oracle_id,c.id), (c.edhrec_rank_cached IS NULL), c.released_at DESC NULLS LAST)
-            SELECT lid, name, color_identity::text AS identity, rank, front_type ILIKE '%Land%' AS is_land, front_type ILIKE '%Basic%' AS is_basic, " . implode(', ', $columns) . " FROM base", $params)->fetchAll();
+            SELECT lid, name, color_identity::text AS identity, rank, legal_mask, front_type ILIKE '%Land%' AS is_land, front_type ILIKE '%Basic%' AS is_basic, " . implode(', ', $columns) . " FROM base", $params)->fetchAll();
         $index = array_fill_keys(array_merge(['lands'], array_keys($patterns)), []);
         foreach ($rows as $row) {
-            $entry = [$row['lid'], $row['name'], deckIdentityMask(json_decode((string)$row['identity'], true) ?: []), $row['rank'] === null ? null : (int)$row['rank']];
+            $entry = [$row['lid'], $row['name'], deckIdentityMask(json_decode((string)$row['identity'], true) ?: []), $row['rank'] === null ? null : (int)$row['rank'], (int)$row['legal_mask']];
             $isLand = $row['is_land'] === true || $row['is_land'] === 't' || $row['is_land'] === 1;
             if ($isLand) {
                 if (!($row['is_basic'] === true || $row['is_basic'] === 't' || $row['is_basic'] === 1)) $index['lands'][] = $entry;
@@ -605,12 +681,34 @@ function deckNeedRoleIndex(): array
     }, 30 * 86400);
 }
 
-/** IDs lógicos do catálogo que cumprem uma função e cabem na identidade (filtro "Função no deck" da busca). */
+/** Bits de legalidade por formato, na ordem de deckFormats(): a carta é legal no formato i se o bit i está ligado. */
+function deckLegalMaskSql(string $alias = 'c'): string
+{
+    $parts = [];
+    $i = 0;
+    foreach (deckFormats() as $format) {
+        $key = preg_replace('/[^a-z]/', '', (string)$format['legality']);
+        $parts[] = "(CASE WHEN ({$alias}.legalities->>'{$key}') IN ('legal','restricted') THEN " . (1 << $i) . " ELSE 0 END)";
+        $i++;
+    }
+    return '(' . implode(' + ', $parts) . ')';
+}
+
+/** Bit do formato em deckLegalMaskSql(). */
+function deckFormatBit(?array $format = null): int
+{
+    $format ??= deckCurrentFormat();
+    $position = array_search($format['key'], array_keys(deckFormats()), true);
+    return $position === false ? 1 : 1 << $position;
+}
+
+/** IDs lógicos do catálogo que cumprem uma função, cabem nas cores e são legais no formato (filtro "Função no deck" da busca). */
 function deckNeedRoleIds(string $role, array $identity): array
 {
     $mask = deckIdentityMask($identity);
+    $bit = deckFormatBit();
     $ids = [];
-    foreach (deckNeedRoleIndex()[$role] ?? [] as [$lid, , $cardMask]) if (($cardMask & ~$mask) === 0) $ids[] = $lid;
+    foreach (deckNeedRoleIndex()[$role] ?? [] as $entry) if (($entry[2] & ~$mask) === 0 && (($entry[4] ?? 1) & $bit)) $ids[] = $entry[0];
     return $ids;
 }
 
@@ -618,24 +716,36 @@ function deckNeedRoleIds(string $role, array $identity): array
  * "O que o deck precisa": para cada função, as metas do Índice de Encaixe e as melhores cartas do catálogo
  * que ainda não estão na seleção — primeiro as com sinergia EDHREC para a comandante, depois as mais jogadas.
  */
-function deckNeedSuggestions(array $commander, array $scores, array $items, array $config, int $limit = 6): array
+function deckNeedSuggestions(?array $commander, array $scores, array $items, array $config, int $limit = 6, ?array $identity = null): array
 {
     $index = deckNeedRoleIndex();
-    $mask = deckIdentityMask(json_decode((string)$commander['color_identity'], true) ?: []);
-    $taken = [(string)($commander['oracle_id'] ?: $commander['id']) => true];
+    $format = deckCurrentFormat();
+    $bit = deckFormatBit($format);
+    $mask = deckIdentityMask($commander ? (json_decode((string)$commander['color_identity'], true) ?: []) : ($identity ?? ['W', 'U', 'B', 'R', 'G']));
+    $taken = $commander ? [(string)($commander['oracle_id'] ?: $commander['id']) => true] : [];
     foreach ($items as $item) $taken[(string)($item['oracle_id'] ?: $item['id'])] = true;
-    $synergy = deckQuery("SELECT COALESCE(card.oracle_id,card.id)::text, MAX(s.score) FROM deck_synergy s
-        JOIN cards leader ON leader.id=s.commander_id JOIN cards card ON card.id=s.card_id
-        WHERE COALESCE(leader.oracle_id,leader.id)=?::uuid GROUP BY 1", [(string)($commander['oracle_id'] ?: $commander['id'])])->fetchAll(PDO::FETCH_KEY_PAIR);
-    $blockedNames = (int)$config['bracket'] <= 2 ? array_flip(deckScoreGameChangers()) : [];
+    if ($commander) {
+        $synergy = deckQuery("SELECT COALESCE(card.oracle_id,card.id)::text, MAX(s.score) FROM deck_synergy s
+            JOIN cards leader ON leader.id=s.commander_id JOIN cards card ON card.id=s.card_id
+            WHERE COALESCE(leader.oracle_id,leader.id)=?::uuid GROUP BY 1", [(string)($commander['oracle_id'] ?: $commander['id'])])->fetchAll(PDO::FETCH_KEY_PAIR);
+    } else {
+        // Construídos: "combina com o seu deck" pelos decks do meta parecidos; sem eles, a presença no formato.
+        $synergy = [];
+        if (metaSlug($format) !== null) {
+            foreach (metaDeckSynergy($format['key'], deckMetaMine($items)) as $lid => $row) $synergy[$lid] = $row['score'];
+            if (!$synergy) foreach (metaCardStats($format['key'])['cards'] as $lid => $row) if ($row['share'] >= 0.02) $synergy[$lid] = $row['share'];
+        }
+    }
+    $blockedNames = !empty($format['brackets']) && (int)$config['bracket'] <= 2 ? array_flip(deckScoreGameChangers()) : [];
     $gameChangers = array_flip(deckScoreGameChangers());
     $result = [];
     $wanted = [];
     foreach ($scores['needs'] as $role => $need) {
         if (!isset($index[$role]) || (int)$need['target'] <= 0) continue;
         $pool = [];
-        foreach ($index[$role] as $position => [$lid, $name, $cardMask, $rank]) {
-            if (($cardMask & ~$mask) !== 0 || isset($taken[$lid]) || isset($blockedNames[strtolower($name)])) continue;
+        foreach ($index[$role] as $position => $entry) {
+            [$lid, $name, $cardMask, $rank] = $entry;
+            if (($cardMask & ~$mask) !== 0 || !(($entry[4] ?? 1) & $bit) || isset($taken[$lid]) || isset($blockedNames[strtolower($name)])) continue;
             $pool[] = ['lid' => $lid, 'name' => $name, 'rank' => $rank, 'synergy' => isset($synergy[$lid]) ? (float)$synergy[$lid] : null, 'position' => $position];
         }
         $total = count($pool);

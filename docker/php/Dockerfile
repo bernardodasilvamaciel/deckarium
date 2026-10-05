@@ -5,10 +5,13 @@ RUN apt-get update \
     && docker-php-ext-install pdo_pgsql \
     && rm -rf /var/lib/apt/lists/*
 
-RUN a2enmod headers rewrite
+# proxy_http com upgrade=websocket: /realtime/ vai para o serviço de tempo real (realtime.conf)
+RUN a2enmod headers rewrite proxy proxy_http
 
 COPY php.ini /usr/local/etc/php/conf.d/mtg.ini
 COPY sitemap.conf /etc/apache2/conf-enabled/sitemap.conf
+COPY realtime.conf /etc/apache2/conf-enabled/realtime.conf
+ENV REALTIME_UPSTREAM=realtime:8090
 
 # Rotina automática do acervo: o entrypoint monta o cron a partir de AUTO_UPDATE_* e TZ.
 ENV TZ=America/Sao_Paulo

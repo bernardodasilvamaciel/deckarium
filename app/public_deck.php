@@ -22,21 +22,27 @@ if (!$deck || (!$isPublic && !$isOwner)) {
     pageFooter();
     exit;
 }
-$commander = $deck['commander_id'] ? deckQuery('SELECT * FROM cards WHERE id=?', [$deck['commander_id']])->fetch() : null;
-$items = deckQuery("SELECT c.*,i.quantity FROM builder_items i JOIN cards c ON c.id=i.card_id WHERE i.deck_id=? AND i.stage='deck' ORDER BY c.cmc,c.name", [$id])->fetchAll();
+$fmt = deckFormatOf($deck);
+$hasLeader = deckFormatHasLeader($fmt);
+$commander = $hasLeader && $deck['commander_id'] ? deckQuery('SELECT * FROM cards WHERE id=?', [$deck['commander_id']])->fetch() : null;
+$signatureCard = $fmt['signature'] && $deck['signature_id'] ? deckQuery('SELECT * FROM cards WHERE id=?', [$deck['signature_id']])->fetch() : null;
+$allItems = deckQuery("SELECT c.*,i.quantity,i.stage FROM builder_items i JOIN cards c ON c.id=i.card_id WHERE i.deck_id=? AND i.stage IN ('deck','sideboard') ORDER BY c.cmc,c.name", [$id])->fetchAll();
+$items = array_values(array_filter($allItems, fn($item) => $item['stage'] === 'deck'));
+$sideItems = array_values(array_filter($allItems, fn($item) => $item['stage'] === 'sideboard'));
 
 // Lista em texto, no formato aceito por Moxfield e pela importação do Deckarium.
 if (($_GET['export'] ?? '') === 'txt') {
     header('Content-Type: text/plain; charset=utf-8');
     header('Content-Disposition: attachment; filename="' . preg_replace('/[^a-z0-9]+/i', '-', (string)$deck['name']) . '.txt"');
-    if ($commander) echo "Commander\n1 " . $commander['name'] . "\n\nDeck\n";
+    if ($commander) echo ($fmt['leader'] === 'oathbreaker' ? 'Oathbreaker' : 'Commander') . "\n1 " . $commander['name'] . "\n" . ($signatureCard ? "\nSignature Spell\n1 " . $signatureCard['name'] . "\n" : '') . "\nDeck\n";
     foreach ($items as $item) echo (int)$item['quantity'] . ' ' . $item['name'] . "\n";
+    if ($sideItems) { echo "\nSideboard\n"; foreach ($sideItems as $item) echo (int)$item['quantity'] . ' ' . $item['name'] . "\n"; }
     exit;
 }
 
 $typeLabels = ['Creature' => 'Criaturas', 'Planeswalker' => 'Planeswalkers', 'Instant' => 'Instantâneas', 'Sorcery' => 'Feitiços', 'Artifact' => 'Artefatos', 'Enchantment' => 'Encantamentos', 'Battle' => 'Batalhas', 'Land' => 'Terrenos'];
 $groups = [];
-$total = $commander ? 1 : 0;
+$total = ($commander ? 1 : 0) + ($signatureCard ? 1 : 0);
 $curve = array_fill(0, 8, 0);
 foreach ($items as $item) {
     $front = explode(' // ', (string)$item['type_line'])[0];
@@ -47,10 +53,12 @@ foreach ($items as $item) {
     if (!str_contains($front, 'Land')) $curve[min(7, (int)floor((float)$item['cmc']))] += (int)$item['quantity'];
 }
 uksort($groups, fn($a, $b) => array_search($a, array_values($typeLabels) + [99 => 'Outras']) <=> array_search($b, array_values($typeLabels) + [99 => 'Outras']));
-$identity = $commander ? (json_decode((string)$commander['color_identity'], true) ?: []) : [];
+$identity = $commander ? (json_decode((string)$commander['color_identity'], true) ?: []) : deckColorsFromItems($items);
+if ($signatureCard) $groups = ['Feitiço de assinatura' => [$signatureCard + ['quantity' => 1]]] + $groups;
+if ($sideItems) $groups['Sideboard'] = $sideItems;
 $maxCurve = max(1, ...$curve);
 
-pageHeader($deck['name'] . ' · deck público', 'Deck de Commander "' . $deck['name'] . '"' . ($commander ? ' com ' . $commander['name'] : '') . ', publicado por @' . $deck['username'] . ' no Deckarium.');
+pageHeader($deck['name'] . ' · deck público', 'Deck de ' . $fmt['name'] . ' "' . $deck['name'] . '"' . ($commander ? ' com ' . $commander['name'] : '') . ', publicado por @' . $deck['username'] . ' no Deckarium.');
 ?>
 <div class="public-page">
 <?php if (!$isPublic): ?><p class="notice warning">Pré-visualização: este deck é privado. Torne-o público na <a href="/decks.php?deck=<?= $id ?>&amp;view=overview">Visão geral</a> para compartilhar o link.</p><?php endif; ?>
@@ -59,7 +67,7 @@ pageHeader($deck['name'] . ' · deck público', 'Deck de Commander "' . $deck['n
     <div>
         <p class="public-kicker">Deck de <a href="/profile.php?u=<?= h(rawurlencode((string)$deck['username'])) ?>">@<?= h($deck['username']) ?></a></p>
         <h1><?= h($deck['name']) ?></h1>
-        <p class="public-deck-meta"><?= $commander ? 'Comandante: <strong>' . h($commander['name']) . '</strong>' : 'Sem comandante definida' ?><?= $identity ? ' · ' . manaSymbols(implode('', array_map(fn($c) => '{' . $c . '}', $identity))) : '' ?> · <?= $total ?>/100 cartas</p>
+        <p class="public-deck-meta"><span class="deck-format-chip"><?= h($fmt['name']) ?></span> <?= $hasLeader ? ($commander ? h((string)$fmt['leader_label']) . ': <strong>' . h($commander['name']) . '</strong>' : 'Sem ' . h(mb_strtolower((string)$fmt['leader_label'])) . ' definida') : '' ?><?= $identity ? ' · ' . manaSymbols(implode('', array_map(fn($c) => '{' . $c . '}', $identity))) : '' ?> · <?= $total ?>/<?= deckFormatSizeLabel($fmt) ?> cartas<?= $sideItems ? ' · ' . array_sum(array_map(fn($c) => (int)$c['quantity'], $sideItems)) . ' no sideboard' : '' ?></p>
         <?php if (trim((string)$deck['strategy']) !== ''): ?><div class="public-deck-strategy"><h2>Intenção do deck</h2><p><?= nl2br(h((string)$deck['strategy'])) ?></p></div><?php endif; ?>
         <p class="public-actions"><a class="secondary-link" href="?id=<?= $id ?>&amp;export=txt">Baixar lista (.txt)</a><?php if ($isOwner): ?><a href="/decks.php?deck=<?= $id ?>">Abrir no meu planejamento</a><?php endif; ?></p>
     </div>

@@ -32,7 +32,7 @@ $number = static fn($value): string => number_format((int)$value, 0, ',', '.');
 $homeSteps = [
     ['find', t('Encontre'), t('Pesquise qualquer carta pelo nome ou pelo texto, percorra as edições e escolha uma comandante.')],
     ['keep', t('Guarde'), t('Registre as cópias que você tem, com impressão e acabamento, e anote o que quer comprar ou vender.')],
-    ['build', t('Monte'), t('Planeje um deck de Commander a partir da comandante e da sua coleção, com sugestões e análise.')],
+    ['build', t('Monte'), t('Planeje um deck de Commander, Pauper, Modern ou outro formato a partir da sua coleção, com sugestões, análise e o meta dos torneios.')],
     ['share', t('Compartilhe'), t('Deixe decks, coleção e lista de vendas públicos e mande o link para quem quiser.')],
 ];
 $access = ['all' => t('Aberto a todos'), 'login' => t('Com conta'), 'admin' => t('Administração')];
@@ -65,10 +65,12 @@ $homeGroups = [
     ],
     'build' => [
         'title' => t('Montar decks'),
-        'lead' => t('A oficina de Commander: da comandante às 100 cartas, sempre olhando a sua coleção primeiro.'),
+        'lead' => t('Uma oficina para 13 formatos: da comandante às 100 cartas ou das 60 cartas ao sideboard, sempre olhando a sua coleção primeiro.'),
         'modules' => [
-            ['decks', t('Meus decks'), '/decks.php', 'login', t('Biblioteca dos seus decks, planejados do zero ou importados do Moxfield.'),
-                [t('Cada deck mostra a comandante, a intenção e quanto falta para 100'), t('Troque cartas com “Preparar upgrade” quando o deck estiver cheio'), t('Exporte em texto, JSON ou CSV da Liga')]],
+            ['decks', t('Meus decks'), '/decks.php', 'login', t('Biblioteca dos seus decks, planejados do zero, importados do Moxfield ou copiados do meta.'),
+                [t('Commander, Pauper Commander, Brawl, Standard Brawl, Duel Commander e Oathbreaker; Standard, Pioneer, Modern, Legacy, Vintage, Pauper e Premodern'), t('Cada formato com as próprias regras: tamanho, cópias, cartas legais, sideboard e zona de comando'), t('Exporte em texto, JSON ou CSV da Liga')]],
+            ['playtest', t('Mesa de teste'), '/decks.php', 'login', t('Jogue o deck numa mesa 3D, sozinho ou com até 3 amigos pelo link da mesa.'),
+                [t('Cada jogador entra com um deck da própria conta e controla as próprias cartas'), t('Vida, dano de comandante, ataques com feixes até o tapete atacado, revelações, dados e chat chegam para todos'), t('A câmera mostra a mesa toda, o seu tapete ou o de cada oponente')]],
         ],
     ],
     'share' => [
@@ -84,17 +86,18 @@ $homeGroups = [
 ];
 // As abas de um deck, na ordem em que aparecem.
 $deckTabs = [
-    [t('Visão geral'), t('Comandante, a sua intenção para o deck, se ele é público e atalhos para o resto.')],
-    [t('Guia da comandante'), t('Planos de jogo, combos, mecânicas e cartas novas que combinam com ela, do EDHREC.')],
+    [t('Visão geral'), t('Formato, comandante (ou as cores do deck), a sua intenção, se ele é público e atalhos para o resto.')],
+    [t('Guia da comandante ou meta do formato'), t('Com comandante: planos, combos e mecânicas do EDHREC. Nos formatos de torneio: arquétipos, decks parecidos com o seu e o que dá para montar com a coleção, pelas listas do MTGO.')],
     [t('O que falta'), t('Metas por função — ramp, compra, remoção, proteção — e sugestões para cada lacuna.')],
-    [t('Explorar'), t('O catálogo filtrado pela identidade da comandante, em ordem de sinergia ou “Encaixa no deck”.')],
-    [t('Minha seleção'), t('Candidatas e deck, com análise, mapa de jogo, fichas e terrenos preenchidos sozinhos.')],
+    [t('Explorar'), t('O catálogo filtrado pelas cores e pelas cartas legais no formato, em ordem de sinergia, de presença no meta ou “Encaixa no deck”.')],
+    [t('Minha seleção'), t('Candidatas, deck e sideboard, com análise, mapa de jogo, fichas e terrenos preenchidos sozinhos.')],
     [t('Quadro de relações'), t('A constelação 3D de quem fornece e quem aproveita, com equilíbrio dos temas e sugestões da coleção.')],
-    [t('Mesa de teste'), t('Uma partida solitária numa mesa 3D: mulligan, terrenos, fichas, marcadores e combate contra um oponente imaginário.')],
+    [t('Mesa de teste'), t('Uma partida numa mesa 3D, sozinho ou com até 3 amigos: mulligan, terrenos, fichas, marcadores, combate e dano de comandante.')],
 ];
 $homeSources = [
     ['Scryfall', t('cartas, imagens, preços e legalidade')],
     ['EDHREC', t('popularidade, sinergia e guias das comandantes')],
+    ['MTGO', t('listas dos Challenges e ligas de Standard, Pioneer, Modern, Legacy, Vintage, Pauper e Premodern')],
     ['Commander Spellbook', t('combos completos e os que falta uma carta')],
     ['Scryfall Tagger', t('funções das cartas, que completam a leitura do texto')],
 ];
@@ -104,7 +107,7 @@ echo cardActionNotice();
 <section class="home-hero" aria-labelledby="home-title">
   <div class="home-hero-copy">
     <h1 id="home-title"><?= te('Sua coleção de Magic,') ?> <em><?= te('pronta para virar deck.') ?></em></h1>
-    <p class="home-lede"><?= te('O Deckarium junta o catálogo completo de Magic, as cartas que você tem e uma oficina para montar decks de Commander. Aqui está o que cada parte do site faz e por onde começar.') ?></p>
+    <p class="home-lede"><?= te('O Deckarium junta o catálogo completo de Magic, as cartas que você tem e uma oficina para montar decks de Commander, Modern, Pauper e outros formatos — e para jogá-los com amigos numa mesa 3D. Aqui está o que cada parte do site faz e por onde começar.') ?></p>
     <form class="home-search" action="/" method="get" role="search">
       <label for="home-query"><?= te('Procure uma carta') ?></label>
       <div><input id="home-query" name="q" type="search" placeholder="<?= te('Nome da carta…') ?>" autocomplete="off" required><button type="submit"><?= te('Buscar') ?></button></div>

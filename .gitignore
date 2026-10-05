@@ -20,3 +20,8 @@ storage/download-normal.lock
 app/_shot_*.html
 app/_vid*
 storage/_*.php
+storage/edhrec-misses/
+# Listas do MTGO: travas e registro da busca em segundo plano (bin/sync_meta.php)
+storage/meta/
+# Dependências do serviço de tempo real (instaladas na imagem com npm ci)
+realtime/node_modules/

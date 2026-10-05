@@ -22,6 +22,7 @@ function uiIcon(string $name): string
         'collapse'=>'<path d="M14.5 5.5 8 12l6.5 6.5"/>',
         'expand'=>'<path d="M9.5 5.5 16 12l-6.5 6.5"/>',
         'close'=>'<path d="M6 6l12 12M18 6 6 18"/>',
+        'playtest'=>'<ellipse cx="12" cy="13" rx="9" ry="4.2"/><path d="M3 13v2.2c0 2.3 4 4.2 9 4.2s9-1.9 9-4.2V13"/><path d="m8.2 12.4 1.2-4.6 3.2.8-1.2 4.6M13.4 12.9l2.1-4.1 2.8 1.5-1.6 3"/>',
     ];
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . ($paths[$name] ?? $paths['cards']) . '</svg>';
 }
@@ -43,13 +44,13 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
 
     // Resumo, endereço canônico e cartão de compartilhamento.
     $descriptions = [
-        'home' => 'Catálogo completo de Magic, sua coleção e uma oficina de decks de Commander: veja o que cada parte do Deckarium faz e por onde começar.',
+        'home' => 'Catálogo completo de Magic, sua coleção e uma oficina de decks de Commander, Modern, Pauper e outros formatos: veja o que cada parte do Deckarium faz e por onde começar.',
         'cards' => 'Pesquise qualquer carta de Magic pelo nome, texto Oracle, tipo, cores, raridade e edição.',
         'sets' => 'Todas as edições de Magic em linha do tempo, com cartas novas, reimpressões e proporção de cores.',
         'commanders' => 'Todos os comandantes do catálogo, com as cartas mais jogadas e as sinergias de cada um.',
         'community' => 'Decks e coleções que outros jogadores tornaram públicos no Deckarium.',
     ];
-    $pageDescription = t($description !== '' ? $description : ($descriptions[$section] ?? 'Deckarium: catálogo de Magic, oficina de decks de Commander e controle da sua coleção.'));
+    $pageDescription = t($description !== '' ? $description : ($descriptions[$section] ?? 'Deckarium: catálogo de Magic, oficina de decks para Commander e outros formatos, mesa 3D com amigos e controle da sua coleção.'));
     $pageDescription = mb_substr(trim(preg_replace('/\s+/u', ' ', $pageDescription) ?? ''), 0, 300);
     $privateRoutes = ['login.php','register.php','logout.php','account.php','collection.php','decks.php','deck_board.php','deck_playtest.php','upgrades.php','users.php','status.php','sync_history.php','wishlist.php','trade.php'];
     $noindex = $meta['noindex'] ?? in_array($route, $privateRoutes, true);

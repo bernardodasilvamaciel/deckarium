@@ -14,13 +14,13 @@ $landSuggestion = $landPlan['suggestion'];
 <div class="land-dialog-head">
     <span class="land-kicker">Base de mana automática</span>
     <h3 id="land-fill-title">Completar com terrenos</h3>
-    <p>Você cuida das mágicas; o Deckarium escolhe os terrenos. Eles só são escolhidos com as mágicas fechadas (comandante + mágicas = 100 − terrenos), para as cores e os não básicos serem calculados sobre a lista final.</p>
+    <p>Você cuida das mágicas; o Deckarium escolhe os terrenos. Eles só são escolhidos com as mágicas fechadas (<?= $landPlan['fixed'] ? ($landPlan['fixed'] > 1 ? 'zona de comando' : ($fmt['leader']==='oathbreaker'?'oathbreaker':'comandante')).' + ' : '' ?>mágicas = <?= (int)$landPlan['size'] ?> − terrenos), para as cores e os não básicos serem calculados sobre a lista final.<?= (int)$fmt['copies'] > 1 ? ' Nos construídos, os melhores não básicos entram com mais de uma cópia.' : '' ?></p>
 </div>
 
 <div class="land-suggestion">
     <div class="land-suggestion-total"><span>Sugestão pelo deck</span><strong><?= (int)$landSuggestion['total'] ?></strong><small>terrenos</small></div>
     <ul>
-        <li><span>Base de Commander</span><b>37</b></li>
+        <li><span><?= $fmt['size'] >= 100 ? 'Base de Commander' : 'Base de 60 cartas' ?></span><b><?= $fmt['size'] >= 100 ? 37 : 24 ?></b></li>
         <?php foreach($landSuggestion['parts'] as [$partLabel,$partDelta]): ?><li><span><?= h($partLabel) ?></span><b class="<?= $partDelta<0?'is-down':($partDelta>0?'is-up':'') ?>"><?= $partDelta>0?'+'.$partDelta:($partDelta<0?'−'.abs($partDelta):'±0') ?></b></li><?php endforeach; ?>
         <?php if($landSuggestion['raw']!==$landSuggestion['total']): ?><li><span>Limitado à faixa 31–42</span><b><?= (int)$landSuggestion['total'] ?></b></li><?php endif; ?>
     </ul>
@@ -30,7 +30,7 @@ $landSuggestion = $landPlan['suggestion'];
 <form method="post" class="land-controls" data-land-preview>
     <?php $tokenFields('land_target'); ?><input type="hidden" name="land_buy_set" value="1">
     <?php foreach($landOptionsRequest['skip'] as $skipped): ?><input type="hidden" name="land_skip[]" value="<?= h($skipped) ?>"><?php endforeach; ?>
-    <label class="land-total">Meta de terrenos<input type="number" name="land_total" min="20" max="60" placeholder="<?= (int)$landSuggestion['total'] ?>" value="<?= $landPlan['target_source']==='suggestion' ? '' : (int)$landPlan['target'] ?>"><small>Vazio = usar a sugestão (<?= (int)$landSuggestion['total'] ?>). Atual: <?= (int)$landPlan['target'] ?>, <?= h($landTargetLabel) ?>.</small></label>
+    <label class="land-total">Meta de terrenos<input type="number" name="land_total" min="10" max="60" placeholder="<?= (int)$landSuggestion['total'] ?>" value="<?= $landPlan['target_source']==='suggestion' ? '' : (int)$landPlan['target'] ?>"><small>Vazio = usar a sugestão (<?= (int)$landSuggestion['total'] ?>). Atual: <?= (int)$landPlan['target'] ?>, <?= h($landTargetLabel) ?>.</small></label>
     <label class="land-source">Origem dos não básicos<select name="land_buy">
         <option value="" <?= $landPlan['include_missing']?'':'selected' ?>>Só o que sobra na minha coleção</option>
         <option value="1" <?= $landPlan['include_missing']?'selected':'' ?>>Sobras da coleção e, se faltar, de fora</option>

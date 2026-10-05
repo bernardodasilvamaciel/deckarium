@@ -10,9 +10,13 @@ Banco PostgreSQL do Deckarium (schema `public`). Gerado a partir do banco em exe
 | Contas e acesso | `users`, `auth_attempts`, `auth_remember_tokens`, `app_migrations` | `app/auth.php` (migração automática na primeira requisição) |
 | Coleção e decks | `builder_collection`, `builder_decks`, `builder_items`, `deck_upgrades` | `deckSchema()` em `app/deck_library.php` e `app/auth.php` |
 | Cache de fontes externas | `deck_synergy`, `deck_commander_insights`, `deck_spellbook_cache` | `deckSchema()` |
+| Meta dos formatos (MTGO) | `meta_formats`, `meta_events`, `meta_decks`, `meta_deck_cards` | `metaSchema()` em `app/deck_meta.php` |
+| Mesa compartilhada | `playtest_tables`, `playtest_seats`, `playtest_events`, `app_secrets` | `playtestSchema()` em `app/playtest_lib.php` |
 | Legado | `upgrade_items` | `database/init.sql` |
 
 Não há ferramenta de migração: as tabelas novas usam `CREATE TABLE IF NOT EXISTS` e as colunas novas `ALTER TABLE … ADD COLUMN IF NOT EXISTS`, executados pelo próprio app. `database/init.sql` só roda na criação do volume do PostgreSQL.
+
+`deckSchema()` roda **uma vez por versão**: depois de aplicar, grava `deck_schema_vN` em `app_migrations` e as próximas requisições pulam os `ALTER TABLE` (que travam as tabelas e, com a mesa compartilhada consultando o servidor sem parar, chegavam a causar deadlocks). Ao mudar o esquema dos decks, suba `DECK_SCHEMA_VERSION` em `app/deck_library.php`. `metaSchema()` e `playtestSchema()` só criam as tabelas quando elas ainda não existem (`to_regclass`).
 
 ### Conceitos usados em várias tabelas
 
@@ -246,10 +250,12 @@ Cópias físicas de cada usuário, por impressão e acabamento. Importada por CS
 | `id` | bigint | não | sequência | **PK.** |
 | `user_id` | bigint | não | | Dono. FK → `users.id` (apaga em cascata). |
 | `name` | text | não | | Nome do deck (até 160 caracteres). |
-| `commander_id` | uuid | sim | | Impressão escolhida como comandante. FK → `cards.id`. |
+| `format` | text | não | `'commander'` | Formato do deck (`commander`, `paupercommander`, `brawl`, `standardbrawl`, `duel`, `oathbreaker`, `standard`, `pioneer`, `modern`, `legacy`, `vintage`, `pauper`, `premodern`). As regras de cada um ficam em `deckFormats()` (`app/deck_formats.php`). |
+| `commander_id` | uuid | sim | | Impressão escolhida como comandante (ou oathbreaker). Nula nos formatos construídos. FK → `cards.id`. |
+| `signature_id` | uuid | sim | | Oathbreaker: o feitiço de assinatura, na zona de comando. FK → `cards.id`. |
 | `strategy` | text | não | `''` | “Minha intenção”: estratégia em texto livre. Aparece na página pública. |
 | `terms` | text | não | `''` | Termos Oracle padrão do Explorar, separados por `;`. |
-| `status` | text | não | `'planning'` | `planning` ou `ready` (importados e decks com 100 cartas). |
+| `status` | text | não | `'planning'` | `planning` ou `ready` (tamanho do formato atingido: 100 ou 60 exatas com comandante; 60 ou mais e até 15 no sideboard nos construídos). |
 | `scoring_config` | jsonb | sim | | Metas e regras personalizadas; nulo = automáticas. `land_fill` guarda a meta de “Completar com terrenos” (`total`, nulo = sugestão pelo deck) e `buy` (incluir terrenos fora da coleção). |
 | `is_public` | boolean | não | `false` | Deck visível em `/public_deck.php?id=<id>` e na Comunidade. |
 | `created_at` | timestamptz | sim | `now()` | Criação. |
@@ -262,12 +268,12 @@ Cartas de cada deck, nas etapas da seleção.
 |---|---|---|---|---|
 | `deck_id` | bigint | não | | **PK**, FK → `builder_decks.id` (apaga em cascata). |
 | `card_id` | uuid | não | | **PK**, FK → `cards.id`. Impressão escolhida. |
-| `stage` | text | não | | `candidate` (candidata) ou `deck` (aprovada). `review` é legado e é convertido para `candidate`. |
-| `quantity` | integer | não | | Cópias (> 0). Só terrenos básicos podem ter mais de 1 no deck. |
+| `stage` | text | não | | `candidate` (candidata), `deck` (aprovada) ou `sideboard` (construídos). `review` é legado e é convertido para `candidate`. |
+| `quantity` | integer | não | | Cópias (> 0). Limite pelo formato (`deckCopyLimit()`): 1 nos formatos com comandante, 4 nos construídos, 1 para as restritas do Vintage; básicos e cartas como Relentless Rats sem limite. |
 | `role` | text | não | `''` | Função informada pelo usuário (ramp, compra…). Privada. |
 | `notes` | text | não | `''` | Avaliação do usuário. Privada. |
 
-Só `stage = 'deck'` e a comandante contam para as 100 cartas, reservam cópias da coleção e aparecem na página pública e no quadro de relações.
+Só `stage = 'deck'`, a comandante e o feitiço de assinatura contam no tamanho do deck. Deck, sideboard, comandante e feitiço de assinatura reservam cópias da coleção e aparecem na página pública; o quadro de relações usa o deck e a zona de comando.
 
 ### `trade_lists`
 
@@ -354,6 +360,109 @@ Resultado do *Find My Combos* do Commander Spellbook para um deck (quadro de rel
 | `deck_id` | bigint | não | | **PK**, FK → `builder_decks.id` (cascata). |
 | `payload` | jsonb | não | | Combos `included` (completos) e `almost` (falta uma carta). |
 | `synced_at` | timestamptz | não | `now()` | Data da consulta. |
+
+## Meta dos formatos (MTGO)
+
+Listas públicas dos torneios do MTGO (`www.mtgo.com/decklists`), buscadas por `bin/sync_meta.php` em segundo plano quando o meta de um formato tem mais de 36 horas (ou pelo botão **Atualizar agora** da aba Meta do formato). Guarda os últimos 60 dias.
+
+### `meta_formats`
+
+| Coluna | Tipo | Nulo | Padrão | Descrição |
+|---|---|---|---|---|
+| `format` | text | não | | **PK.** Formato do Deckarium (`modern`, `pauper`…). |
+| `synced_at` | timestamptz | sim | | Última busca concluída. |
+| `attempted_at` | timestamptz | sim | | Última tentativa (uma falha espera 30 minutos para tentar de novo). |
+| `decks`, `events` | integer | não | `0` | Totais guardados. |
+| `message` | text | não | `''` | Resumo da última busca ou o erro. |
+
+### `meta_events`
+
+| Coluna | Tipo | Nulo | Padrão | Descrição |
+|---|---|---|---|---|
+| `id` | text | não | | **PK.** Nome da página no MTGO (`modern-challenge-32-2026-09-2712854927`). |
+| `format` | text | não | | Formato. |
+| `name` | text | não | | Nome do evento (“Modern Challenge 32”). |
+| `kind` | text | não | `'league'` | `challenge`, `qualifier`, `league` ou `other`. |
+| `event_date` | date | sim | | Data do evento. |
+| `url` | text | não | | Página do evento. |
+| `deck_count` | integer | não | `0` | Decks guardados. |
+| `synced_at` | timestamptz | não | `now()` | Quando foi buscado. |
+
+### `meta_decks`
+
+| Coluna | Tipo | Nulo | Padrão | Descrição |
+|---|---|---|---|---|
+| `id` | bigint | não | sequência | **PK.** |
+| `event_id` | text | não | | FK → `meta_events.id` (cascata). |
+| `format` | text | não | | Formato. |
+| `player`, `rank`, `wins`, `losses` | | | | Jogador, colocação (Challenges) e campanha (ligas). |
+| `colors` | text | não | `''` | Cores das mágicas (`UB`, `WUG`…). |
+| `signature` | text | não | `''` | A carta que define o arquétipo: a de mais cópias que aparece em menos decks do formato. |
+| `archetype` | text | não | `''` | Nome montado: cores + carta (“Izzet · Murktide Regent”). |
+| `main_count`, `core_count`, `side_count` | integer | não | `0` | Cartas no deck, no deck sem básicos e no sideboard. |
+
+### `meta_deck_cards`
+
+| Coluna | Tipo | Nulo | Padrão | Descrição |
+|---|---|---|---|---|
+| `deck_id` | bigint | não | | **PK**, FK → `meta_decks.id` (cascata). |
+| `name` | text | não | | **PK.** Nome da carta como o MTGO publica. |
+| `sideboard` | boolean | não | `false` | **PK.** Carta do sideboard. |
+| `quantity` | integer | não | | Cópias (o MTGO repete a carta por impressão; aqui já vem somada). |
+| `basic` | boolean | não | `false` | Terreno básico (fica fora das comparações entre decks). |
+| `logical_id` | uuid | sim | | Carta lógica do catálogo (`oracle_id`), resolvida pelo nome ou pela face da frente. |
+
+## Mesa compartilhada
+
+A página é `deck_playtest.php?mesa=CÓDIGO`. O PHP (`playtest_table.php`) abre a mesa e senta os jogadores; a partida corre no WebSocket do serviço `realtime/`, que lê e grava as mesmas tabelas. Mesas paradas há mais de dois dias são apagadas (com assentos e eventos).
+
+### `app_secrets`
+
+| Coluna | Tipo | Nulo | Padrão | Descrição |
+|---|---|---|---|---|
+| `name` | text | não | | **PK.** `realtime`: chave dos bilhetes do WebSocket. |
+| `value` | text | não | | Segredo aleatório (64 hex), criado pelo PHP na primeira mesa e lido pelo serviço de tempo real. |
+| `created_at` | timestamptz | não | `now()` | |
+
+### `playtest_tables`
+
+| Coluna | Tipo | Nulo | Padrão | Descrição |
+|---|---|---|---|---|
+| `id` | text | não | | **PK.** Código de 12 caracteres do link. |
+| `host_user_id` | bigint | não | | Quem abriu a mesa (passa para o próximo jogador se sair). FK → `users.id` (cascata). |
+| `format` | text | não | `'commander'` | Formato: só entram decks dele. |
+| `status` | text | não | `'lobby'` | `lobby` ou `playing`. |
+| `game` | integer | não | `0` | Número da partida (sobe a cada “Começar partida”). |
+| `starting_seat`, `turn_seat` | smallint | sim | | Quem começou (sorteado) e de quem é a vez. |
+| `turn_number` | integer | não | `0` | Turno da mesa (1 = primeiro turno da partida). |
+| `phase` | smallint | não | `0` | Fase de quem está jogando (0 desvirar … 6 final). |
+| `version` | bigint | não | `1` | Sobe quando assentos, vez ou fase mudam. |
+| `created_at`, `updated_at` | timestamptz | não | `now()` | |
+
+### `playtest_seats`
+
+| Coluna | Tipo | Nulo | Padrão | Descrição |
+|---|---|---|---|---|
+| `table_id` | text | não | | **PK**, FK → `playtest_tables.id` (cascata). |
+| `seat` | smallint | não | | **PK.** 0 a 3. |
+| `user_id` | bigint | não | | Jogador (um assento por pessoa na mesa). FK → `users.id`. |
+| `deck_id` | bigint | não | | Deck do jogador. FK → `builder_decks.id`. |
+| `public_state` | jsonb | sim | | O que todos veem: campo, cemitério, exílio, zona de comando, contagens de mão e grimório, vida, veneno, dano de comandante recebido e as cartas visíveis (`defs`). Gravado pelo serviço de tempo real, agrupado a cada 0,8 s. |
+| `private_state` | jsonb | sim | | A partida completa, devolvida só ao dono para retomar ao recarregar. |
+| `state_version` | bigint | não | `0` | Sobe a cada estado público recebido. |
+| `eliminated` | boolean | não | `false` | Concedeu ou saiu durante a partida (fica fora da ordem de turno). |
+| `joined_at`, `last_seen` | timestamptz | não | `now()` | `last_seen`: atualizado pelo serviço de tempo real ao conectar, ao sair e a cada 30 s com o socket aberto (menos de 40 s = conectado). |
+
+### `playtest_events`
+
+| Coluna | Tipo | Nulo | Padrão | Descrição |
+|---|---|---|---|---|
+| `id` | bigint | não | sequência | **PK.** Ordem dos eventos. |
+| `table_id` | text | não | | FK → `playtest_tables.id` (cascata). |
+| `seat` | smallint | sim | | Quem gerou. |
+| `kind` | text | não | | `join`, `leave`, `start`, `lobby`, `turn`, `log`, `chat`, `damage`, `life`, `poison`, `reveal`, `dice`, `attack`, `concede`. |
+| `payload` | jsonb | não | `'{}'` | Dados do evento (ex.: `damage` → `to`, `amount`, `commander`, `combat`, `sources`). |
+| `created_at` | timestamptz | não | `now()` | |
 
 ---
 

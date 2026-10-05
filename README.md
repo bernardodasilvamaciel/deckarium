@@ -1,6 +1,6 @@
 # Deckarium — coleção de Magic e oficina de decks
 
-Projeto local para pesquisar cartas, planejar decks de Commander a partir da sua coleção, compartilhar decks e coleções e manter um cache de imagens sem precisar baixar todas as impressões do Scryfall.
+Projeto local para pesquisar cartas, planejar decks a partir da sua coleção — Commander, Pauper Commander, Brawl, Standard Brawl, Duel Commander, Oathbreaker, Standard, Pioneer, Modern, Legacy, Vintage, Pauper e Premodern —, jogá-los numa mesa 3D sozinho ou com até 3 amigos, compartilhar decks e coleções e manter um cache de imagens sem precisar baixar todas as impressões do Scryfall.
 
 ## Capturas
 
@@ -12,12 +12,13 @@ Projeto local para pesquisar cartas, planejar decks de Commander a partir da sua
 <tr><td width="50%"><a href="docs/images/deck-visao-geral.png"><img src="docs/images/deck-visao-geral.png" alt="Visão geral do deck"></a><br><b>Visão geral do deck</b><br><sub>Comandante, intenção e atalhos para as subpáginas.</sub></td><td width="50%"><a href="docs/images/explorar.png"><img src="docs/images/explorar.png" alt="Explorar"></a><br><b>Explorar</b><br><sub>Resultados ordenados por sinergia EDHREC, com situação na coleção.</sub></td></tr>
 <tr><td width="50%"><a href="docs/images/selecao-cartas-grandes.png"><img src="docs/images/selecao-cartas-grandes.png" alt="Minha seleção · Cartas grandes"></a><br><b>Minha seleção · Cartas grandes</b><br><sub>Cartas em tamanho de leitura; informações abaixo da arte.</sub></td><td width="50%"><a href="docs/images/mapa-de-jogo.png"><img src="docs/images/mapa-de-jogo.png" alt="Minha seleção · Mapa de jogo"></a><br><b>Minha seleção · Mapa de jogo</b><br><sub>Função × valor de mana, com metas por linha e por coluna.</sub></td></tr>
 <tr><td width="50%"><a href="docs/images/fichas.png"><img src="docs/images/fichas.png" alt="Fichas e marcadores"></a><br><b>Fichas e marcadores</b><br><sub>Calculados automaticamente das cartas do deck.</sub></td><td width="50%"><a href="docs/images/terrenos.png"><img src="docs/images/terrenos.png" alt="Completar com terrenos"></a><br><b>Completar com terrenos</b><br><sub>Sugestão de quantidade pelo deck, não básicos da coleção e básicos pelas cores.</sub></td></tr>
-<tr><td width="50%"><a href="docs/images/analise.png"><img src="docs/images/analise.png" alt="Análise do deck"></a><br><b>Análise do deck</b><br><sub>Contagens, valor, curva de mana e cores dos custos.</sub></td><td width="50%"><a href="docs/images/mesa-de-teste.png"><img src="docs/images/mesa-de-teste.png" alt="Mesa de teste"></a><br><b>Mesa de teste</b><br><sub>Partida solitária numa mesa 3D com a arte da comandante: mulligan, fichas, marcadores, combate e regras.</sub></td></tr>
+<tr><td width="50%"><a href="docs/images/analise.png"><img src="docs/images/analise.png" alt="Análise do deck"></a><br><b>Análise do deck</b><br><sub>Contagens, valor, curva de mana e cores dos custos.</sub></td><td width="50%"><a href="docs/images/mesa-de-teste.png"><img src="docs/images/mesa-de-teste.png" alt="Mesa de teste"></a><br><b>Mesa de teste</b><br><sub>Partida numa mesa 3D com a arte da comandante: mulligan, fichas, marcadores, combate e regras.</sub></td></tr>
+<tr><td width="50%"><a href="docs/images/mesa-compartilhada.png"><img src="docs/images/mesa-compartilhada.png" alt="Mesa compartilhada"></a><br><b>Mesa compartilhada</b><br><sub>Até 4 jogadores pelo link da mesa, cada um com o próprio deck; os tapetes dos oponentes em arco, vida e dano de comandante no painel.</sub></td><td width="50%"><a href="docs/images/meta-do-formato.png"><img src="docs/images/meta-do-formato.png" alt="Meta do formato"></a><br><b>Meta do formato</b><br><sub>Listas do MTGO: decks parecidos com o seu, arquétipos e o que dá para montar com a coleção.</sub></td></tr>
 </table>
 
 ## Documentação
 
-- [Oficina de decks](docs/deck-builder.md) — decks, coleção, EDHREC, quadro de relações (3D), mesa de teste (3D) e compartilhamento.
+- [Oficina de decks](docs/deck-builder.md) — formatos, decks, coleção, EDHREC, meta do MTGO, quadro de relações (3D), mesa de teste (3D, sozinho ou com amigos) e compartilhamento.
 - [Dicionário de dados](docs/banco-de-dados.md) — todas as tabelas e colunas do PostgreSQL.
 - [Página inicial](docs/home.md) e [deploy](docs/deploy.md).
 
@@ -37,6 +38,7 @@ Projeto local para pesquisar cartas, planejar decks de Commander a partir da sua
 | Minha coleção | `/collection.php` | Login |
 | À venda | `/trade.php` | Login |
 | Meus decks | `/decks.php` | Login |
+| Mesa compartilhada | `/deck_playtest.php?mesa=CÓDIGO` | Login, com um deck do formato da mesa |
 | Status do acervo | `/status.php` | Administrador |
 | Histórico de atualizações | `/sync_history.php` | Administrador |
 | Usuários | `/users.php` | Administrador |
@@ -254,9 +256,9 @@ Não há alteração de schema nesta versão. Se o projeto já está rodando com
 ## v6.1 - correção PostgreSQL/PDO
 Corrige a consulta da home que usava o operador JSONB `?`. O PDO PostgreSQL pode interpretar esse caractere como placeholder posicional (`$1`) quando `ATTR_EMULATE_PREPARES=false`. A consulta agora usa `jsonb_exists(...)`, evitando o conflito.
 
-## Oficina de decks Commander
+## Oficina de decks
 
-Novo módulo em http://localhost:8080/decks.php. Importação de coleção, busca Oracle e seleção manual de cartas. Consulte [o guia do módulo](docs/deck-builder.md).
+Módulo em http://localhost:8080/decks.php, para 13 formatos: seis com comandante (Commander, Pauper Commander, Brawl, Standard Brawl, Duel Commander e Oathbreaker) e sete construídos de 60 cartas com sideboard (Standard, Pioneer, Modern, Legacy, Vintage, Pauper e Premodern). Nos formatos com comandante, a ajuda de montagem usa o EDHREC; nos construídos, as listas públicas dos torneios do MTGO, buscadas em segundo plano (`php app/bin/sync_meta.php [formato…]`). Consulte [o guia do módulo](docs/deck-builder.md).
 
 ## Idiomas
 
@@ -328,6 +330,8 @@ docker compose up -d --build
 ~~~
 
 Abra http://localhost:8080. O PostgreSQL fica disponível em localhost:5435 para ferramentas externas; dentro do Compose, o host do banco é db.
+
+O Compose sobe três containers: `app` (PHP 8.3 + Apache, o site), `db` (PostgreSQL 16) e `realtime` (Node.js, o WebSocket da mesa compartilhada — o Apache repassa `/realtime/` para ele, então tudo sai pela porta 8080). Depois de mudar o código de `realtime/`, rode `docker compose restart realtime`.
 
 Para importar ou atualizar o catálogo Scryfall, abra **Status → Catálogo do Scryfall** e clique em **Baixar atualização**. O download e a importação rodam em segundo plano, com progresso na própria página (log em `storage/sync.log`).
 

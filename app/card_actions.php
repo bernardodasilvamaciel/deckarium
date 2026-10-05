@@ -32,7 +32,7 @@ function cardActionColorNames(array $colors): string
 function cardActionDecks(int $userId): array
 {
     if ($userId < 1) return [];
-    return deckQuery("SELECT d.id, d.name, d.status, c.name AS commander, c.color_identity
+    return deckQuery("SELECT d.id, d.name, d.status, d.format, c.name AS commander, c.color_identity
         FROM builder_decks d LEFT JOIN cards c ON c.id = d.commander_id
         WHERE d.user_id = ? ORDER BY d.name", [$userId])->fetchAll();
 }
@@ -40,6 +40,12 @@ function cardActionDecks(int $userId): array
 /** Motivo de a carta não caber no deck, ou null quando ela cabe. */
 function cardActionBlockReason(array $card, array $deck): ?string
 {
+    // Formato do deck: carta banida ou fora do formato não entra (Modern, Pauper, Commander…).
+    $format = deckFormatOf($deck);
+    $legality = deckFormatLegality($card, $format);
+    if (in_array($legality, ['banned', 'not_legal'], true) && !($format['leader'] === 'pauper' && $legality === 'not_legal' && deckQuery('SELECT 1 FROM cards c WHERE c.id=? AND ' . deckLeaderSql($format), [$card['id']])->fetchColumn())) {
+        return $legality === 'banned' ? t('Banida no :format.', ['format' => $format['name']]) : t('Não é legal no :format.', ['format' => $format['name']]);
+    }
     if (empty($deck['commander'])) return null; // Deck sem comandante ainda não tem identidade.
     $deckColors = cardActionColors($deck['color_identity']);
     $cardColors = cardActionColors($card['color_identity'] ?? []);

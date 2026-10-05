@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 /** Short-lived, local query cache. A completed Scryfall sync changes every key. */
+// Guardado por function_exists: a página e deck_meta.php podem carregar este arquivo.
+if (!function_exists('catalogCached')) {
 function catalogCached(string $key, callable $query, int $ttl = 300): array
 {
     static $revision;
@@ -23,4 +25,5 @@ function catalogCached(string $key, callable $query, int $ttl = 300): array
         if (!@rename($temp, $path)) @unlink($temp);
     }
     return $value;
+}
 }

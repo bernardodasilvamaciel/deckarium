@@ -33,7 +33,7 @@ foreach ($groups as $category=>$entries) foreach ($entries as $entry) {
     $mapLaneCounts[$lane] += $quantity;
     if (!$isCommander) $mapColumnCounts[$column] += $quantity;
 }
-$mapShowTargets = $selectionStage==='deck' && $commander;
+$mapShowTargets = $selectionStage==='deck' && $deckReady;
 $mapTargets = $mapShowTargets ? ($scoreConfig['targets'] ?? []) : [];
 $mapCurveTargets = $mapShowTargets ? ($scoreConfig['curve'] ?? []) : [];
 $mapColors = $identity ? array_values(array_intersect(['W','U','B','R','G'],$identity)) : ['C'];
@@ -85,6 +85,6 @@ $mapCard = function(array $entry, bool $isCommander, int $index) use($selectionS
         </div>
         <?php if($mapLands): ?>
         <div class="map-fan" style="--n:<?= count($mapLands) ?>"><?php foreach($mapLands as $index=>$land) $mapCard($land,false,$index); ?></div>
-        <?php else: ?><p class="muted">Nenhum terreno nesta etapa.<?php if($selectionStage==='deck' && $commander): ?> Use “Completar com terrenos” para montar a base a partir da coleção.<?php endif; ?></p><?php endif; ?>
+        <?php else: ?><p class="muted">Nenhum terreno nesta etapa.<?php if($selectionStage==='deck' && $deckReady): ?> Use “Completar com terrenos” para montar a base a partir da coleção.<?php endif; ?></p><?php endif; ?>
     </section>
 </div>

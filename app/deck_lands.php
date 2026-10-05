@@ -17,18 +17,23 @@ const DECK_BASIC_LANDS = ['W' => 'Plains', 'U' => 'Island', 'B' => 'Swamp', 'R' 
  *
  * $options: total (meta de terrenos informada), buy (inclui terrenos fora da coleção), skip (ids lógicos a ignorar).
  */
-function deckLandPlan(int $deckId, array $commander, array $items, array $config, array $options = []): array
+function deckLandPlan(int $deckId, ?array $commander, array $items, array $config, array $options = []): array
 {
-    $identity = array_values(array_intersect(['W', 'U', 'B', 'R', 'G'], json_decode((string)$commander['color_identity'], true) ?: []));
+    $format = deckCurrentFormat();
+    $size = (int)$format['size'];
+    // Sem comandante (construídos), as cores são as das mágicas do deck.
+    $identity = array_values(array_intersect(['W', 'U', 'B', 'R', 'G'], $commander ? (json_decode((string)$commander['color_identity'], true) ?: []) : ($options['identity'] ?? [])));
     $colors = $identity ?: ['C'];
+    // Cartas fora de builder_items que contam no tamanho: comandante e feitiço de assinatura.
+    $fixed = (int)($options['fixed'] ?? ($commander ? 1 : 0));
     $includeMissing = $options['buy'] ?? (bool)($config['land_fill']['buy'] ?? false);
     // Mínimo de básicos: a fração informada pelo usuário ou a padrão da identidade de cor.
     $basicShareOption = $options['basic_share'] ?? ($config['land_fill']['basic_share'] ?? null);
     $skip = array_flip(array_map('strtolower', (array)($options['skip'] ?? [])));
 
-    $taken = [strtolower((string)($commander['oracle_id'] ?: $commander['id'])) => true];
+    $taken = $commander ? [strtolower((string)($commander['oracle_id'] ?: $commander['id'])) => true] : [];
     $takenPrintings = [];
-    $cardCount = 1; $manualLands = 0; $manualBasics = 0; $autoLands = 0; $nonland = 0; $basicFetchers = 0;
+    $cardCount = $fixed; $manualLands = 0; $manualBasics = 0; $autoLands = 0; $nonland = 0; $basicFetchers = 0;
     $pips = array_fill_keys($colors, 0.0);
     $sources = array_fill_keys($colors, 0);
     $candidateLands = [];
@@ -36,7 +41,7 @@ function deckLandPlan(int $deckId, array $commander, array $items, array $config
     $addPips = function (array $card, float $weight) use (&$pips): void {
         foreach (array_keys($pips) as $color) if ($color !== 'C') $pips[$color] += substr_count(strtoupper((string)($card['mana_cost'] ?? '')), $color) * $weight;
     };
-    $addPips($commander, 2.0);
+    if ($commander) $addPips($commander, 2.0);
     foreach ($items as $item) {
         if ($item['role'] !== DECK_AUTO_LAND_ROLE) $takenPrintings[strtolower((string)$item['id'])] = true;
         $isLand = str_contains(explode(' // ', (string)$item['type_line'])[0], 'Land');
@@ -66,14 +71,15 @@ function deckLandPlan(int $deckId, array $commander, array $items, array $config
     $saved = $config['land_fill']['total'] ?? null;
     $targetSource = isset($options['total']) && $options['total'] !== null ? 'request' : ($saved !== null ? 'saved' : 'suggestion');
     $target = max(0, min(60, (int)($targetSource === 'request' ? $options['total'] : ($saved ?? $suggestion['total']))));
-    $open = max(0, 100 - $cardCount);
-    // Os terrenos só são escolhidos com a parte não terreno fechada: comandante + mágicas = 100 − meta.
+    $open = max(0, $size - $cardCount);
+    // Os terrenos só são escolhidos com a parte não terreno fechada: comandante + mágicas = tamanho − meta.
     // Assim a divisão de cores e os não básicos são calculados sobre a lista final de mágicas.
-    $spellsNeeded = 99 - $target;
+    $spellsNeeded = $size - $fixed - $target;
+    $leaderWord = $fixed ? ' + ' . mb_strtolower((string)($format['leader_label'] ?? 'comandante')) . ($fixed > 1 ? ' e feitiço de assinatura' : '') : '';
     $blocked = null;
     if ($manualLands > $target) $blocked = 'Você já aprovou ' . $manualLands . ' terrenos, mais que a meta de ' . $target . '. Aumente a meta ou devolva terrenos às candidatas.';
-    elseif ($nonland < $spellsNeeded) $blocked = 'Faltam ' . ($spellsNeeded - $nonland) . ' mágica(s). Com ' . $target . ' terrenos, o deck precisa de ' . $spellsNeeded . ' mágicas + comandante antes de completar; hoje tem ' . $nonland . '.';
-    elseif ($nonland > $spellsNeeded) $blocked = 'Sobram ' . ($nonland - $spellsNeeded) . ' mágica(s). Com ' . $target . ' terrenos, o deck comporta ' . $spellsNeeded . ' mágicas + comandante; hoje tem ' . $nonland . '. Retire mágicas ou reduza a meta para ' . (99 - $nonland) . '.';
+    elseif ($nonland < $spellsNeeded) $blocked = 'Faltam ' . ($spellsNeeded - $nonland) . ' mágica(s). Com ' . $target . ' terrenos, o deck precisa de ' . $spellsNeeded . ' mágicas' . $leaderWord . ' antes de completar; hoje tem ' . $nonland . '.';
+    elseif ($nonland > $spellsNeeded && $format['exact']) $blocked = 'Sobram ' . ($nonland - $spellsNeeded) . ' mágica(s). Com ' . $target . ' terrenos, o deck comporta ' . $spellsNeeded . ' mágicas' . $leaderWord . '; hoje tem ' . $nonland . '. Retire mágicas ou reduza a meta para ' . ($size - $fixed - $nonland) . '.';
     $need = $blocked ? 0 : max(0, $target - $manualLands);
     $notes = [];
 
@@ -91,11 +97,20 @@ function deckLandPlan(int $deckId, array $commander, array $items, array $config
     $basicShare = $basicShareOption !== null ? max(0.0, min(1.0, (float)$basicShareOption)) : $defaultShare;
     $totalTarget = $manualLands + max(0, $target - $manualLands);
     $minBasics = min($need, max(0, (int)ceil($basicShare * $totalTarget) - $manualBasics, $basicFetchers * 2));
-    $synergy = deckQuery("SELECT COALESCE(card.oracle_id,card.id)::text, MAX(s.score) FROM deck_synergy s
-        JOIN cards leader ON leader.id=s.commander_id JOIN cards card ON card.id=s.card_id
-        WHERE COALESCE(leader.oracle_id,leader.id)=?::uuid GROUP BY 1", [(string)($commander['oracle_id'] ?: $commander['id'])])->fetchAll(PDO::FETCH_KEY_PAIR);
-    // Terrenos que o EDHREC mostra nesta comandante entram na busca mesmo fora do top 6000 geral.
-    $landOptions = deckLandOptions($deckId, $commander, $identity, $includeMissing, $includeMissing ? array_keys($synergy) : []);
+    if ($commander) {
+        $synergy = deckQuery("SELECT COALESCE(card.oracle_id,card.id)::text, MAX(s.score) FROM deck_synergy s
+            JOIN cards leader ON leader.id=s.commander_id JOIN cards card ON card.id=s.card_id
+            WHERE COALESCE(leader.oracle_id,leader.id)=?::uuid GROUP BY 1", [(string)($commander['oracle_id'] ?: $commander['id'])])->fetchAll(PDO::FETCH_KEY_PAIR);
+    } else {
+        // Construídos: terrenos dos decks do meta parecidos com o seu (ou os mais jogados no formato).
+        $synergy = [];
+        if (metaSlug($format) !== null) {
+            foreach (metaDeckSynergy($format['key'], deckMetaMine($items)) as $lid => $row) if ($row['share'] > 0.1) $synergy[$lid] = $row['share'];
+            foreach (metaCardStats($format['key'])['cards'] as $lid => $row) if (!$row['basic'] && $row['share'] >= 0.03) $synergy[$lid] = max($synergy[$lid] ?? 0, $row['share'] / 2);
+        }
+    }
+    // Terrenos que o EDHREC (ou o meta) mostra para este deck entram na busca mesmo fora do top 6000 geral.
+    $landOptions = deckLandOptions($deckId, $commander, $identity, $includeMissing, $includeMissing || !$commander ? array_keys($synergy) : []);
     $pool = [];
     foreach ($candidateLands as $logical => $item) {
         if (isset($taken[$logical]) || str_contains((string)$item['type_line'], 'Basic')) continue;
@@ -114,18 +129,27 @@ function deckLandPlan(int $deckId, array $commander, array $items, array $config
     usort($pool, fn($a, $b) => [$b['score'], $a['card']['name']] <=> [$a['score'], $b['card']['name']]);
 
     // Escolha gulosa: melhor pontuação primeiro, com teto de não básicos e de terrenos que só geram incolor.
+    // Nos construídos um bom terreno entra com várias cópias (até o limite do formato e as cópias disponíveis).
     $colorlessCap = $multicolor ? (count($identity) >= 3 ? 2 : 3) : 6;
-    $picks = []; $colorlessPicked = 0;
+    $picks = []; $colorlessPicked = 0; $picked = 0;
     foreach ($pool as $option) {
-        if (count($picks) >= $need - $minBasics) break;
+        if ($picked >= $need - $minBasics) break;
         if ($option['score'] < 18) continue;
         if ($option['utility_only']) { if ($colorlessPicked >= $colorlessCap) continue; $colorlessPicked++; }
+        $copies = 1;
+        if ((int)$format['copies'] > 1) {
+            $limit = deckCopyLimit($option['card'], $format) ?? 4;
+            $available = $option['availability'] === 'candidate' ? max(1, (int)($option['card']['quantity'] ?? 1)) : ((int)$option['card']['free'] > 0 ? (int)$option['card']['free'] : $limit);
+            $copies = max(1, min($limit, $available, $option['utility_only'] ? 1 : ($option['score'] >= 40 ? 4 : 2), $need - $minBasics - $picked));
+        }
+        $option['quantity'] = $copies;
         $picks[] = $option;
-        foreach ($option['colors'] as $color) $sources[$color]++;
+        $picked += $copies;
+        foreach ($option['colors'] as $color) $sources[$color] += $copies;
     }
 
     // Básicos: divididos pela falta de fontes de cada cor em relação à participação dela nos custos.
-    $basicCount = $need - count($picks);
+    $basicCount = $need - $picked;
     $totalLands = $manualLands + $need;
     $basics = array_fill_keys($colors, 0);
     if ($basicCount > 0) {
@@ -165,8 +189,8 @@ function deckLandPlan(int $deckId, array $commander, array $items, array $config
         'share' => $share, 'sources' => $sources, 'colors' => $colors, 'identity' => $identity,
         'picks' => $picks, 'basics' => $basicPicks, 'notes' => $notes, 'include_missing' => $includeMissing,
         'min_basics' => $minBasics, 'basic_share' => $basicShare, 'basic_share_source' => $basicShareOption !== null ? 'custom' : 'auto',
-        'manual_basics' => $manualBasics,
-        'missing_count' => count(array_filter($picks, fn($pick) => in_array($pick['availability'], ['reserved', 'missing'], true))) + array_sum(array_column($basicPicks, 'missing')),
+        'manual_basics' => $manualBasics, 'fixed' => $fixed, 'size' => $size,
+        'missing_count' => array_sum(array_map(fn($pick) => in_array($pick['availability'], ['reserved', 'missing'], true) ? $pick['quantity'] : max(0, $pick['quantity'] - (int)($pick['card']['free'] ?? $pick['quantity'])), array_filter($picks, fn($pick) => $pick['availability'] !== 'candidate'))) + array_sum(array_column($basicPicks, 'missing')),
     ];
 }
 
@@ -176,8 +200,10 @@ function deckLandPlan(int $deckId, array $commander, array $items, array $config
  * busca de terrenos; ~1 terreno a cada 3 peças), compra barata, terrenos importando (landfall) e custo da comandante.
  * Devolve o total (31–42) e cada ajuste com o motivo.
  */
-function deckLandSuggestion(array $commander, array $spells, array $config): array
+function deckLandSuggestion(?array $commander, array $spells, array $config): array
 {
+    $format = deckCurrentFormat();
+    if ((int)$format['size'] < 100) return deckLandSuggestion60($commander, $spells);
     $count = 0; $mvSum = 0.0; $ramp = 0.0; $rampCards = 0; $draw = 0; $landfall = 0;
     foreach ($spells as $spell) {
         $quantity = max(1, (int)($spell['quantity'] ?? 1));
@@ -211,8 +237,35 @@ function deckLandSuggestion(array $commander, array $spells, array $config): arr
     return ['total' => max(31, min(42, $total)), 'raw' => $total, 'parts' => $parts, 'average' => $average, 'spells' => $count];
 }
 
-/** Terrenos não básicos na identidade e legais em Commander: os da coleção e, se pedido, os mais jogados do catálogo. */
-function deckLandOptions(int $deckId, array $commander, array $identity, bool $includeMissing, array $extraLogicalIds = []): array
+/**
+ * Decks de 60 cartas: referência de 24 terrenos para curva média 2,8; ≈5 terrenos por ponto de curva
+ * (aggro de curva 2 fica perto de 20; controle de curva 3,3, perto de 26) e um a menos a cada 4 peças de aceleração.
+ */
+function deckLandSuggestion60(?array $commander, array $spells): array
+{
+    $count = 0; $mvSum = 0.0; $ramp = 0; $draw = 0;
+    foreach ($spells as $spell) {
+        $quantity = max(1, (int)($spell['quantity'] ?? 1));
+        $mv = (float)($spell['cmc'] ?? 0);
+        $count += $quantity; $mvSum += $mv * $quantity;
+        $profile = deckScoreProfile($spell);
+        if (isset($profile['roles']['ramp']) && $mv <= 2) $ramp += $quantity;
+        if (isset($profile['roles']['draw']) && $mv <= 2) $draw += $quantity;
+    }
+    if ($commander) { $count++; $mvSum += (float)($commander['cmc'] ?? 0); }
+    $average = $count ? $mvSum / $count : 2.8;
+    $parts = [];
+    $total = 24;
+    $curve = (int)round(($average - 2.8) * 5);
+    $parts[] = ['Curva média ' . number_format($average, 2, ',', '.') . ' (referência 2,80 para 24 terrenos)', $curve];
+    if ($ramp >= 4) $parts[] = [$ramp . ' peça(s) de aceleração até 2 manas', -intdiv($ramp, 4)];
+    if ($draw >= 6) $parts[] = [$draw . ' carta(s) de compra até 2 manas', -1];
+    foreach ($parts as [, $delta]) $total += $delta;
+    return ['total' => max(16, min(28, $total)), 'raw' => $total, 'parts' => $parts, 'average' => $average, 'spells' => $count];
+}
+
+/** Terrenos não básicos nas cores e legais no formato: os da coleção e, se pedido, os mais jogados do catálogo. */
+function deckLandOptions(int $deckId, ?array $commander, array $identity, bool $includeMissing, array $extraLogicalIds = []): array
 {
     // 1) Quais cartas lógicas considerar: os terrenos da coleção (poucas linhas) e, com compra, os mais jogados do catálogo.
     $landSql = "split_part(COALESCE(c.type_line,''),' // ',1) ILIKE '%Land%' AND COALESCE(c.type_line,'') NOT ILIKE '%Basic%'";
@@ -228,7 +281,7 @@ function deckLandOptions(int $deckId, array $commander, array $identity, bool $i
             SELECT DISTINCT ON (COALESCE(c.oracle_id,c.id)) c.id, COALESCE(c.oracle_id,c.id)::text AS logical_id
             FROM cards c
             WHERE COALESCE(c.oracle_id,c.id) = ANY(?::uuid[]) AND {$landSql}
-                AND c.legalities->>'commander'='legal' AND c.color_identity <@ ?::jsonb AND c.layout NOT IN ('token','double_faced_token','art_series')
+                AND " . deckFormatLegalSql(deckCurrentFormat()) . " AND c.color_identity <@ ?::jsonb AND c.layout NOT IN ('token','double_faced_token','art_series')
             ORDER BY COALESCE(c.oracle_id,c.id), (c.id = ANY(?::uuid[])) DESC, (c.lang='en') DESC, (c.local_image IS NOT NULL) DESC, c.released_at DESC NULLS LAST
         ) pick JOIN cards c ON c.id = pick.id",
         ['{' . implode(',', array_unique($logical)) . '}', json_encode($identity), '{' . implode(',', array_column($ownedRows, 'id')) . '}'])->fetchAll();
@@ -332,7 +385,7 @@ function deckLandRequestOptions(array $source): array
     $list = fn(string $key) => array_map('strtolower', array_values(array_filter((array)($source[$key] ?? []), $uuid)));
     $skip = $list('land_skip');
     if (array_key_exists('land_shown', $source)) $skip = array_merge($skip, array_diff($list('land_shown'), $list('land_keep')));
-    $total = filter_var($source['land_total'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 20, 'max_range' => 60]]);
+    $total = filter_var($source['land_total'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 10, 'max_range' => 60]]);
     // land_buy_set indica que o formulário mostrou a opção; sem ele, vale a escolha salva no deck.
     $buy = array_key_exists('land_buy_set', $source) || array_key_exists('land_buy', $source) ? ($source['land_buy'] ?? '') === '1' : null;
     // Percentual mínimo de básicos: vazio volta ao automático da identidade de cor.
@@ -345,7 +398,7 @@ function deckLandRequestOptions(array $source): array
         'basic_share_set' => array_key_exists('land_basic_share', $source), 'skip' => array_slice(array_values(array_unique($skip)), 0, 200)];
 }
 
-/** Aplica o plano: troca os terrenos automáticos anteriores pelos novos, sem passar de 100 cartas. */
+/** Aplica o plano: troca os terrenos automáticos anteriores pelos novos, sem passar do tamanho do formato. */
 function deckApplyLandPlan(int $deckId, array $plan): int
 {
     $added = 0;
@@ -353,19 +406,21 @@ function deckApplyLandPlan(int $deckId, array $plan): int
     try {
         deckQuery("DELETE FROM builder_items WHERE deck_id=? AND stage='deck' AND role=?", [$deckId, DECK_AUTO_LAND_ROLE]);
         foreach ($plan['picks'] as $pick) {
+            $copies = max(1, (int)($pick['quantity'] ?? 1));
             if ($pick['availability'] === 'candidate') {
-                deckQuery("UPDATE builder_items SET stage='deck', quantity=1 WHERE deck_id=? AND card_id=?::uuid AND stage='candidate'", [$deckId, $pick['card']['id']]);
+                deckQuery("UPDATE builder_items SET stage='deck', quantity=? WHERE deck_id=? AND card_id=?::uuid AND stage='candidate'", [$copies, $deckId, $pick['card']['id']]);
             } else {
-                deckQuery("INSERT INTO builder_items(deck_id,card_id,stage,quantity,role) VALUES (?,?,'deck',1,?) ON CONFLICT (deck_id,card_id) DO UPDATE SET stage='deck', quantity=1, role=EXCLUDED.role", [$deckId, $pick['card']['id'], DECK_AUTO_LAND_ROLE]);
+                deckQuery("INSERT INTO builder_items(deck_id,card_id,stage,quantity,role) VALUES (?,?,'deck',?,?) ON CONFLICT (deck_id,card_id) DO UPDATE SET stage='deck', quantity=EXCLUDED.quantity, role=EXCLUDED.role", [$deckId, $pick['card']['id'], $copies, DECK_AUTO_LAND_ROLE]);
             }
-            $added++;
+            $added += $copies;
         }
         foreach ($plan['basics'] as $basic) {
             deckQuery("INSERT INTO builder_items(deck_id,card_id,stage,quantity,role) VALUES (?,?,'deck',?,?) ON CONFLICT (deck_id,card_id) DO UPDATE SET stage='deck', quantity=EXCLUDED.quantity, role=EXCLUDED.role", [$deckId, $basic['card']['id'], $basic['quantity'], DECK_AUTO_LAND_ROLE]);
             $added += $basic['quantity'];
         }
-        $count = (int)deckQuery("SELECT COALESCE(SUM(quantity),0) FROM builder_items WHERE deck_id=? AND stage='deck'", [$deckId])->fetchColumn() + 1;
-        if ($count > 100) throw new RuntimeException('Os terrenos passariam de 100 cartas. Recarregue a página e tente de novo.');
+        $format = deckCurrentFormat();
+        $count = (int)deckQuery("SELECT COALESCE(SUM(quantity),0) FROM builder_items WHERE deck_id=? AND stage='deck'", [$deckId])->fetchColumn() + (int)($plan['fixed'] ?? 1);
+        if ($format['exact'] && $count > (int)$format['size']) throw new RuntimeException('Os terrenos passariam de ' . $format['size'] . ' cartas. Recarregue a página e tente de novo.');
         db()->commit();
     } catch (Throwable $e) { if (db()->inTransaction()) db()->rollBack(); throw $e; }
     return $added;

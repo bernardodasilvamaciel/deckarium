@@ -75,6 +75,10 @@ jobs:
               | xargs -0 -n1 -P4 php -l > /tmp/lint.log 2>&1 \
               || { grep -v "^No syntax errors" /tmp/lint.log; exit 1; }'
 
+      - name: Conferir o serviço de tempo real
+        shell: bash
+        run: docker run --rm --entrypoint node deckarium-realtime:latest --check server.js && docker run --rm --entrypoint node deckarium-realtime:latest --check rooms.js
+
       - name: Aplicar schema no PostgreSQL do host
         shell: bash
         run: docker compose --env-file "$DEPLOY_DIR/.env" -f docker-compose.prod.yml run --rm migrate

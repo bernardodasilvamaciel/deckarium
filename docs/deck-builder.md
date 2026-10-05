@@ -2,6 +2,42 @@
 
 Acesse `http://localhost:8080/decks.php` ou **Meus decks** no menu. O módulo funciona no PHP/PostgreSQL existente e mantém os dados externos de recomendação em cache.
 
+## Formatos
+
+Cada deck tem um formato, escolhido ao criar ou importar e trocável na Visão geral. As regras de cada um ficam num lugar só, `deckFormats()` em `app/deck_formats.php`, e valem em todas as abas: tamanho, cópias, cartas legais (pela legalidade do Scryfall), sideboard, zona de comando e vida na mesa de teste.
+
+| Formato | Tamanho | Cópias | Líder | Vida | Ajuda de montagem |
+|---|---|---|---|---|---|
+| Commander | 100 | 1 | criatura lendária | 40 (21 de comandante) | EDHREC + relações |
+| Pauper Commander | 100 | 1 | criatura já impressa como incomum; as 99 comuns | 30 (16 de comandante) | EDHREC (filtrado pelas comuns) + relações |
+| Brawl | 100 | 1 | criatura ou planeswalker lendário (cartas do Arena) | 25 (30 com 3 ou mais) | EDHREC + relações |
+| Standard Brawl | 60 | 1 | idem, só Standard | 25 (30 com 3 ou mais) | EDHREC (metas proporcionais) + relações |
+| Duel Commander | 100 | 1 | como no Commander, lista própria de banidas | 20 | EDHREC + relações |
+| Oathbreaker | 60 | 1 | planeswalker + feitiço de assinatura | 20 | relações e metas de 60 cartas |
+| Standard, Pioneer, Modern, Legacy, Vintage, Pauper, Premodern | 60 ou mais, sideboard até 15 | 4 (restritas do Vintage: 1) | — | 20 | meta do MTGO + relações |
+
+Por que esses: o Commander é de longe o formato mais jogado no papel; no MTG Arena, o Standard responde por cerca de metade das partidas e o Brawl passou o Historic em 2025 (Wizards, *State of the Formats 2026*); Modern, Pioneer, Legacy, Vintage, Pauper e Premodern têm torneios diários no MTGO, com listas públicas; Pauper Commander, Duel Commander e Oathbreaker são as variantes de Commander com comunidade própria.
+
+**Fontes de dados para a montagem.** O EDHREC só abre os dados das comandantes (`json.edhrec.com/pages/commanders/…`); as páginas de Brawl, Oathbreaker e Pauper Commander respondem “Access Denied”. Por isso, nos formatos com comandante, o Deckarium usa a página da comandante no EDHREC e filtra as sugestões pela legalidade do formato. Para os formatos de torneio não há API de meta: MTGGoldfish e MTGTop8 não publicam uma, e o Archidekt tem endpoints JSON sem documentação e com termos de uso que proíbem consultas automatizadas. A fonte usada é a própria Wizards: as páginas de `www.mtgo.com/decklists` trazem a lista completa de cada deck em JSON (ver **Meta do formato**). O Commander Spellbook marca em quais formatos cada combo é legal, e o quadro de relações só mostra os do formato do deck. O MTGJSON tem os decks pré-construídos, e o 17lands tem dados de Limited (fora do escopo).
+
+**Oathbreaker.** Depois do oathbreaker, o Explorar abre na escolha do **feitiço de assinatura** (instantânea ou feitiço na identidade dele); também dá para escolhê-lo na janela de uma carta da seleção. Os dois ficam na zona de comando, pagam o imposto de {2} e aparecem juntos na seleção, na página pública e na mesa de teste.
+
+**Construídos.** Sem comandante, as cores do deck são as das cartas aprovadas (o Explorar filtra por elas quando há alguma). A seleção ganha a aba **Sideboard**; cada carta pode ter até 4 cópias (o campo de quantidade limita e o servidor recusa acima disso). O deck fica finalizado com 60 cartas ou mais e até 15 no sideboard. As metas de função partem de uma base de 60 cartas (24 terrenos, mais remoção barata) e seguem a média de terrenos e a curva dos decks do meta parecidos com o seu. “Completar com terrenos” sugere de 16 a 28 terrenos pela curva (24 para curva 2,8) e põe até 4 cópias dos melhores não básicos. Brackets e Game Changers são só do Commander.
+
+**Importação e exportação.** A lista aceita os cabeçalhos do Moxfield e do Arena: `Commander`/`Oathbreaker`, `Signature Spell`, `Deck`, `Sideboard` (vira candidatas nos formatos sem sideboard) e `Maybeboard` (candidatas). Cópias acima do limite do formato são reduzidas, com aviso. A exportação em texto sai com os mesmos cabeçalhos; o JSON traz `format`, `sideboard_count` e `signature_spell`; o CSV da Liga inclui o sideboard.
+
+## Meta do formato (MTGO)
+
+Nos construídos, a aba **Meta do formato** (`view=guide`, arquivo `deck_meta_view.php`) usa as listas que a Wizards publica dos Challenges, qualifiers e ligas 5-0 do MTGO (`app/deck_meta.php`). A busca roda em segundo plano (`php bin/sync_meta.php modern pauper …`), uma por formato de cada vez, quando o meta tem mais de 36 horas ou pelo botão **Atualizar agora**. Os eventos dos últimos 60 dias ficam em `meta_events`, `meta_decks` e `meta_deck_cards`, com o nome de cada carta ligado à carta lógica do catálogo.
+
+- **Arquétipos:** cada deck recebe cores + a carta que o define — a de mais cópias que aparece em menos decks do formato (Lightning Bolt está em todo lugar; Murktide Regent diz qual deck é). A tabela mostra a participação no meta, a campanha somada e quanto do melhor deck daquele arquétipo você já tem livre na coleção; abrir a linha mostra a lista.
+- **Decks parecidos com o seu:** semelhança de Jaccard ponderada pelas cópias (sem básicos) entre o seu deck e cada lista.
+- **O que dá para montar com a sua coleção:** as listas com mais cartas livres (fora de outros decks; básicos contam como tidos).
+- **Cartas mais jogadas:** presença no formato e média de cópias; “Adicionar N×” manda para as candidatas já com as cópias.
+- Cada lista tem **Levar o que falta para as candidatas** (as cartas que ainda não estão na seleção, com as cópias da lista) e **Copiar como deck novo** (importa a lista inteira, com sideboard, no formato dela).
+
+O mesmo dado alimenta o resto do deck: no Explorar, **Mais jogadas no formato** (presença no meta) e **Combina com o deck** — a presença da carta nos decks do meta parecidos com o seu menos a presença no formato inteiro, a mesma ideia da sinergia do EDHREC; em O que falta, as sugestões de cada função vêm nessa ordem; e “Completar com terrenos” considera os não básicos dessas listas.
+
 ## Fluxo
 
 1. Em **Minha coleção**, envie um CSV (`Name`, `Scryfall ID`, `Quantity` e, opcional, `Foil`) para **substituir**, **somar** ou **subtrair** cópias (vendas e trocas). Ao substituir, qualquer linha com erro cancela tudo; ao somar ou subtrair, as linhas corretas são aplicadas. Em todos os casos a página lista cada linha que não entrou com número, carta, motivo e conteúdo, e oferece essas linhas em CSV para corrigir e reenviar. Subtrair mais cópias do que a coleção tem, ou uma impressão/acabamento que não está nela, é erro daquela linha. Impressões desconhecidas do catálogo continuam aceitas ao importar e são sinalizadas.
@@ -47,13 +83,13 @@ Cada deck tem abas curtas em vez de uma página longa (`decks.php?deck=ID&view=�
 
 | Aba | `view` | Conteúdo |
 |---|---|---|
-| Visão geral | `overview` (padrão) | Comandante, Minha intenção, compartilhamento (público/privado) e atalhos para as outras abas, inclusive **Análise do deck** |
-| Guia da comandante | `guide` | Planos, combos, mecânicas e novidades |
+| Visão geral | `overview` (padrão) | Comandante (ou o formato e as cores do deck), Minha intenção, compartilhamento, troca de formato e atalhos para as outras abas, inclusive **Análise do deck** |
+| Guia da comandante / Meta do formato | `guide` | Com comandante e EDHREC: planos, combos, mecânicas e novidades. Nos construídos: arquétipos, decks parecidos, o que dá para montar e cartas mais jogadas no MTGO. No Oathbreaker: regras e atalhos |
 | O que falta | `needs` | Metas por função e sugestões |
 | Explorar | `explore` | Filtros e resultados, inclusive “Encaixa no deck” |
-| Minha seleção | `selection` | Candidatas e deck; em **No deck**, a Análise do deck (`#deck-analysis`) |
+| Minha seleção | `selection` | Candidatas, deck e (nos construídos) sideboard; em **No deck**, a Análise do deck (`#deck-analysis`) |
 | Quadro de relações | `deck_board.php` | Constelação 3D (ou plano) de quem fornece e quem aproveita, equilíbrio dos temas e sugestões da coleção |
-| Mesa de teste | `deck_playtest.php` | Partida solitária numa mesa 3D: mulligan, terrenos, fichas, marcadores, combate e as regras que dá para conferir sozinho |
+| Mesa de teste | `deck_playtest.php` | Partida numa mesa 3D, sozinho ou com até 3 amigos (mesa compartilhada): mulligan, terrenos, fichas, marcadores, combate e as regras que dá para conferir |
 
 Links antigos com `view=discover` abrem a Visão geral, ou o Explorar quando trazem parâmetros de busca (`q`, `oracle`, `sort`, `page`…). Sem comandante, o deck mostra só a escolha da comandante e a seleção. As abas vêm de `deckSectionNav()`.
 
@@ -74,7 +110,7 @@ Além da ordenação por sinergia, o painel apresenta planos prováveis para o c
 - Um comandante por deck; parceiros e Backgrounds ainda não são modelados.
 - A busca local é textual e explicada pelos termos encontrados. As recomendações externas não interpretam a estratégia escrita.
 - Funções são classificações manuais. “Completar com terrenos” usa uma heurística (metas, símbolos e texto dos terrenos), não uma simulação de partidas; revise o plano antes de aplicar.
-- Há alertas básicos de identidade e duplicidade, sem validação completa de legalidade ou banimentos.
+- A legalidade vem do Scryfall para o formato do deck (banidas e fora do formato geram alerta; o Explorar mostra só as legais por padrão). Regras de construção mais finas — companheiros, parceiros, Backgrounds, a lista de comandantes banidos do Duel Commander — não são conferidas.
 - Cópias usadas em outros decks são **mostradas** (Explorar, Minha coleção, indicadores da seleção), mas não bloqueiam a adição; candidatas não reservam cópias. Preços do CSV não são usados como cotação atual.
 - Preços são os valores USD/EUR da impressão no Scryfall convertidos para BRL. A conversão usa \`USD_BRL_RATE\` (padrão 5,50) ou \`EUR_BRL_RATE\` (padrão 6,00), configuráveis no ambiente do app; “Preço indisponível” significa que aquela impressão não possui cotação.
 
@@ -151,7 +187,7 @@ Nas duas vistas:
 
 ![Mesa de teste](images/mesa-de-teste.png)
 
-`deck_playtest.php?deck=ID` (aba **Mesa de teste** do deck) é uma partida solitária e manual com a comandante e as cartas aprovadas no deck, numa mesa 3D. Candidatas ficam de fora. Os dados vêm do servidor (`playtestCard()`: face da frente e de trás, P/R, lealdade, cores, ímpeto; `deckTokenList()` para as fichas); a partida roda no navegador (`assets/playtest.js`) e o desenho em `assets/playtest-scene.js`, com o three.js de `assets/vendor`.
+`deck_playtest.php?deck=ID` (aba **Mesa de teste** do deck) é uma partida manual com a zona de comando e as cartas aprovadas no deck, numa mesa 3D — sozinho ou numa **mesa compartilhada** com até 3 amigos (abaixo). Candidatas e sideboard ficam de fora. O formato define a vida inicial, o dano de comandante, o mulligan grátis e a zona de comando (os construídos não têm pedestal; o tapete usa a arte da carta mais cara do deck). Os dados vêm do servidor (`playtestCard()`: face da frente e de trás, P/R, lealdade, cores, ímpeto; `deckTokenList()` para as fichas); a partida roda no navegador (`assets/playtest.js`) e o desenho em `assets/playtest-scene.js`, com o three.js de `assets/vendor`.
 
 **A mesa.** O tapete é a ilustração da comandante, desfocada e escurecida, com as zonas impressas: fileiras de criaturas, outras permanentes e terrenos no centro; grimório, cemitério e exílio em pilhas à direita (a altura acompanha a quantidade; o cemitério e o exílio mostram a carta de cima); a comandante em pé num pedestal dourado à esquerda. As cartas têm espessura e sombra de verdade, flutuam quando o mouse passa e se inclinam quando arrastadas. Arrastar o fundo gira um pouco a mesa, a roda do mouse aproxima e o duplo clique volta à vista inicial.
 
@@ -167,7 +203,7 @@ Nas duas vistas:
 
 **Regras que a mesa aplica ou avisa** (com o número da regra nas Comprehensive Rules):
 
-- Mulligan de Londres com o primeiro grátis do multiplayer: compra 7 de novo e, ao manter, escolhe na mão as cartas que vão para o fundo (103.5). Em Commander ninguém pula a compra do 1º turno; “Partida a dois” em **Nova partida** faz quem começa pular (103.8a).
+- Mulligan de Londres: compra 7 de novo e, ao manter, escolhe na mão as cartas que vão para o fundo (103.5). O primeiro é grátis em partidas com 3 ou mais jogadores e no Brawl (103.5c) — na mesa solo de Commander, que simula uma mesa de quatro, também. Nos formatos a dois, quem começa não compra no 1º turno (103.8a); na mesa solo, “Partida a dois” em **Nova partida** liga ou desliga isso.
 - Um terreno por turno: o selo “Terreno 0/1” muda de cor e o segundo gera aviso (305.2).
 - Enjoo de invocação: criatura que entrou no turno (sem ímpeto) ganha um anel pulsante e um aviso ao virar ou atacar (302.6).
 - Combate: na fase de combate, clicar numa criatura declara o ataque (vira, exceto com vigilância); a barra soma a força dos atacantes e **Causar N ao oponente** tira a vida do oponente imaginário. Quando ele chega a 0, a mesa comemora e guarda o turno (“caiu no T5”) — um jeito rápido de medir a velocidade do deck.
@@ -177,7 +213,31 @@ Nas duas vistas:
 
 **Efeitos.** Cada carta que entra no campo solta faíscas nas cores dela (terrenos: nas cores de mana que produzem) e ondas no tapete; a comandante sobe do pedestal com partículas douradas; o exílio dissolve a carta em luz azulada; o cemitério deixa cinzas; fichas surgem num estalo; comprar faz uma carta voar do grimório para a mão, que recebe a carta deslizando; embaralhar sacode a pilha; marcadores viram fichas de pôquer empilhadas no canto da carta; atacantes brilham em vermelho e avançam; o dano ao oponente sobe em números. Com `prefers-reduced-motion`, as animações e partículas param.
 
-A partida fica guardada no navegador (`localStorage`, chave `deckarium-playtest-v1-<deck>`) e é retomada ao voltar, desde que as cartas do deck não tenham mudado. A mesa precisa de WebGL; sem ele, a página avisa.
+A partida fica guardada no navegador (`localStorage`, chave `deckarium-playtest-v2-<deck>`) e é retomada ao voltar, desde que as cartas do deck não tenham mudado. A mesa precisa de WebGL; sem ele, a página avisa.
+
+### Mesa compartilhada
+
+**Jogar com amigos** (nas ferramentas da mesa solo) abre uma mesa com o deck e leva para `deck_playtest.php?mesa=CÓDIGO`; é esse link que se manda. Quem abre o link entra com a própria conta (o login volta para a mesa) e escolhe um deck **do mesmo formato**, com cartas aprovadas e, se o formato pede, comandante; sem um deck assim, a página explica e leva para Meus decks. Até 4 jogadores. No lobby aparecem os lugares com a arte de cada comandante, o link com **Copiar**, e quem abriu a mesa pode tirar alguém e **Começar partida** — quem joga primeiro é sorteado (103.1).
+
+- **Cada um controla o próprio deck.** Mão, grimório, campo, fichas e marcadores ficam no navegador de cada jogador, como na mesa solo (inclusive Desfazer). O que é público vai para a mesa: campo (posição, virada, atacando, marcadores, P/R, enjoo), cemitério, exílio, zona de comando com o imposto, topo revelado, quantas cartas na mão e no grimório, vida, veneno e dano de comandante recebido. A mão e a ordem do grimório nunca saem do navegador — só o estado completo vai para o servidor, e volta apenas para o próprio jogador, para retomar a partida ao recarregar.
+- **A mesa em 3D.** Os tapetes dos oponentes ficam em arco à frente do seu, virados para você, com a arte da comandante de cada um e a moldura na cor do assento; as cartas deles aparecem espelhadas (terrenos longe, criaturas perto do centro) e legíveis, com a mão em leque de versos na borda de trás. O tapete de quem está na vez brilha. A câmera mostra **Mesa toda**, **Meu tapete** ou o tapete de um oponente (clique no nome dele no painel ou no tapete; **V** alterna). Passar o mouse sobre uma carta de outro jogador mostra a leitura grande; clicar no cemitério ou exílio dele abre a lista.
+- **Vez e fases.** A mesa guarda de quem é a vez e a fase. Só quem está na vez avança as fases e **Passa o turno**; quando a vez chega, o turno começa sozinho (desvirar, manutenção, compra). Os outros podem fazer tudo o que não depende da vez — virar cartas, lançar instantâneas, mexer nas próprias zonas. Quem abriu a mesa pode pular a vez de alguém desconectado.
+- **Combate.** Na fase de combate, a faixa escolhe o oponente atacado (ou o menu da carta: “Atacar Fulano”); cada atacante ganha um arco luminoso até o tapete atacado, na cor de quem ataca, e o defensor recebe um aviso. **Causar dano…** abre, por defensor, os atacantes com a força editável e a opção de desmarcar os bloqueados; o dano chega na vida de cada um e o da comandante conta como dano de comandante (21 no Commander, 16 no Pauper Commander; 704.6c), mostrado no painel.
+- **Entre jogadores:** no menu de cada oponente (⋯ no painel ou botão direito no tapete dele) há Causar dano, Mudar a vida e Dar veneno; **Mostrar para a mesa** (na mão) e Revelar o topo aparecem para todos; dados e moeda também. O painel **Mesa e mensagens** junta o registro público de todos (sem o que é segredo: compras e buscas aparecem só como “comprou 1 carta”) e o chat.
+- **Mesa** (nas ferramentas): link, jogadores e, para quem abriu, **Encerrar e voltar ao lobby** (permite novas entradas e uma nova partida); para todos, **Conceder** e **Sair da mesa**.
+
+**Como funciona por baixo.** A partida corre num **WebSocket**, o mesmo modelo dos jogos de navegador (Colyseus, Socket.IO, o cliente web do Cockatrice): uma conexão aberta por jogador, mensagens nos dois sentidos e nada de consultar o servidor de tempo em tempo.
+
+| Peça | Onde | O que faz |
+|---|---|---|
+| Serviço de tempo real | `realtime/` (Node.js + `ws`, container `realtime`) | Uma sala em memória por mesa: assentos, vez, fase, o último estado público de cada jogador e quem está conectado. Recebe as jogadas e repassa na hora para os outros; grava mesa, assentos e eventos no PostgreSQL na hora e o estado de cada jogador agrupado a cada 0,8 s (para retomar a partida). |
+| Proxy | `docker/php/realtime.conf` | O Apache repassa `/realtime/` para o serviço (`mod_proxy_http` com `upgrade=websocket`): o navegador fala com o mesmo endereço do site. |
+| PHP | `playtest_table.php`, `playtest_lib.php` | Abre a mesa (`create`), senta os jogadores com a escolha do deck (`join`) e entrega o **bilhete** do socket: usuário, mesa e validade (12 h) assinados com HMAC-SHA256 com o segredo de `app_secrets`. Quando muda algo, avisa o serviço com `NOTIFY playtest`. |
+| Navegador | `assets/playtest-net.js` | Conecta em `/realtime/mesa`, manda `hello` com o bilhete e recebe o retrato da mesa; depois só o que muda. As ações (vez, fase, lobby, eventos) esperam a resposta do servidor. |
+
+O estado da própria partida só sai quando muda: o público (o que os outros veem) na hora, as cartas (`defs`) uma vez por partida e o privado no máximo a cada 2 s. Com a mesa parada, a conexão fica em silêncio — só um `ping` a cada 20 s, que derruba e refaz conexões mortas (notebook que dormiu, Wi-Fi que caiu). Se o serviço reinicia, os navegadores mostram “Reconectando…” e voltam sozinhos em poucos segundos, pedindo só os eventos que perderam.
+
+Mensagens do navegador: `hello`, `state`, `event` (registro, chat, dano, vida, veneno, revelação, dados, concessão), `turn`, `phase`, `start`, `lobby`, `kick`, `leave` e `ping`. Do servidor: `snapshot` (ao conectar), `room` (mesa e assentos), `state` (estado público de um jogador), `events`, `ack` (resposta a uma ação), `gone` (mesa encerrada ou você saiu) e `pong`. Dados em `playtest_tables`, `playtest_seats` e `playtest_events` (ver o dicionário de dados); a partida, o lobby e os painéis ficam em `assets/playtest.js` e o desenho em `assets/playtest-scene.js`.
 
 ## Metas automáticas por comandante
 

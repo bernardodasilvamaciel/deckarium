@@ -8,7 +8,8 @@ $id = trim((string)($_GET['id'] ?? ''));
 $face = (string)($_GET['face'] ?? 'front');
 $size = (string)($_GET['size'] ?? 'normal');
 $face = $face === 'back' ? 'back' : 'front';
-$size = in_array($size, ['small', 'normal'], true) ? $size : 'small';
+// art_crop: só a ilustração (626 px), usada como arte do tapete na Mesa de teste.
+$size = in_array($size, ['small', 'normal', 'art_crop'], true) ? $size : 'small';
 
 if (!preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i', $id)) {
     http_response_code(400);
@@ -56,21 +57,21 @@ function decodedRawCard(array $card): array
 function remoteUriForVariant(array $card, string $face, string $size): ?string
 {
     $raw = decodedRawCard($card);
-    $sizeKey = $size === 'small' ? 'small' : 'normal';
+    $sizeKey = in_array($size, ['small', 'art_crop'], true) ? $size : 'normal';
 
     if ($face === 'front') {
         $uri = $raw['image_uris'][$sizeKey] ?? null;
         if (!$uri && !empty($raw['card_faces'][0]['image_uris'][$sizeKey])) {
             $uri = $raw['card_faces'][0]['image_uris'][$sizeKey];
         }
-        if (!$uri) {
+        if (!$uri && $sizeKey === 'normal') {
             $uri = $card['image_uri'] ?? null;
         }
         return $uri ?: null;
     }
 
     $uri = $raw['card_faces'][1]['image_uris'][$sizeKey] ?? null;
-    if (!$uri) {
+    if (!$uri && $sizeKey === 'normal') {
         $uri = $card['image_uri_back'] ?? null;
     }
     return $uri ?: null;
@@ -88,7 +89,7 @@ if ($size === 'normal' && $existingRel) {
 }
 
 if (!$full) {
-    $subdir = $size === 'small' ? 'images/small' : 'images/normal';
+    $subdir = 'images/' . $size;
     $suffix = $face === 'back' ? 'back' : 'front';
     $rel = $subdir . '/' . $card['id'] . '-' . $suffix . '.jpg';
     $full = $storage . '/' . $rel;

@@ -917,3 +917,4 @@ button.is-busy::after{content:"";display:inline-block;width:.8em;height:.8em;mar
 .trade-footnote{margin-top:22px;font-size:.78rem}
 @media(max-width:850px){.trade-modes,.trade-fields{grid-template-columns:1fr}.trade-share{flex-direction:column}.trade-share-actions{justify-items:stretch;width:100%}.trade-public .trade-hero{flex-direction:column}}
 @media(max-width:600px){.trade-bulk{align-items:flex-start;flex-direction:column;gap:10px}.trade-table{font-size:.8rem}.trade-card-cell{min-width:170px}}
+.deck-format-chip{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--soft);color:var(--accent);font-size:.72rem;font-weight:800;letter-spacing:.02em;vertical-align:1px}

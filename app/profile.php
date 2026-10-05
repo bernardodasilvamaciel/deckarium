@@ -24,7 +24,7 @@ if (!$profile) {
 }
 $profileId = (int)$profile['id'];
 $isOwner = $viewer && (int)$viewer['id'] === $profileId;
-$decks = deckQuery("SELECT d.id,d.name,d.status,c.id commander_card_id,c.name commander,c.color_identity,
+$decks = deckQuery("SELECT d.id,d.name,d.status,d.format,c.id commander_card_id,c.name commander,c.color_identity,
         COALESCE(c.raw->'image_uris'->>'art_crop',c.raw->'card_faces'->0->'image_uris'->>'art_crop') commander_art,
         (SELECT COALESCE(SUM(quantity),0) FROM builder_items WHERE deck_id=d.id AND stage='deck') + CASE WHEN d.commander_id IS NULL THEN 0 ELSE 1 END card_count
     FROM builder_decks d LEFT JOIN cards c ON c.id=d.commander_id WHERE d.user_id=? AND d.is_public ORDER BY d.id DESC", [$profileId])->fetchAll();
@@ -72,7 +72,7 @@ pageHeader($name . ' · Perfil');
         <?php foreach ($decks as $deck): $identity = json_decode((string)($deck['color_identity'] ?? '[]'), true) ?: []; ?>
             <a class="profile-deck" href="/public_deck.php?id=<?= (int)$deck['id'] ?>"<?php if ($deck['commander_art']): ?> style="--deck-art:url('<?= h($deck['commander_art']) ?>')"<?php endif; ?>>
                 <span class="profile-deck-art" aria-hidden="true"></span>
-                <span class="profile-deck-copy"><strong><?= h($deck['name']) ?></strong><span><?= h($deck['commander'] ?: 'Comandante a escolher') ?></span><small><?= $identity ? manaSymbols(implode('', array_map(fn($c) => '{' . $c . '}', $identity))) : '' ?> <?= (int)$deck['card_count'] ?>/100 · <?= $deck['status'] === 'ready' ? 'Finalizado' : 'Em planejamento' ?></small></span>
+                <span class="profile-deck-copy"><strong><?= h($deck['name']) ?></strong><span><?php $deckFormat = deckFormatInfo((string)($deck['format'] ?? '')); ?><b class="deck-format-chip"><?= h($deckFormat['name']) ?></b> <?= h(deckFormatHasLeader($deckFormat) ? ($deck['commander'] ?: 'Comandante a escolher') : '') ?></span><small><?= $identity ? manaSymbols(implode('', array_map(fn($c) => '{' . $c . '}', $identity))) : '' ?> <?= (int)$deck['card_count'] ?>/100 · <?= $deck['status'] === 'ready' ? 'Finalizado' : 'Em planejamento' ?></small></span>
             </a>
         <?php endforeach; ?>
         </div>
