@@ -65,7 +65,7 @@ main.wrap:has(> .pt-app){max-width:none}
 .pt-rule{display:inline-block;padding:0 5px;border-radius:4px;border:1px solid currentColor;font:600 .62rem/1.5 ui-monospace,Consolas,monospace;opacity:.75;vertical-align:1px}
 
 /* Câmera: aproximar, afastar, vista de cima e centralizar (canto inferior direito) */
-.pt-camera{position:absolute;z-index:5;right:12px;bottom:14px;display:flex;flex-direction:column;gap:4px;padding:4px;border:1px solid var(--glass-line);border-radius:12px;background:var(--glass);backdrop-filter:blur(10px)}
+.pt-camera{position:absolute;z-index:5;right:12px;bottom:14px;display:flex;flex-direction:row;gap:4px;padding:4px;border:1px solid var(--glass-line);border-radius:12px;background:var(--glass);backdrop-filter:blur(10px)}
 .pt-camera button{min-width:38px;height:32px;padding:0 9px;border:0;border-radius:8px;background:none;font:inherit;font-size:.74rem;font-weight:700;color:var(--ink-on);cursor:pointer}
 .pt-camera button[data-pt-cam="in"],.pt-camera button[data-pt-cam="out"]{font-size:1.1rem;line-height:1}
 .pt-camera button:hover{background:rgba(255,255,255,.12)}
@@ -100,14 +100,31 @@ main.wrap:has(> .pt-app){max-width:none}
 @keyframes pt-fade{from{opacity:0;transform:translateY(6px)}}
 
 /* Registro */
-.pt-log{position:absolute;z-index:5;left:12px;bottom:12px;display:grid;gap:6px;justify-items:start;max-width:320px}
-.pt-log-toggle{border:1px solid var(--glass-line);border-radius:999px;background:var(--glass);backdrop-filter:blur(8px);padding:6px 12px;font:inherit;font-size:.74rem;font-weight:700;color:var(--ink-on);cursor:pointer}
-.pt-log-list{order:-1;margin:0;padding:8px 10px;max-height:260px;overflow-y:auto;list-style:none;border:1px solid var(--glass-line);border-radius:12px;background:var(--glass);backdrop-filter:blur(10px);font-size:.74rem;line-height:1.4;scrollbar-width:thin}
-.pt-log-list li{padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05)}
-.pt-log-list small{display:inline-block;min-width:2.6em;color:var(--gold);font-weight:700}
 
 /* Avisos de regra */
-.pt-toasts{position:absolute;z-index:8;bottom:calc(var(--hand-h) + 8px);left:12px;display:grid;gap:8px;width:min(340px,calc(100% - 32px));pointer-events:none}
+/* Avisos à direita, acima dos botões da câmera (a esquerda é do registro) */
+.pt-toasts{position:absolute;z-index:8;bottom:calc(var(--hand-h) + 8px);right:12px;display:grid;gap:8px;width:min(340px,calc(100% - 32px));pointer-events:none}
+
+/* Registro da partida: sempre à vista, o mais novo embaixo, com ícone, nome na cor do assento e o turno separando */
+.pt-log{position:absolute;z-index:5;left:12px;bottom:12px;display:grid;gap:6px;width:min(310px,calc(100% - 24px));padding:8px 10px;border:1px solid var(--glass-line);border-radius:12px;background:rgba(9,16,12,.86);backdrop-filter:blur(10px)}
+.pt-log-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pt-log-head strong{font-size:.66rem;letter-spacing:.09em;text-transform:uppercase;color:var(--gold)}
+.pt-log-size{border:0;background:none;padding:0;color:var(--muted-on);font:inherit;font-size:.68rem;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.pt-log-size:hover{color:var(--ink-on)}
+.pt-log-list{margin:0;padding:0 2px 0 0;max-height:136px;overflow-y:auto;list-style:none;font-size:.74rem;line-height:1.35;scrollbar-width:thin;overscroll-behavior:contain}
+.pt-log.is-expanded .pt-log-list{max-height:min(48vh,440px)}
+.pt-log-list li{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:6px;align-items:start;padding:3px 2px;border-bottom:1px solid rgba(255,255,255,.05)}
+.pt-log-icon{text-align:center;font-size:.76rem;line-height:1.35}
+.pt-log-text{min-width:0;overflow-wrap:anywhere}.pt-log-text b{font-weight:800}
+.pt-log-list small{padding-top:1px;color:#7f9088;font-size:.62rem;font-variant-numeric:tabular-nums}
+.pt-log-list li.is-alert{border-radius:6px;background:rgba(255,190,90,.1);box-shadow:inset 3px 0 0 #f0b44c}
+.pt-log-list li.is-chat .pt-log-text{color:#fff}
+.pt-log-list li.is-damage .pt-log-text,.pt-log-list li.is-concede .pt-log-text{color:#ffc2b5}
+.pt-log-list li.pt-log-turn{display:block;padding:7px 0 3px;border:0;text-align:center}
+.pt-log-turn span{display:inline-block;padding:1px 10px;border-radius:999px;background:rgba(217,180,90,.16);color:#f1d48a;font-size:.66rem;font-weight:800;letter-spacing:.03em}
+.pt-log-turn.is-start span{background:rgba(95,216,150,.16);color:#9fe0b9}
+.pt-log-list li.pt-log-empty{display:block;color:var(--muted-on)}
+.pt-chat{display:flex;gap:4px}
 .pt-toast{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;background:rgba(12,20,16,.9);backdrop-filter:blur(10px);border:1px solid var(--glass-line);border-left:4px solid #8fb4a2;box-shadow:0 14px 30px #0008;font-size:.8rem;line-height:1.4;animation:pt-toast-in .3s cubic-bezier(.2,.8,.2,1) both;transition:opacity .35s ease,transform .35s ease}
 .pt-toast p{margin:0}
 .pt-toast.is-rule{border-left-color:var(--gold)}
@@ -203,8 +220,10 @@ html.pt-lock{overflow:hidden}
   .pt-preview{display:none}
   .pt-camera{flex-direction:row;bottom:calc(var(--hand-h) + 8px)}
   .pt-mulligan,.pt-combat{top:auto;bottom:calc(var(--hand-h) + 44px);max-width:calc(100% - 24px)}
-  .pt-log{display:none}
   .pt-toasts{top:auto;bottom:calc(var(--hand-h) + 50px)}
+  .pt-log{display:none}
+  .pt-app.is-shared .pt-log{display:grid;left:8px;right:8px;width:auto;bottom:calc(var(--hand-h) + 6px)}
+  .pt-app.is-shared .pt-log-list{max-height:72px}
   .pt-counter-list{grid-template-columns:1fr}
 }
 @media (prefers-reduced-motion:reduce){.pt-card,.pt-toast{transition:none}.pt-card.is-new,.pt-preview,.pt-toast,.pt-float,.pt-modal-card,.pt-dice-result.is-rolling{animation:none}}
@@ -230,17 +249,8 @@ html.pt-lock{overflow:hidden}
 .pt-opp-cmd.is-lethal{border-color:#ff8a78;color:#ff8a78}
 .pt-opp-more{width:24px;height:24px;border:0;border-radius:6px;background:none;color:var(--muted-on);font-size:1rem;line-height:1;cursor:pointer}
 .pt-opp-more:hover{background:rgba(255,255,255,.12);color:var(--ink-on)}
-.pt-app.is-shared .pt-log{max-width:340px}
 .pt-app.is-shared .pt-turn{gap:6px 8px}
 .pt-app.is-shared .pt-phases li{padding:3px 5px}
-.pt-app.is-shared .pt-toasts{left:auto;right:12px}
-.pt-app.is-shared .pt-log-list{max-height:200px;width:340px}
-.pt-log-list li b{font-weight:800}
-.pt-log-list li.is-chat{color:#fff}
-.pt-log-list li.is-start{color:#ffe7a8}
-.pt-chat{display:flex;gap:4px;width:340px}
-/* O campo de mensagem aparece com o registro aberto: fechado, ele ficava por cima da mão. */
-.pt-log-list[hidden]~.pt-chat{display:none}
 .pt-chat input{flex:1;min-width:0;padding:6px 10px;border:1px solid var(--glass-line);border-radius:999px;background:var(--glass);backdrop-filter:blur(8px);font:inherit;font-size:.76rem;color:var(--ink-on)}
 .pt-chat input::placeholder{color:var(--muted-on)}
 .pt-app.is-offline .pt-turn::after{content:'Reconectando…';padding:3px 8px;border-radius:999px;background:#6b2a1f;color:#ffd4c9;font-size:.66rem;font-weight:700}
@@ -308,8 +318,22 @@ html.pt-lock{overflow:hidden}
 @media (max-width:850px){
   .pt-opponents{min-width:0;grid-column:1/-1}
   .pt-lobby-seats,.pt-join-seats{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .pt-app.is-shared .pt-log{display:grid;left:8px;right:8px;max-width:none}
-  .pt-app.is-shared .pt-log-list,.pt-chat{width:auto}
 }
 @media (prefers-reduced-motion:reduce){.pt-reveal,.pt-lobby-card{animation:none}}
-.pt-unread{display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:4px;padding:0 5px;border-radius:999px;background:#ff7a5c;color:#1a0c07;font-size:.66rem}
+
+/* Olhar o grimório: escolha de quantas e de onde, depois as cartas viram uma a uma */
+.pt-look-pick{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin:10px 0 4px}
+.pt-look-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:16px 14px;max-height:62vh;margin:12px 0 4px;padding:4px 2px 2px;overflow-y:auto;list-style:none}
+.pt-look-card{display:grid;gap:6px;align-content:start;perspective:900px}
+.pt-look-card strong{font-size:.8rem;line-height:1.25}
+.pt-look-card .pt-chips{display:flex;flex-wrap:wrap;gap:3px}
+.pt-look-flip{position:relative;aspect-ratio:488/680;transform-style:preserve-3d;animation:pt-look-deal .7s cubic-bezier(.2,.8,.2,1) both;animation-delay:var(--d)}
+.pt-look-cards.is-dealt .pt-look-flip{animation:none}
+.pt-look-front,.pt-look-back{position:absolute;inset:0;width:100%;height:100%;border-radius:4.75%/3.4%;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.pt-look-front{box-shadow:0 14px 30px #0009}
+.pt-look-back{transform:rotateY(180deg);background:radial-gradient(ellipse at center,#1f3a2e 0 30%,#10231b 60%,#0a1611);border:4px solid #c9a44f;box-sizing:border-box}
+.pt-look-to{position:absolute;left:8px;bottom:8px;padding:2px 8px;border-radius:999px;background:rgba(9,16,12,.85);color:#ffe7a8;font-size:.68rem;backface-visibility:hidden}
+.pt-look-card.is-graveyard .pt-look-front,.pt-look-card.is-exile .pt-look-front{filter:grayscale(.6) brightness(.75)}
+.pt-look-card.is-hand .pt-look-front{outline:3px solid #5fd896;outline-offset:2px}
+@keyframes pt-look-deal{0%{opacity:0;transform:translateY(-60px) rotateY(180deg) scale(.85)}35%{opacity:1;transform:translateY(0) rotateY(180deg) scale(1)}100%{opacity:1;transform:rotateY(0)}}
+@media (prefers-reduced-motion:reduce){.pt-look-flip{animation:none}}

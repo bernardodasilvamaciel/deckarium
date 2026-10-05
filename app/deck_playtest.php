@@ -230,9 +230,9 @@ pageHeader(($table ? 'Mesa compartilhada' : 'Mesa de teste') . ' · ' . $deck['n
         <button type="button" data-pt-cam="reset" title="Voltar ao enquadramento (Esc ou duplo clique na mesa)">Centralizar</button>
     </div>
     <aside class="pt-preview" data-pt-preview hidden></aside>
-    <section class="pt-log" data-pt-log-wrap>
-        <button type="button" class="pt-log-toggle" data-pt-action="log" aria-expanded="false"><?= $table ? 'Mesa e mensagens' : 'Registro da partida' ?></button>
-        <ol class="pt-log-list" data-pt-log hidden></ol>
+    <section class="pt-log" data-pt-log-wrap aria-label="<?= $table ? 'Registro da mesa: o que cada jogador faz, para todos' : 'Registro da partida' ?>">
+        <div class="pt-log-head"><strong><?= $table ? 'Registro da mesa' : 'Registro da partida' ?></strong><button type="button" class="pt-log-size" data-pt-action="log" aria-expanded="false">Ampliar</button></div>
+        <ol class="pt-log-list" data-pt-log></ol>
         <?php if ($table): ?><form class="pt-chat" data-pt-chat><label class="sr-only" for="pt-chat-input">Mensagem para a mesa</label><input id="pt-chat-input" name="text" maxlength="280" autocomplete="off" placeholder="Mensagem para a mesa…"><button class="pt-btn">Enviar</button></form><?php endif; ?>
     </section>
     <div class="pt-hand" data-pt-hand aria-label="Mão"></div>

@@ -500,7 +500,59 @@ export function createPlaytestScene(host, hooks) {
     return parts;
   });
 
+  /* ---------- Olhando o grimório: as cartas sobem num leque, viradas para baixo (todos veem) ---------- */
+  const lookFans = new Map();
+  /**
+   * look: { n, from: 'top' | 'bottom' | 'search' } ou null. parent: a cena (você) ou o grupo do assento; pile: posição
+   * do grimório nesse grupo; o leque abre para o centro do tapete.
+   */
+  function setLook(key, parent, pile, look) {
+    let fan = lookFans.get(key);
+    if (!look) { if (fan) fan.closing = true; return; }
+    if (!fan) {
+      fan = { group: new THREE.Group(), cards: [], label: sprite('', { size: key === 'me' ? 0.7 : 1.15, color: '#1a150a', bg: 'rgba(240,196,92,.97)' }), parent, open: 0 };
+      fan.group.add(fan.label);
+      parent.add(fan.group);
+      lookFans.set(key, fan);
+    }
+    fan.closing = false;
+    fan.pile = pile;
+    fan.from = look.from;
+    const n = Math.max(1, Math.min(look.from === 'search' ? 9 : 10, look.n || 1));
+    while (fan.cards.length < n) {
+      const parts = makeCard(false);
+      parts.group.scale.setScalar(key === 'me' ? 0.85 : 1.05);
+      // Brilho dourado em volta de cada verso: o leque aparece mesmo sobre um tapete escuro.
+      parts.glow.material.color.set('#f0c45c'); parts.glow.material.opacity = 0.75; parts.glow.position.y = -0.01; parts.glow.material.side = THREE.DoubleSide;
+      fan.group.add(parts.group); fan.cards.push(parts);
+    }
+    while (fan.cards.length > n) fan.group.remove(fan.cards.pop().group);
+    setSprite(fan.label, look.from === 'search' ? 'Buscando no grimório' : `Olhando ${look.n} ${look.n === 1 ? 'carta' : 'cartas'} do ${look.from === 'bottom' ? 'fundo' : 'topo'}`);
+  }
+  function animateLooks(dt, reduce) {
+    lookFans.forEach((fan, key) => {
+      fan.open = THREE.MathUtils.clamp(fan.open + (fan.closing ? -dt * 2.6 : dt * 2.2), 0, 1);
+      if (fan.closing && fan.open <= 0) { fan.parent.remove(fan.group); lookFans.delete(key); return; }
+      const u = reduce ? (fan.closing ? 0 : 1) : 1 - (1 - fan.open) ** 3;
+      const dir = fan.pile.x > 0 ? -1 : 1;
+      const n = fan.cards.length;
+      const startY = fan.from === 'bottom' ? 0.02 : 0.45;
+      fan.cards.forEach((parts, i) => {
+        const offset = i - (n - 1) / 2;
+        const spread = fan.label.userData.size > 1 ? 1.05 : 0.8;
+        const tx = fan.pile.x + dir * (3.4 + n * 0.3) + offset * spread; const tz = fan.pile.z + Math.abs(offset) * 0.08;
+        const ty = 2.6 + (reduce ? 0 : Math.sin(time * 1.6 + i * 0.6) * 0.06);
+        parts.group.position.set(THREE.MathUtils.lerp(fan.pile.x, tx, u), THREE.MathUtils.lerp(startY + i * 0.01, ty, u), THREE.MathUtils.lerp(fan.pile.z, tz, u));
+        // Viradas para baixo, inclinadas para quem olha a mesa: dá para ver quantas são, nunca quais.
+        parts.group.rotation.set(Math.PI + 0.95 * u, 0, offset * 0.07 * u);
+      });
+      fan.label.position.set(fan.pile.x + dir * (3.4 + n * 0.3), 4.6, fan.pile.z);
+      fan.label.material.opacity = u;
+    });
+  }
+
   function sync(view) {
+    setLook('me', scene, LAYOUT.zones.library, view.look || null);
     const seen = new Set();
     view.battlefield.forEach((v, order) => {
       seen.add(v.iid);
@@ -650,6 +702,8 @@ export function createPlaytestScene(host, hooks) {
     board.tex.needsUpdate = true;
   }
   function removeSeat(board) {
+    const fan = lookFans.get(`seat${board.seat}`);
+    if (fan) { board.group.remove(fan.group); lookFans.delete(`seat${board.seat}`); }
     scene.remove(board.group);
     seats.delete(board.seat);
   }
@@ -709,6 +763,7 @@ export function createPlaytestScene(host, hooks) {
         board.fading.push({ entry, age: 0 });
       });
       ['library', 'graveyard', 'exile'].forEach((zone) => updatePile(board.piles[zone], info.piles[zone], zone));
+      setLook(`seat${info.seat}`, board.group, mirror(LAYOUT.zones.library.x, LAYOUT.zones.library.z), info.look || null);
       board.commands.forEach((slot, i) => {
         const cmd = info.piles.command[i];
         slot.group.visible = !!cmd?.image;
@@ -1155,6 +1210,7 @@ export function createPlaytestScene(host, hooks) {
       });
     });
     myFrame.material.opacity += ((activeMe && seats.size ? 0.5 + Math.sin(time * 2.4) * 0.22 : 0) - myFrame.material.opacity) * ease;
+    animateLooks(dt, reduce);
     // Feixes de ataque: arco luminoso e brasas correndo da criatura até o tapete atacado.
     updateBeamMeshes(reduce);
     if (!reduce) beams.forEach((beam) => {

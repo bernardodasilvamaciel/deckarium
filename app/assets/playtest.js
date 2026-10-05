@@ -90,10 +90,17 @@ async function start(data) {
   const nameOf = (iid) => faceOf(S.cards[iid]).name;
   // Registro. Na mesa compartilhada, o texto público (sem o que é segredo) vai para todos.
   let outbox = [];
-  function log(text, publicText = text) {
-    S.log.unshift({ turn: S.turn, text });
+  /* Registro: cada ação tem uma categoria (o ícone na lista) e uma versão pública, sem o que é segredo (as cartas que
+     você comprou ou olhou). Na mesa compartilhada a versão pública vai para todos; null = só no seu navegador. */
+  const ACTION_CATS = { draw: 'draw', play: 'play', drop: 'play', commander: 'play', 'commander-zone': 'move', position: 'move', move: 'move', 'exile-top': 'move', mill: 'move',
+    tap: 'tap', untap: 'tap', attack: 'combat', damage: 'combat', adjust: 'life', token: 'token', copy: 'token', counter: 'counter', flip: 'flip', face: 'flip',
+    keep: 'hand', mulligan: 'hand', bottom: 'hand', shuffle: 'shuffle', look: 'look', scry: 'look', search: 'search', zone: 'search', reveal: 'reveal',
+    turn: 'turn', phase: 'phase', concede: 'concede', incoming: 'damage', undo: 'undo' };
+  let currentCat = 'info';
+  function log(text, publicText = text, cat = currentCat) {
+    S.log.unshift({ turn: S.turn, text, cat });
     if (S.log.length > 250) S.log.length = 250;
-    if (MP && publicText) outbox.push(publicText);
+    if (MP && publicText) outbox.push({ t: publicText, c: cat });
   }
 
   /* ---------- Mesa 3D ---------- */
@@ -278,9 +285,10 @@ async function start(data) {
 
   function act(label, fn) {
     closeMenu();
-    history.push(JSON.stringify(S));
+    history.push({ label, state: JSON.stringify(S) });
     if (history.length > 80) history.shift();
-    fn();
+    currentCat = ACTION_CATS[label] || 'info';
+    try { fn(); } finally { currentCat = 'info'; }
     stateBased();
     render();
     save();
@@ -321,7 +329,7 @@ async function start(data) {
     if (MP && !myTurn()) { toast(`A fase é de ${seatName(T.turn)}. Você ainda pode virar cartas, lançar mágicas e mexer nas suas zonas.`, { kind: 'info' }); return; }
     if (S.phase === 4) endCombat();
     if (S.phase >= 6) { nextTurn(); return; }
-    act('phase', () => enterPhase(S.phase + 1));
+    act('phase', () => { enterPhase(S.phase + 1); log(`Passou para ${PHASES[S.phase]}.`); });
     if (MP) net.post('phase', { phase: String(S.phase) }).catch((error) => toast(error.message, { kind: 'warn' }));
   }
   function nextTurn() {
@@ -555,7 +563,7 @@ async function start(data) {
     revealOnce = top;
     clearTimeout(revealTimer);
     revealTimer = setTimeout(() => { revealOnce = null; syncReveal(); render(); }, 6000);
-    log(`Revelou o topo do grimório: ${nameOf(top)}.`);
+    log(`Revelou o topo do grimório: ${nameOf(top)}.`, MP ? null : undefined, 'reveal');
     if (MP) { sendReveal(S.cards[top], 'do topo do grimório'); flushOutbox(); }
     syncReveal(); renderLog(); save(); publish();
     showPreview(S.cards[top], null, 'left');
@@ -647,9 +655,13 @@ async function start(data) {
   }
   function openZone(zone) {
     closeMenu();
+    if (zone === 'library') {
+      if (!S.zones.library.length) { toast('O grimório está vazio.', { kind: 'info' }); return; }
+      if (S.stage !== 'play') { toast('Primeiro, decida a mão inicial.', { kind: 'info' }); return; }
+      act('search', () => { S.look = { n: S.zones.library.length, from: 'search', ids: [] }; log('Abriu o grimório para buscar (ao fechar, embaralha).'); });
+    }
     const title = { library: 'Buscar no grimório', graveyard: 'Cemitério', exile: 'Exílio' }[zone];
-    const note = zone === 'library' ? '<p class="pt-modal-note">Buscar no grimório revela a ordem das cartas: ao fechar, a mesa embaralha, como pedem quase todas as buscas.</p>' : '';
-    let searched = false;
+    const note = zone === 'library' ? '<p class="pt-modal-note">A mesa vê que você está buscando. Buscar revela a ordem das cartas: ao fechar, a mesa embaralha, como pedem quase todas as buscas.</p>' : '';
     const paint = (filter = '') => { $('[data-zone-list]').innerHTML = zoneRows(zone, filter); };
     openModal(`<h2>${title} <span class="pt-modal-count">${S.zones[zone].length}</span></h2>${note}
       <label class="pt-field"><span class="sr-only">Filtrar pelo nome</span><input type="search" placeholder="Filtrar pelo nome…" data-zone-filter></label>
@@ -657,59 +669,125 @@ async function start(data) {
       const button = event.target.closest('[data-move]');
       if (!button) return;
       const iid = button.dataset.iid; const key = button.dataset.move;
-      searched = true;
-      act('zone', () => (key === 'bottom' ? move(iid, 'library', { position: 'bottom' }) : move(iid, key === 'library' ? 'library' : key)));
+      act(zone === 'library' ? 'zone' : 'move', () => (key === 'bottom' ? move(iid, 'library', { position: 'bottom' }) : move(iid, key === 'library' ? 'library' : key)));
       paint($('[data-zone-filter]')?.value || '');
       modalCard.querySelector('.pt-modal-count').textContent = S.zones[zone].length;
-    }, () => { if (zone === 'library' && searched !== null) act('shuffle', () => { shuffleList(S.zones.library); scene.fx.shuffle(); log('Embaralhou o grimório depois da busca.'); }); });
+    }, () => { if (zone === 'library') finishSearch(); });
     paint();
     $('[data-zone-filter]').addEventListener('input', (event) => paint(event.target.value));
   }
 
-  function openScry() {
+  function finishSearch() {
+    if (S.look?.from !== 'search') return;
+    act('search', () => { shuffleList(S.zones.library); S.look = null; log('Fechou a busca e embaralhou o grimório.'); });
+    scene.fx.shuffle();
+  }
+
+  /*
+   * Olhar o grimório (vidência, vigiar, "olhe as N do topo"): primeiro escolhe quantas e de onde, sem ver nada.
+   * Ao olhar, a mesa é avisada (registro e cartas viradas para baixo subindo do seu grimório) e as cartas aparecem
+   * para você, uma a uma. Elas só saem daqui com um destino; fechar deixa todas como estavam — e também vai para o registro.
+   */
+  function openScry(from = 'top') {
     closeMenu();
-    let plan = [];
-    const reset = (count) => { plan = S.zones.library.slice(0, count).map((iid) => ({ iid, to: 'top' })); };
-    const paint = () => {
-      $('[data-scry-list]').innerHTML = plan.map((p, i) => {
-        const inst = S.cards[p.iid];
-        return `<li><img src="${esc(cardOf(inst).thumb || '')}" alt="" width="73" height="102"><div><strong>${i + 1}. ${esc(nameOf(p.iid))}</strong><small>${esc(typeOf(inst))}</small>
-          <span class="pt-chips">${[['top', 'Topo'], ['bottom', 'Fundo'], ['graveyard', 'Cemitério'], ['hand', 'Mão'], ['exile', 'Exílio']].map(([key, label]) => `<button type="button" class="pt-chip${p.to === key ? ' is-on' : ''}" data-scry-to="${key}" data-i="${i}" aria-pressed="${p.to === key}">${label}</button>`).join('')}
-          <button type="button" class="pt-chip" data-scry-up="${i}" aria-label="Subir na ordem" ${i === 0 ? 'disabled' : ''}>↑</button></span></div></li>`;
-      }).join('') || '<li class="pt-empty">O grimório está vazio.</li>';
-    };
-    openModal(`<h2>Olhar o topo do grimório</h2>
-      <p class="pt-modal-note">Escolha o destino de cada carta — vidência, vigiar, “olhe as N do topo”. As que ficam no topo voltam na ordem da lista.</p>
-      <label class="pt-field is-inline">Quantas cartas <input type="number" min="1" max="15" value="1" data-scry-count></label>
-      <ul class="pt-zone-list" data-scry-list></ul>
-      <div class="pt-modal-actions"><button type="button" class="pt-btn is-strong" data-scry-apply>Aplicar</button></div>`, (event) => {
-      const to = event.target.closest('[data-scry-to]');
-      if (to) { plan[Number(to.dataset.i)].to = to.dataset.scryTo; paint(); return; }
-      const up = event.target.closest('[data-scry-up]');
-      if (up) { const i = Number(up.dataset.scryUp); [plan[i - 1], plan[i]] = [plan[i], plan[i - 1]]; paint(); return; }
-      if (!event.target.closest('[data-scry-apply]')) return;
-      const chosen = plan.slice();
-      closeModal();
-      act('scry', () => {
-        const ids = new Set(chosen.map((p) => p.iid));
-        S.zones.library = S.zones.library.filter((iid) => !ids.has(iid));
-        chosen.filter((p) => p.to === 'top').reverse().forEach((p) => S.zones.library.unshift(p.iid));
-        chosen.filter((p) => p.to === 'bottom').forEach((p) => S.zones.library.push(p.iid));
-        chosen.filter((p) => !['top', 'bottom'].includes(p.to)).forEach((p) => { S.cards[p.iid].zone = p.to; S.zones[p.to].push(p.iid); if (p.to === 'hand') freshHand.add(p.iid); });
-        const moved = ['bottom', 'graveyard', 'hand', 'exile'].map((key) => [key, chosen.filter((p) => p.to === key).length]).filter(([, n]) => n);
-        const shown = chosen.filter((p) => ['graveyard', 'exile'].includes(p.to)).map((p) => nameOf(p.iid));
-        log(`Olhou ${chosen.length} do topo${moved.length ? `: ${moved.map(([key, n]) => `${n} para ${key === 'bottom' ? 'o fundo' : toZone[key]}`).join(', ')}` : ''}.${shown.length ? ` (${shown.join(', ')})` : ''}`);
+    if (S.stage !== 'play') { toast('Primeiro, decida a mão inicial.', { kind: 'info' }); return; }
+    if (S.look) { resumeLook(); return; }
+    if (!S.zones.library.length) { toast('O grimório está vazio.', { kind: 'info' }); return; }
+    const max = Math.min(15, S.zones.library.length);
+    openModal(`<h2>Olhar cartas do grimório</h2>
+      <p class="pt-modal-note">Quem está na mesa vê que você está olhando e quantas cartas — nunca quais. Depois de olhar, cada carta precisa de um destino; fechar deixa todas como estavam.</p>
+      <div class="pt-look-pick">
+        <label class="pt-field is-inline">Quantas cartas <input type="number" min="1" max="${max}" value="1" data-look-count></label>
+        <span class="pt-chips" role="group" aria-label="De onde"><button type="button" class="pt-chip${from === 'top' ? ' is-on' : ''}" data-look-from="top" aria-pressed="${from === 'top'}">Do topo</button><button type="button" class="pt-chip${from === 'bottom' ? ' is-on' : ''}" data-look-from="bottom" aria-pressed="${from === 'bottom'}">Do fundo</button></span>
+      </div>
+      <div class="pt-modal-actions"><button type="button" class="pt-btn is-strong" data-look-start>Olhar as cartas</button></div>`, (event) => {
+      const pick = event.target.closest('[data-look-from]');
+      if (pick) {
+        from = pick.dataset.lookFrom;
+        modalCard.querySelectorAll('[data-look-from]').forEach((button) => { button.classList.toggle('is-on', button === pick); button.setAttribute('aria-pressed', String(button === pick)); });
+        return;
+      }
+      if (!event.target.closest('[data-look-start]')) return;
+      const n = Math.max(1, Math.min(max, Number(modalCard.querySelector('[data-look-count]').value) || 1));
+      act('look', () => {
+        const ids = from === 'bottom' ? S.zones.library.slice(-n) : S.zones.library.slice(0, n);
+        S.look = { n: ids.length, from, ids };
+        log(`Olhou ${ids.length === 1 ? 'a carta' : `as ${ids.length} cartas`} do ${from === 'bottom' ? 'fundo' : 'topo'} do grimório.`);
       });
+      showLook();
     });
-    reset(1);
+  }
+  /** Reabre o que estava pela metade (recarregou a página olhando ou buscando). */
+  function resumeLook() {
+    if (!S?.look) return;
+    if (S.look.from === 'search') finishSearch();
+    else showLook();
+  }
+  function showLook() {
+    const look = S.look;
+    if (!look) return;
+    const keep = look.from === 'bottom' ? 'bottom' : 'top';
+    const plan = look.ids.filter((iid) => S.cards[iid]?.zone === 'library').map((iid) => ({ iid, to: keep }));
+    let dealt = false;
+    const where = { top: 'Topo', bottom: 'Fundo', hand: 'Mão', graveyard: 'Cemitério', exile: 'Exílio' };
+    const paint = () => {
+      const list = modalCard.querySelector('[data-look-list]');
+      list.classList.toggle('is-dealt', dealt);
+      list.innerHTML = plan.map((p, i) => {
+        const inst = S.cards[p.iid];
+        return `<li class="pt-look-card is-${p.to}" style="--d:${i * 110}ms">
+          <div class="pt-look-flip"><img class="pt-look-front" src="${esc(faceOf(inst).image || cardOf(inst).image || '')}" alt="${esc(nameOf(p.iid))}" width="488" height="680"><span class="pt-look-back" aria-hidden="true"></span><b class="pt-look-to">${where[p.to]}</b></div>
+          <strong>${i + 1}. ${esc(nameOf(p.iid))}</strong>
+          <span class="pt-chips">${Object.entries(where).map(([key, label]) => `<button type="button" class="pt-chip${p.to === key ? ' is-on' : ''}" data-look-to="${key}" data-i="${i}" aria-pressed="${p.to === key}">${label}</button>`).join('')}
+          <button type="button" class="pt-chip" data-look-up="${i}" aria-label="Antes na ordem" ${i === 0 ? 'disabled' : ''}>←</button><button type="button" class="pt-chip" data-look-down="${i}" aria-label="Depois na ordem" ${i === plan.length - 1 ? 'disabled' : ''}>→</button></span>
+        </li>`;
+      }).join('');
+      dealt = true;
+    };
+    openModal(`<h2>${look.from === 'bottom' ? 'Do fundo' : 'Do topo'} do grimório <span class="pt-modal-count">${plan.length}</span></h2>
+      <p class="pt-modal-note">Escolha o destino de cada carta. As que ficam no topo ou no fundo seguem a ordem da esquerda para a direita (a primeira fica por cima).</p>
+      <ul class="pt-look-cards" data-look-list></ul>
+      <div class="pt-modal-actions"><button type="button" class="pt-btn is-strong" data-look-apply>Concluir</button></div>`, (event) => {
+      const to = event.target.closest('[data-look-to]');
+      if (to) { plan[Number(to.dataset.i)].to = to.dataset.lookTo; paint(); return; }
+      const up = event.target.closest('[data-look-up]'); const down = event.target.closest('[data-look-down]');
+      if (up || down) {
+        const i = Number(up ? up.dataset.lookUp : down.dataset.lookDown); const j = up ? i - 1 : i + 1;
+        [plan[i], plan[j]] = [plan[j], plan[i]]; paint(); return;
+      }
+      if (event.target.closest('[data-look-apply]')) finishLook(plan);
+    }, () => finishLook(null));
     paint();
-    $('[data-scry-count]').addEventListener('input', (event) => { reset(Math.max(1, Math.min(15, Number(event.target.value) || 1))); paint(); });
+  }
+  function finishLook(plan) {
+    const look = S.look;
+    if (!look || look.from === 'search') return;
+    closeModal();
+    const keep = look.from === 'bottom' ? 'bottom' : 'top';
+    const chosen = (plan || look.ids.map((iid) => ({ iid, to: keep }))).filter((p) => S.cards[p.iid]?.zone === 'library');
+    act('scry', () => {
+      const ids = new Set(chosen.map((p) => p.iid));
+      S.zones.library = S.zones.library.filter((iid) => !ids.has(iid));
+      chosen.filter((p) => p.to === 'top').reverse().forEach((p) => S.zones.library.unshift(p.iid));
+      chosen.filter((p) => p.to === 'bottom').forEach((p) => S.zones.library.push(p.iid));
+      chosen.filter((p) => !['top', 'bottom'].includes(p.to)).forEach((p) => { S.cards[p.iid].zone = p.to; S.zones[p.to].push(p.iid); if (p.to === 'hand') freshHand.add(p.iid); });
+      S.look = null;
+      const origin = `${chosen.length === 1 ? 'Da carta' : `Das ${chosen.length} cartas`} do ${look.from === 'bottom' ? 'fundo' : 'topo'}`;
+      const count = (key) => chosen.filter((p) => p.to === key).length;
+      const names = (key) => chosen.filter((p) => p.to === key).map((p) => nameOf(p.iid));
+      const mine = ['top', 'bottom', 'hand', 'graveyard', 'exile'].filter((key) => count(key)).map((key) => `${{ top: 'no topo', bottom: 'no fundo', hand: 'para a mão', graveyard: 'para o cemitério', exile: 'para o exílio' }[key]}: ${names(key).join(', ')}`);
+      const all = [
+        ...[['top', 'no topo'], ['bottom', 'no fundo'], ['hand', 'para a mão']].filter(([key]) => count(key)).map(([key, label]) => `${count(key)} ${label}`),
+        ...[['graveyard', 'para o cemitério'], ['exile', 'para o exílio']].filter(([key]) => count(key)).map(([key, label]) => `${names(key).join(', ')} ${label}`),
+      ];
+      log(`${origin}: ${mine.join('; ')}.`, plan ? `${origin}: ${all.join(', ')}.` : `${origin}: deixou como estavam.`);
+    });
   }
 
   function openCounters(iid) {
     closeMenu();
     const inst = S.cards[iid];
-    history.push(JSON.stringify(S));
+    history.push({ label: 'counter', state: JSON.stringify(S) });
     const paint = () => {
       const names = [...new Set([...COUNTERS, ...Object.keys(inst.counters)])];
       $('[data-counter-list]').innerHTML = names.map((name) => `<li><span>${esc(name)}</span><button type="button" class="pt-round" data-counter="${esc(name)}" data-delta="-1" aria-label="Tirar ${esc(name)}">−</button><output>${inst.counters[name] || 0}</output><button type="button" class="pt-round" data-counter="${esc(name)}" data-delta="1" aria-label="Pôr ${esc(name)}">+</button></li>`).join('');
@@ -790,6 +868,7 @@ async function start(data) {
       const text = roll === 'coin' ? `Moeda: ${result}.` : `d${roll}: ${result}.`;
       S.log.unshift({ turn: S.turn, text });
       if (MP) net.event('dice', { text }).catch(() => {});
+      else { log(text, undefined, 'dice'); renderLog(); save(); }
       renderLog(); save();
     });
   }
@@ -816,7 +895,10 @@ async function start(data) {
     const list = S.zones.hand;
     const n = list.length;
     handEl.style.setProperty('--n', n);
-    handEl.style.setProperty('--overlap', `${n <= 6 ? 14 : Math.min(92, 14 + (n - 6) * 9)}px`);
+    const cardWidth = Math.min(134, Math.max(92, window.innerWidth * 0.082));
+    const free = Math.max(260, root.clientWidth - 2 * (($('[data-pt-log-wrap]')?.offsetWidth || 0) + 28));
+    const squeeze = n > 1 ? Math.ceil((n * cardWidth - free) / (n - 1)) : 0;
+    handEl.style.setProperty('--overlap', `${Math.min(cardWidth - 26, Math.max(n <= 6 ? 14 : Math.min(92, 14 + (n - 6) * 9), squeeze))}px`);
     handEl.innerHTML = list.map((iid, i) => {
       const inst = S.cards[iid]; const card = faceOf(inst);
       const picked = S.bottom.includes(iid);
@@ -1019,24 +1101,36 @@ async function start(data) {
   }
   combatBar.addEventListener('change', (event) => { if (event.target.matches('[data-attack-target]')) defaultTarget = Number(event.target.value); });
 
-  let unread = 0;
-  const logOpen = () => !$('[data-pt-log]').hidden;
-  function renderLogToggle() {
-    const toggle = $('[data-pt-action="log"]');
-    if (!MP || !toggle) return;
-    toggle.innerHTML = `Mesa e mensagens${unread ? ` <b class="pt-unread">${unread}</b>` : ''}`;
+  const LOG_ICONS = { draw: '🃏', play: '✨', move: '➜', tap: '🔄', combat: '⚔️', life: '❤️', token: '🪙', counter: '🔢', flip: '🔃', hand: '✋', shuffle: '🔀',
+    look: '👁️', search: '🔍', reveal: '👀', turn: '⏭️', phase: '▸', concede: '🏳️', undo: '↩️', dice: '🎲', chat: '💬', damage: '💥', poison: '☠️', join: '🚪', leave: '🚪',
+    start: '🏁', lobby: '🏁', attack: '⚔️', info: '•' };
+  // Ações com carta escondida (olhar, buscar, desfazer) e revelações ficam destacadas para ninguém deixar passar.
+  const LOG_ALERT = new Set(['look', 'search', 'undo', 'reveal']);
+  function logRow(cat, who, color, text, at) {
+    return `<li class="is-${cat}${LOG_ALERT.has(cat) ? ' is-alert' : ''}"><span class="pt-log-icon" aria-hidden="true">${LOG_ICONS[cat] || '•'}</span><span class="pt-log-text">${who ? `<b style="color:${color}">${esc(who)}</b> ` : ''}${esc(text)}</span>${at ? `<small>${esc(at)}</small>` : ''}</li>`;
   }
   function renderLog() {
-    const list = $('[data-pt-log]');
+    const logList = $('[data-pt-log]');
+    const atBottom = logList.scrollHeight - logList.scrollTop - logList.clientHeight < 40;
     if (MP) {
-      list.innerHTML = feed.slice(-120).reverse().map((entry) => `<li class="is-${entry.kind}"><small>${esc(entry.at || '')}</small>${entry.seat !== null && entry.seat !== undefined ? `<b style="color:${SEAT_COLORS[entry.seat % 4]}">${esc(seatName(entry.seat))}</b> ` : ''}${esc(entry.text)}</li>`).join('') || '<li>Sem mensagens ainda.</li>';
-      return;
+      logList.innerHTML = feed.slice(-160).map((entry) => {
+        if (entry.kind === 'turn') return `<li class="pt-log-turn"><span>Turno ${esc(entry.payload?.number ?? '')} · ${esc(seatName(entry.payload?.seat))}</span></li>`;
+        if (entry.kind === 'start' && entry.payload?.game) return `<li class="pt-log-turn is-start"><span>Partida ${esc(entry.payload.game)} · ${esc(seatName(entry.payload.starting))} começa</span></li>`;
+        const cat = entry.cat || (entry.kind === 'log' ? 'info' : entry.kind);
+        const who = entry.seat !== null && entry.seat !== undefined ? seatName(entry.seat) : '';
+        return logRow(cat, who, entry.seat !== null && entry.seat !== undefined ? SEAT_COLORS[entry.seat % 4] : '', entry.text, entry.at);
+      }).join('') || '<li class="pt-log-empty">Tudo o que cada jogador fizer aparece aqui, para todos.</li>';
+    } else {
+      logList.innerHTML = S.log.slice(0, 120).reverse().map((entry) => (/^— .* —$/.test(entry.text)
+        ? `<li class="pt-log-turn"><span>${esc(entry.text.replace(/^— | —$/g, ''))}</span></li>`
+        : logRow(entry.cat || 'info', '', '', entry.text, `T${entry.turn}`))).join('') || '<li class="pt-log-empty">O que acontecer na partida aparece aqui.</li>';
     }
-    list.innerHTML = S.log.slice(0, 80).map((entry) => `<li><small>T${entry.turn}</small>${esc(entry.text)}</li>`).join('');
+    if (atBottom) logList.scrollTop = logList.scrollHeight;
   }
 
   function sceneView() {
     return {
+      look: S.look ? { n: S.look.n, from: S.look.from } : null,
       active: MP ? T.status === 'playing' && T.turn === ME : false,
       battlefield: S.zones.battlefield.map((iid) => {
         const inst = S.cards[iid]; const face = faceOf(inst); const pt = ptOf(inst);
@@ -1125,7 +1219,7 @@ async function start(data) {
         'confirm-bottom': () => { act('keep', keepHand); maybeBeginTurn(); },
         mulligan: () => act('mulligan', mulligan),
         damage: applyDamage,
-        log: () => { const list = $('[data-pt-log]'); list.hidden = !list.hidden; button.setAttribute('aria-expanded', String(!list.hidden)); if (!list.hidden) { unread = 0; renderLogToggle(); } },
+        log: () => { const wide = $('[data-pt-log-wrap]').classList.toggle('is-expanded'); button.setAttribute('aria-expanded', String(wide)); button.textContent = wide ? 'Reduzir' : 'Ampliar'; const list = $('[data-pt-log]'); list.scrollTop = list.scrollHeight; },
       }[action] || (() => {}))();
       return;
     }
@@ -1133,18 +1227,44 @@ async function start(data) {
     if (adjust) {
       const [key, delta] = adjust.dataset.ptAdjust.split(':');
       const step = Number(delta) * (event.shiftKey ? 5 : 1);
-      act('adjust', () => { S[key] = Math.max(key === 'poison' ? 0 : -999, S[key] + step); log(`${{ life: 'Vida', poison: 'Veneno', opponent: 'Oponente' }[key]}: ${step > 0 ? '+' : ''}${step} (${S[key]}).`); });
+      act('adjust', () => { S[key] = Math.max(key === 'poison' ? 0 : -999, S[key] + step); });
+      queueAdjustLog(key, step);
       floatText(`${step > 0 ? '+' : ''}${step}`, adjust.closest('.pt-meter'));
     }
   });
 
+  // Na mesa compartilhada não voltam: o que mostrou cartas escondidas (comprar, olhar, buscar, embaralhar, mulligan, moer)
+  // e o que é da mesa (vez, fase, dano recebido, concessão).
+  const NO_UNDO_MP = new Set(['draw', 'look', 'scry', 'search', 'zone', 'shuffle', 'mulligan', 'keep', 'bottom', 'mill', 'exile-top', 'reveal', 'turn', 'phase', 'incoming', 'concede']);
+  const UNDO_TEXT = { play: 'a carta jogada', drop: 'a carta posta no campo', commander: 'o lançamento da zona de comando', 'commander-zone': 'a ida para a zona de comando', position: 'a mudança de lugar de uma carta',
+    move: 'o movimento de uma carta', tap: 'virar/desvirar uma carta', untap: 'desvirar tudo', attack: 'um ataque', damage: 'o dano de combate', adjust: 'a mudança de vida', token: 'as fichas criadas',
+    copy: 'a cópia criada', counter: 'os marcadores', flip: 'a transformação', face: 'virar a face', draw: 'a compra', shuffle: 'o embaralhamento', mill: 'a moagem', turn: 'o turno', phase: 'a fase' };
+  const adjustLog = {};
+  function queueAdjustLog(key, step) {
+    const entry = adjustLog[key] ||= { sum: 0, timer: 0 };
+    entry.sum += step;
+    clearTimeout(entry.timer);
+    entry.timer = setTimeout(() => {
+      const sum = entry.sum; entry.sum = 0;
+      if (!sum) return;
+      log(`${{ life: 'Vida', poison: 'Veneno', opponent: 'Oponente' }[key]}: ${sum > 0 ? '+' : ''}${sum} (${S[key]}).`, undefined, key === 'poison' ? 'poison' : 'life');
+      renderLog(); save(); publish();
+    }, 900);
+  }
   function undo() {
-    const previous = history.pop();
-    if (!previous) { toast('Nada para desfazer.', { kind: 'info' }); return; }
-    S = JSON.parse(previous);
+    const entry = history[history.length - 1];
+    if (!entry) { toast('Nada para desfazer.', { kind: 'info' }); return; }
+    if (MP && NO_UNDO_MP.has(entry.label)) {
+      toast('Na mesa compartilhada isso não volta: você já viu cartas escondidas ou a ação é da mesa (compra, olhar, busca, embaralhar, mulligan, vez, dano recebido).', { kind: 'warn' });
+      return;
+    }
+    history.pop();
+    S = JSON.parse(entry.state);
     closeMenu(); closeModal();
+    log(`Desfez ${UNDO_TEXT[entry.label] || 'a última ação'}.`, undefined, 'undo');
     render(); save();
-    toast('Ação desfeita.', { kind: 'info' });
+    if (S.look) resumeLook();
+    toast(MP ? 'Ação desfeita — fica no registro da mesa.' : 'Ação desfeita.', { kind: 'info' });
   }
 
   function toggleFullscreen() {
@@ -1158,8 +1278,9 @@ async function start(data) {
 
   document.addEventListener('keydown', (event) => {
     const target = event.target instanceof Element ? event.target : document.body;
-    if (target.closest('input, textarea, select')) return;
+    // Esc fecha a janela mesmo com o cursor num campo (filtro da busca, quantidade do olhar).
     if (event.key === 'Escape') { if (!modal.hidden) { const onClose = modal.onClose; closeModal(); onClose?.(); } else if (!menu.hidden) closeMenu(); else scene.resetCamera(); return; }
+    if (target.closest('input, textarea, select')) return;
     if (!modal.hidden) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); undo(); return; }
     if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -1226,6 +1347,7 @@ async function start(data) {
       exile: S.zones.exile.map((iid) => keyOf(S.cards[iid])),
       command: S.zones.command.map((iid) => ({ k: keyOf(S.cards[iid]), tax: (S.cards[iid].casts || 0) * 2 })),
       reveal: topRevealed() ? keyOf(S.cards[S.zones.library[0]]) : null,
+      look: S.look ? { n: S.look.n, from: S.look.from } : null,
     };
     view.defs = defs;
     return view;
@@ -1291,7 +1413,7 @@ async function start(data) {
       return {
         seat, index, count: list.length, name: info.player || `Jogador ${seat + 1}`, life: state ? state.life : '—', poison: state?.poison || 0,
         active: T.status === 'playing' && T.turn === seat, eliminated: !!info.eliminated, online: info.online, stage: state?.stage || (T.status === 'playing' ? 'mulligan' : 'play'),
-        playmat: info.commander?.image || null, hand: state?.hand || 0, battlefield: bf,
+        playmat: info.commander?.image || null, hand: state?.hand || 0, battlefield: bf, look: state?.look || null,
         piles: { library: { n: state?.library || 0 }, graveyard: { n: state?.graveyard?.length || 0, top: topOf('graveyard') }, exile: { n: state?.exile?.length || 0, top: topOf('exile') },
           command: (state?.command || []).map((row) => ({ image: defFor(seat, row.k)?.i || null, tax: row.tax || 0 })) },
       };
@@ -1450,7 +1572,7 @@ async function start(data) {
       S.turn += 1;
       S.lands = 0;
       endCombat();
-      log(`— Seu ${S.turn}º turno (turno ${T.number} da mesa) —`, `— Começou o ${S.turn}º turno —`);
+      log(`— Seu ${S.turn}º turno (turno ${T.number} da mesa) —`, `Começou o ${S.turn}º turno.`);
       [0, 1, 2, 3].forEach(enterPhase);
     });
     scene.fx.turn(null);
@@ -1473,7 +1595,7 @@ async function start(data) {
     const p = event.payload || {};
     const mine = event.seat === ME;
     const at = event.at;
-    const push = (text, kind = event.kind, seat = event.seat) => feed.push({ seat, text, at, kind });
+    const push = (text, kind = event.kind, seat = event.seat, cat = null) => feed.push({ seat, text, at, kind, cat, id: event.id, payload: p });
     switch (event.kind) {
       case 'join': push(`sentou com ${p.deck || 'um deck'}.`); if (fresh && !mine) toast(`${seatName(event.seat)} entrou na mesa.`, { kind: 'info', who: event.seat }); break;
       case 'leave': push(p.kicked ? 'saiu da mesa (retirado por quem abriu).' : 'saiu da mesa.'); break;
@@ -1481,7 +1603,7 @@ async function start(data) {
       case 'lobby': push('encerrou a partida e voltou ao lobby.', 'start'); break;
       case 'turn': push(`passou a vez para ${seatName(p.seat)}.`); if (fresh && p.seat !== ME) scene.fx.turn(p.seat); break;
       case 'concede': push(p.left ? 'saiu da partida.' : 'concedeu a partida.'); if (fresh && !mine) toast(`${seatName(event.seat)} ${p.left ? 'saiu' : 'concedeu'}.`, { kind: 'info', who: event.seat }); break;
-      case 'log': (p.lines || []).forEach((line) => push(line)); break;
+      case 'log': (p.lines || []).forEach((line) => (typeof line === 'string' ? push(line) : push(String(line.t || ''), 'log', event.seat, line.c || null))); break;
       case 'chat': push(p.text, 'chat'); if (fresh && !mine) toast(`${seatName(event.seat)}: ${p.text}`, { kind: 'info', who: event.seat }); break;
       case 'dice': push(p.text); if (fresh && !mine) toast(`${seatName(event.seat)} rolou — ${p.text}`, { kind: 'info', who: event.seat }); break;
       case 'reveal': push(`mostrou ${p.card?.n || 'uma carta'} ${p.from || ''}.`); if (fresh && !mine) showReveal(event.seat, { ...p, card: cleanDef(p.card) }); break;
@@ -1538,7 +1660,7 @@ async function start(data) {
     // Partida nova (ou a primeira carga): retoma a sua do servidor ou do navegador, senão embaralha uma nova.
     if (table.status === 'playing' && (!S || S.game !== table.game)) {
       const saved = [resumeState, load()].find((state) => state && state.v === 2 && state.sig === signature && state.game === table.game);
-      if (saved) { S = saved; if (!first) toast('Partida retomada.', { kind: 'info' }); }
+      if (saved) { S = saved; if (!first) toast('Partida retomada.', { kind: 'info' }); setTimeout(resumeLook, 0); }
       else {
         newGame(Math.max(2, seatInfo.size) === 2);
         S.game = table.game;
@@ -1555,7 +1677,6 @@ async function start(data) {
     if (!S) { newGame(false); S.game = -1; }
     if (first && table.status === 'playing') setView('table');
     update.events.forEach((event) => handleEvent(event, !first));
-    if (!first && update.events.length && !logOpen()) { unread += update.events.filter((event) => event.seat !== ME && ['log', 'chat', 'dice', 'reveal', 'damage', 'life', 'poison', 'concede', 'join'].includes(event.kind)).length; renderLogToggle(); }
     // Vez: quando passa para você, o turno começa sozinho (desvirar, manutenção, compra).
     const turnKey = `${T.game}:${T.number}`;
     if (T.status === 'playing' && turnKey !== lastTurnKey) { lastTurnKey = turnKey; if (!first && T.turn === ME && T.number > 1) toast('Sua vez!', { kind: 'win' }); }
@@ -1657,4 +1778,5 @@ async function start(data) {
   else newGame(FORMAT.players === 2);
   render();
   save();
+  resumeLook();
 }
