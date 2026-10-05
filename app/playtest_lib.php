@@ -126,6 +126,56 @@ function playtestSeats(string $token): array
         WHERE s.table_id=? ORDER BY s.seat", [$token])->fetchAll();
 }
 
+/** Mesas em aberto em que a pessoa está sentada (as mais recentes primeiro), com os assentos de cada uma. */
+function playtestOpenTables(int $userId, int $limit = 12): array
+{
+    playtestSchema();
+    $rows = deckQuery("SELECT t.*, s.seat my_seat, s.eliminated my_eliminated FROM playtest_seats s JOIN playtest_tables t ON t.id=s.table_id
+        WHERE s.user_id=? AND t.updated_at > now() - interval '2 days' ORDER BY t.updated_at DESC LIMIT " . max(1, $limit), [$userId])->fetchAll();
+    foreach ($rows as &$row) $row['seats'] = playtestSeats((string)$row['id']);
+    return $rows;
+}
+
+/** "agora", "há 5 min", "há 3 h", "ontem". */
+function playtestAgo(string $timestamp): string
+{
+    $seconds = max(0, time() - (int)strtotime($timestamp));
+    if ($seconds < 60) return 'agora';
+    if ($seconds < 3600) return 'há ' . intdiv($seconds, 60) . ' min';
+    if ($seconds < 86400) return 'há ' . intdiv($seconds, 3600) . ' h';
+    return 'ontem';
+}
+
+/** Cartões das mesas em aberto: formato, situação, quem está sentado e o botão para voltar. */
+function playtestTableCards(array $tables, int $userId): string
+{
+    $html = '';
+    foreach ($tables as $table) {
+        $format = deckFormatInfo((string)$table['format']);
+        $bySeat = [];
+        foreach ($table['seats'] as $seat) $bySeat[(int)$seat['seat']] = $seat;
+        $turn = $table['turn_seat'] === null ? null : ($bySeat[(int)$table['turn_seat']] ?? null);
+        $myTurn = $table['status'] === 'playing' && $turn && (int)$turn['user_id'] === $userId;
+        $status = $table['status'] === 'playing'
+            ? 'Partida ' . (int)$table['game'] . ' · turno ' . (int)$table['turn_number'] . ($turn ? ($myTurn ? ' · sua vez' : ' · vez de ' . $turn['player']) : '')
+            : 'No lobby · ' . count($table['seats']) . ' de ' . PLAYTEST_MAX_SEATS . ' lugares';
+        $players = '';
+        foreach ($table['seats'] as $seat) {
+            $online = in_array($seat['online'], [true, 't', 1, '1'], true);
+            $players .= '<li' . ($online ? ' class="is-online"' : '') . '>'
+                . ($seat['commander_id'] ? '<img src="/image.php?id=' . h(rawurlencode((string)$seat['commander_id'])) . '&amp;size=small" alt="" width="36" height="50" loading="lazy">' : '<span class="play-table-noart" aria-hidden="true">♦</span>')
+                . '<span><strong>' . h((string)$seat['player']) . ((int)$seat['user_id'] === $userId ? ' (você)' : '') . '</strong><small>' . h((string)$seat['deck_name']) . '</small></span>'
+                . '<i title="' . ($online ? 'Na mesa agora' : 'Fora da mesa') . '"></i></li>';
+        }
+        $html .= '<article class="play-table' . ($myTurn ? ' is-my-turn' : '') . '">'
+            . '<div class="play-table-head"><b class="deck-format-chip">' . h($format['name']) . '</b><span>' . h($status) . '</span></div>'
+            . '<ul class="play-table-seats">' . $players . '</ul>'
+            . '<div class="play-table-foot"><small>Atualizada ' . h(playtestAgo((string)$table['updated_at'])) . '</small>'
+            . '<a class="primary-link" href="/deck_playtest.php?mesa=' . h((string)$table['id']) . '">' . ($table['status'] === 'playing' ? 'Voltar à partida' : 'Voltar ao lobby') . '</a></div></article>';
+    }
+    return $html;
+}
+
 /** Mesas paradas há mais de dois dias somem (com assentos e eventos). */
 function playtestCleanup(): void
 {

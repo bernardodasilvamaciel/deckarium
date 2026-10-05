@@ -5,21 +5,22 @@
    playtest.js, que chama sync() e syncSeats() depois de cada mudança. */
 import * as THREE from './vendor/three.module.min.js';
 
-export const CARD_W = 1.42;
+// Cartas grandes em relação ao tapete (cerca de 1/17 da largura), como num playmat de verdade.
+export const CARD_W = 1.78;
 export const CARD_H = CARD_W * 680 / 488;
 const THICK = 0.028;
 const MAT_W = 30;
 const MAT_D = 18;
 export const LAYOUT = {
-  rows: { creature: -4.55, other: -1.85, land: 0.95, land2: 3.25 },
+  rows: { creature: -5.1, other: -2.4, land: 0.3, land2: 3.0 },
   left: -8.2,
   right: 8.4,
-  spacing: 1.66,
+  spacing: 2.0,
   zones: {
-    library: { x: 11.2, z: 3.0, label: 'Grimório' },
-    graveyard: { x: 11.2, z: -0.1, label: 'Cemitério' },
-    exile: { x: 11.2, z: -3.2, label: 'Exílio' },
-    command: { x: -11.4, z: -4.1, label: 'Zona de comando' },
+    library: { x: 11.5, z: 3.2, label: 'Grimório' },
+    graveyard: { x: 11.5, z: 0, label: 'Cemitério' },
+    exile: { x: 11.5, z: -3.2, label: 'Exílio' },
+    command: { x: -11.6, z: -4.3, label: 'Zona de comando' },
   },
 };
 export const MANA_COLORS = { W: '#fff1c9', U: '#4aa7ff', B: '#b07cff', R: '#ff5b3a', G: '#43d27c', C: '#d5dcd8' };
@@ -337,16 +338,16 @@ export function createPlaytestScene(host, hooks) {
   // Zona de comando: um pedestal com anel dourado.
   const dais = new THREE.Group();
   dais.position.set(LAYOUT.zones.command.x, 0, LAYOUT.zones.command.z);
-  const daisBase = new THREE.Mesh(new THREE.CylinderGeometry(1.55, 1.7, 0.16, 48), new THREE.MeshStandardMaterial({ color: 0x1b2620, roughness: 0.4, metalness: 0.3 }));
+  const daisBase = new THREE.Mesh(new THREE.CylinderGeometry(1.85, 2.0, 0.16, 48), new THREE.MeshStandardMaterial({ color: 0x1b2620, roughness: 0.4, metalness: 0.3 }));
   daisBase.position.y = 0.08; daisBase.receiveShadow = true; daisBase.castShadow = true;
-  const daisRing = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.035, 12, 80), new THREE.MeshStandardMaterial({ color: 0xd9b45a, emissive: 0xd9b45a, emissiveIntensity: 0.6, metalness: 0.8, roughness: 0.3 }));
+  const daisRing = new THREE.Mesh(new THREE.TorusGeometry(1.9, 0.04, 12, 90), new THREE.MeshStandardMaterial({ color: 0xd9b45a, emissive: 0xd9b45a, emissiveIntensity: 0.6, metalness: 0.8, roughness: 0.3 }));
   daisRing.rotation.x = Math.PI / 2; daisRing.position.y = 0.16;
   const daisGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xd9b45a, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }));
-  daisGlow.scale.set(4.2, 4.2, 1); daisGlow.position.y = 0.3;
-  const daisHit = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 0.5, 16), new THREE.MeshBasicMaterial({ visible: false }));
+  daisGlow.scale.set(5, 5, 1); daisGlow.position.y = 0.3;
+  const daisHit = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, 0.5, 16), new THREE.MeshBasicMaterial({ visible: false }));
   daisHit.userData.zone = 'command';
   const taxLabel = sprite('', { size: 0.46, color: '#e9d296' });
-  taxLabel.position.set(0, 0.35, 1.9);
+  taxLabel.position.set(0, 0.35, 2.25);
   dais.add(daisBase, daisRing, daisGlow, daisHit, taxLabel);
   dais.visible = hasCommand;
   scene.add(dais);
@@ -824,7 +825,12 @@ export function createPlaytestScene(host, hooks) {
   const view = { yaw: 0, pitch: PITCH, zoom: 1, dist: 24, target: new THREE.Vector3(0.2, 0, -0.5) };
   const goal = { yaw: 0, pitch: PITCH, zoom: 1, dist: 24, target: new THREE.Vector3(0.2, 0, -0.5) };
   const base = { yaw: 0, pitch: PITCH };
+  const baseTarget = new THREE.Vector3(0.2, 0, -0.5);
   let camMode = 'me';
+  // Vista de cima: a câmera trava olhando a mesa de cima (arrastar move a mesa em vez de girar).
+  const TOP_PITCH = 1.47;
+  let topDown = false;
+  let focusKey = null;
   let width = 1; let height = 1;
   const probe = new THREE.PerspectiveCamera();
   function orbitPosition(out, target, yaw, pitch, dist) {
@@ -856,7 +862,7 @@ export function createPlaytestScene(host, hooks) {
     return THREE.MathUtils.clamp(dist, 10, 160);
   }
   const myPoints = () => {
-    const left = hasCommand ? LAYOUT.zones.command.x - 1.8 : LAYOUT.left - CARD_W * 1.2; const right = LAYOUT.zones.library.x + 1;
+    const left = hasCommand ? LAYOUT.zones.command.x - 2.3 : LAYOUT.left - CARD_W * 1.2; const right = LAYOUT.zones.library.x + 1.4;
     const far = LAYOUT.rows.creature - CARD_H * 0.75; const near = LAYOUT.rows.land2 + CARD_H * 0.7;
     return [[left, far], [right, far], [left, near], [right, near]].map(([x, z]) => new THREE.Vector3(x, 0, z));
   };
@@ -875,23 +881,28 @@ export function createPlaytestScene(host, hooks) {
     if (camMode === 'me' || typeof camMode === 'number' && !board || (camMode === 'table' && !seats.size)) {
       // Sem oponentes ainda, a "mesa toda" é o seu tapete; o modo continua valendo para quando eles chegarem.
       target.set(0.2, 0, -0.5);
-      dist = fitPoints(myPoints(), target, 0, PITCH);
+      pitch = topDown ? TOP_PITCH : PITCH;
+      dist = fitPoints(myPoints(), target, 0, pitch);
     } else if (camMode === 'table') {
-      const pts = [new THREE.Vector3(-MAT_W / 2, 0, MAT_D / 2), new THREE.Vector3(MAT_W / 2, 0, MAT_D / 2)];
+      // Do seu tapete basta até a última fileira de terrenos: a borda de baixo fica sob a mão e as cartas crescem na tela.
+      const near = LAYOUT.rows.land2 + CARD_H * 0.8;
+      const pts = [new THREE.Vector3(-MAT_W / 2, 0, near), new THREE.Vector3(MAT_W / 2, 0, near)];
       seats.forEach((b) => { b.group.updateMatrixWorld(); pts.push(...seatPoints(b)); });
       const box = new THREE.Box3().setFromPoints(pts);
       box.getCenter(target); target.y = 0;
       // Mais de cima: a perspectiva encolhe menos os tapetes do fundo.
-      pitch = 1.2;
+      pitch = topDown ? TOP_PITCH : 1.2;
       dist = fitPoints(pts, target, 0, pitch);
     } else {
       board.group.updateMatrixWorld();
       target.copy(board.group.position);
       yaw = -board.placement.theta;
-      pitch = 1.02;
+      pitch = topDown ? TOP_PITCH : 1.02;
       dist = fitPoints(seatPoints(board), target, yaw, pitch);
     }
     base.yaw = yaw; base.pitch = pitch;
+    baseTarget.copy(target);
+    focusKey = null;
     goal.yaw = yaw; goal.pitch = pitch; goal.dist = dist; goal.target.copy(target); goal.zoom = 1;
     if (instant) { view.yaw = yaw; view.pitch = pitch; view.dist = dist; view.target.copy(target); view.zoom = 1; }
   }
@@ -916,6 +927,38 @@ export function createPlaytestScene(host, hooks) {
     camera.lookAt(view.target);
   }
 
+  const MIN_ZOOM = 0.28;
+  /** O alvo da câmera não sai da área da mesa. */
+  function clampTarget() {
+    const limit = seats.size ? 34 : 14;
+    goal.target.x = THREE.MathUtils.clamp(goal.target.x, baseTarget.x - limit, baseTarget.x + limit);
+    goal.target.z = THREE.MathUtils.clamp(goal.target.z, baseTarget.z - limit, baseTarget.z + limit * 0.8);
+  }
+  function resetCamera() {
+    focusKey = null;
+    goal.yaw = base.yaw; goal.pitch = base.pitch; goal.zoom = 1; goal.target.copy(baseTarget);
+  }
+  /** Leve zoom numa carta (sua ou de um oponente); de novo na mesma carta, volta. Devolve true se aproximou. */
+  function focusCard(target) {
+    const entry = target.seat === undefined || target.seat === null ? cards.get(target.iid) : seats.get(target.seat)?.cards.get(target.iid);
+    if (!entry) return false;
+    const key = `${target.seat ?? 'me'}:${target.iid}`;
+    if (focusKey === key) { resetCamera(); return false; }
+    focusKey = key;
+    const p = entry.group.getWorldPosition(new THREE.Vector3());
+    goal.target.set(p.x, 0, p.z);
+    goal.zoom = Math.min(goal.zoom, seats.size ? 0.42 : 0.55);
+    return true;
+  }
+  function zoomBy(factor) {
+    goal.zoom = THREE.MathUtils.clamp(goal.zoom * factor, MIN_ZOOM, 1.3);
+    if (factor > 1 && goal.zoom > 0.98) goal.target.copy(baseTarget);
+  }
+  function setTopDown(on) {
+    topDown = !!on;
+    refreshView();
+  }
+
   /* ---------- Ponteiro ---------- */
   const raycaster = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
@@ -929,7 +972,7 @@ export function createPlaytestScene(host, hooks) {
   function zoneAt(x, z) {
     for (const [zone, info] of Object.entries(LAYOUT.zones)) {
       if (zone === 'command' && !hasCommand) continue;
-      const w = zone === 'command' ? 1.7 : CARD_W * 0.75; const d = zone === 'command' ? 1.9 : CARD_H * 0.72;
+      const w = zone === 'command' ? 2.0 : CARD_W * 0.75; const d = zone === 'command' ? 2.2 : CARD_H * 0.72;
       if (Math.abs(x - info.x) < w && Math.abs(z - info.z) < d) return zone;
     }
     return null;
@@ -973,7 +1016,7 @@ export function createPlaytestScene(host, hooks) {
   dom.addEventListener('pointerdown', (event) => {
     const target = pickObject(event.clientX, event.clientY);
     dom.setPointerCapture(event.pointerId);
-    pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, sx: event.clientX, sy: event.clientY, button: event.button, target, moved: false, yaw: goal.yaw, pitch: goal.pitch };
+    pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, sx: event.clientX, sy: event.clientY, button: event.button, target, moved: false, yaw: goal.yaw, pitch: goal.pitch, from: goal.target.clone() };
     if (event.button === 2) {
       // Depois do evento: o clique que fecha menus abertos não pode fechar este.
       const { clientX, clientY } = event;
@@ -1000,7 +1043,14 @@ export function createPlaytestScene(host, hooks) {
       const entry = cards.get(dragId);
       if (entry) { entry.drag = { x: p.x, z: p.z }; }
       dropZone = p.zone;
-    } else if (!pointer.target || pointer.target.mat) {
+    } else if (topDown) {
+      // Vista de cima: a mesa acompanha o ponteiro.
+      const perPixel = 2 * view.dist * view.zoom * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / height;
+      const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).setY(0).normalize();
+      const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).setY(0).normalize();
+      goal.target.copy(pointer.from).addScaledVector(right, -dx * perPixel).addScaledVector(up, dy * perPixel);
+      clampTarget();
+    } else if (!pointer.target || pointer.target.mat || pointer.target.seat !== undefined) {
       goal.yaw = THREE.MathUtils.clamp(pointer.yaw - dx * 0.004, base.yaw - 0.6, base.yaw + 0.6);
       goal.pitch = THREE.MathUtils.clamp(pointer.pitch + dy * 0.003, 0.6, 1.35);
     }
@@ -1025,8 +1075,23 @@ export function createPlaytestScene(host, hooks) {
   dom.addEventListener('pointerup', release);
   dom.addEventListener('pointercancel', release);
   dom.addEventListener('pointerleave', () => { lastMove = null; if (hoverId || hoverZone || hoverSeat !== null) { hoverId = null; hoverZone = null; hoverSeat = null; hooks.onHover?.(null); } });
-  dom.addEventListener('wheel', (event) => { event.preventDefault(); goal.zoom = THREE.MathUtils.clamp(goal.zoom * Math.exp(event.deltaY * 0.001), 0.45, 1.3); }, { passive: false });
-  dom.addEventListener('dblclick', () => { goal.yaw = base.yaw; goal.pitch = base.pitch; goal.zoom = 1; });
+  dom.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    const before = goal.zoom;
+    goal.zoom = THREE.MathUtils.clamp(goal.zoom * Math.exp(event.deltaY * 0.0012), MIN_ZOOM, 1.3);
+    // Aproxima na direção do ponteiro (o ponto sob o mouse fica parado); afastando até o fim, volta ao centro.
+    setNdc(event.clientX, event.clientY);
+    if (goal.zoom < before && raycaster.ray.intersectPlane(plane, hit)) {
+      const f = 1 - goal.zoom / before;
+      goal.target.x += (hit.x - goal.target.x) * f; goal.target.z += (hit.z - goal.target.z) * f;
+      clampTarget();
+    } else if (goal.zoom > before) {
+      const f = Math.min(1, (goal.zoom - before) / Math.max(0.05, 1 - before));
+      goal.target.lerp(baseTarget, f);
+    }
+    focusKey = null;
+  }, { passive: false });
+  dom.addEventListener('dblclick', resetCamera);
 
   /* ---------- Quadro a quadro ---------- */
   let ghost = null;
@@ -1207,6 +1272,12 @@ export function createPlaytestScene(host, hooks) {
     /** Troca a câmera: 'me', 'table' ou o número de um assento. */
     view(mode) { camMode = mode; refreshView(); },
     viewMode: () => camMode,
+    focusCard,
+    resetCamera,
+    zoomBy,
+    setTopDown,
+    isTopDown: () => topDown,
+    isFocused: () => focusKey !== null || goal.zoom < 0.98,
     spawn(iid, from) { spawnFrom.set(iid, from); },
     revealTop(url) {
       const next = url || null;

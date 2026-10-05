@@ -184,7 +184,7 @@ pageHeader(($table ? 'Mesa compartilhada' : 'Mesa de teste') . ' · ' . $deck['n
 <?php else: ?>
 <?php if (!$table && ($fmt['exact'] ? $zoneCount + $deckCount !== (int)$fmt['size'] : $deckCount < (int)$fmt['size'])): ?><p class="notice pt-count-note">O deck tem <?= $zoneCount + $deckCount ?> cartas<?= $zoneCount ? ' com a zona de comando' : '' ?>; a mesa usa as que estão aprovadas, mesmo fora das <?= deckFormatSizeLabel($fmt) ?> do <?= h($fmt['name']) ?>.</p><?php endif; ?>
 <div class="pt-app<?= $table ? ' is-shared' : '' ?>" data-playtest>
-    <div class="pt-stage" data-pt-stage aria-label="Mesa 3D. Pelo teclado: D compra, U desvira tudo, N passa o turno, Ctrl+Z desfaz; as cartas da mão são botões.">
+    <div class="pt-stage" data-pt-stage aria-label="Mesa 3D. Pelo teclado: D compra, U desvira tudo, N passa o turno, Ctrl+Z desfaz, Z aproxima a carta sob o mouse, C liga a vista de cima; as cartas da mão são botões.">
         <p class="pt-stage-status" data-pt-status>Arrumando a mesa…</p>
     </div>
 
@@ -223,6 +223,12 @@ pageHeader(($table ? 'Mesa compartilhada' : 'Mesa de teste') . ' · ' . $deck['n
         <button type="button" class="pt-tool" data-pt-action="fullscreen" aria-pressed="false">Tela cheia</button>
     </nav>
 
+    <div class="pt-camera" data-pt-camera role="group" aria-label="Câmera">
+        <button type="button" data-pt-cam="in" title="Aproximar (roda do mouse: aproxima onde o ponteiro está)" aria-label="Aproximar">+</button>
+        <button type="button" data-pt-cam="out" title="Afastar" aria-label="Afastar">−</button>
+        <button type="button" data-pt-cam="top" aria-pressed="false" title="Vista de cima: a câmera trava olhando a mesa de cima; arrastar move a mesa (C)">De cima</button>
+        <button type="button" data-pt-cam="reset" title="Voltar ao enquadramento (Esc ou duplo clique na mesa)">Centralizar</button>
+    </div>
     <aside class="pt-preview" data-pt-preview hidden></aside>
     <section class="pt-log" data-pt-log-wrap>
         <button type="button" class="pt-log-toggle" data-pt-action="log" aria-expanded="false"><?= $table ? 'Mesa e mensagens' : 'Registro da partida' ?></button>

@@ -979,3 +979,29 @@ body:has(.selection-dialog[open]){overflow:hidden}
   .meta-decklist{grid-template-columns:1fr}
   .meta-hero-actions{justify-items:start}
 }
+/* Jogar (mesas.php) e mesas em aberto na biblioteca de decks */
+.play-section{margin-bottom:34px}.play-section h2{margin:0 0 14px;font-size:1.45rem}
+.play-strip{margin:0 0 22px;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.play-strip-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}.play-strip-head h2{margin:0;font-size:1.2rem}
+.play-tables{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.play-table{display:grid;gap:10px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:0 10px 26px -20px #17241c66}
+.play-table.is-my-turn{border-color:#d9b45a;box-shadow:0 0 0 2px #d9b45a55,0 10px 26px -20px #17241c66}
+.play-table-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:.86rem;font-weight:700}
+.play-table.is-my-turn .play-table-head span{color:#9a6b07}
+.play-table-seats{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.play-table-seats li{display:grid;grid-template-columns:36px minmax(0,1fr) 10px;align-items:center;gap:9px}
+.play-table-seats img{width:36px;height:auto;border-radius:3px;box-shadow:0 2px 6px #0003}
+.play-table-noart{display:grid;place-items:center;width:36px;height:50px;border-radius:4px;background:var(--soft);color:var(--muted)}
+.play-table-seats li span{display:grid;min-width:0}.play-table-seats strong{font-size:.86rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.play-table-seats small{color:var(--muted);font-size:.74rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.play-table-seats i{width:9px;height:9px;border-radius:50%;background:#c9cfcc}.play-table-seats li.is-online i{background:#2f9e5c;box-shadow:0 0 0 3px #2f9e5c2e}
+.play-table-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}.play-table-foot small{color:var(--muted)}
+.play-decks{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.play-deck{position:relative;display:grid;align-content:space-between;gap:14px;min-height:150px;padding:16px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface);isolation:isolate}
+.play-deck::before{content:'';position:absolute;inset:0;z-index:-1;background:var(--deck-art,none) center 30%/cover;opacity:.22}
+.play-deck::after{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 30%,transparent),var(--surface) 85%)}
+.play-deck-copy{display:grid;gap:5px}.play-deck-copy strong{font-size:1.02rem}.play-deck-copy span{font-size:.82rem;color:var(--muted)}
+.play-deck-actions{display:flex;flex-wrap:wrap;gap:8px}.play-deck-actions>*{flex:1 1 auto;text-align:center}
+.play-deck-missing{margin:0;font-size:.82rem;color:var(--muted)}.play-deck.is-blocked{opacity:.8}
+.deck-play-link{position:relative;z-index:1;font-size:.84rem;font-weight:700;color:var(--accent-strong,#2f5d46);padding:10px 4px;text-underline-offset:3px}
+.deck-library-row.has-art-crop .deck-play-link{padding:4px 8px;border-radius:6px;background:color-mix(in srgb,var(--surface) 86%,transparent);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}

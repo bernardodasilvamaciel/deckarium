@@ -918,7 +918,9 @@ async function start(data) {
   function hidePreview() { preview.hidden = true; }
   const lastPointer = { x: 0, y: 0 };
   root.addEventListener('pointermove', (event) => { lastPointer.x = event.clientX; lastPointer.y = event.clientY; });
+  let lastHover = null;
   function hoverTarget(target) {
+    lastHover = target;
     if (!S) return;
     if (target && target.seat !== undefined) { hovered = null; previewSeat(target.seat, target); return; }
     hovered = target?.iid || null;
@@ -1082,6 +1084,20 @@ async function start(data) {
     return null;
   }
 
+  /* ---------- Câmera: aproximar, afastar, vista de cima, centralizar ---------- */
+  const cameraBar = $('[data-pt-camera]');
+  function setTopDown(on) {
+    scene.setTopDown(on);
+    cameraBar?.querySelector('[data-pt-cam="top"]')?.setAttribute('aria-pressed', String(on));
+    try { localStorage.setItem('deckarium-playtest-topdown', on ? '1' : '0'); } catch { /* sem armazenamento: só não lembra */ }
+  }
+  cameraBar?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-pt-cam]');
+    if (!button) return;
+    ({ in: () => scene.zoomBy(0.75), out: () => scene.zoomBy(1 / 0.75), top: () => setTopDown(!scene.isTopDown()), reset: () => scene.resetCamera() }[button.dataset.ptCam] || (() => {}))();
+  });
+  try { if (localStorage.getItem('deckarium-playtest-topdown') === '1') setTopDown(true); } catch { /* idem */ }
+
   /* ---------- Botões e teclado ---------- */
   root.addEventListener('click', (event) => {
     const button = event.target.closest('[data-pt-action]');
@@ -1143,12 +1159,15 @@ async function start(data) {
   document.addEventListener('keydown', (event) => {
     const target = event.target instanceof Element ? event.target : document.body;
     if (target.closest('input, textarea, select')) return;
-    if (event.key === 'Escape') { if (!modal.hidden) { const onClose = modal.onClose; closeModal(); onClose?.(); } else closeMenu(); return; }
+    if (event.key === 'Escape') { if (!modal.hidden) { const onClose = modal.onClose; closeModal(); onClose?.(); } else if (!menu.hidden) closeMenu(); else scene.resetCamera(); return; }
     if (!modal.hidden) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); undo(); return; }
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     const key = event.key.toLowerCase();
     if (MP && key === 'v') { event.preventDefault(); cycleView(); return; }
+    if (key === 'c') { event.preventDefault(); setTopDown(!scene.isTopDown()); return; }
+    // Z: leve zoom na carta sob o mouse (sua ou de um oponente).
+    if (key === 'z' && lastHover?.iid) { event.preventDefault(); scene.focusCard(lastHover); return; }
     if (hovered && S.cards[hovered] && S.cards[hovered].zone === 'battlefield') {
       const iid = hovered;
       const cardKeys = { t: () => toggleTap(iid), a: () => (isCreature(S.cards[iid]) ? toggleAttack(iid) : null), g: () => act('move', () => move(iid, 'graveyard')), e: () => act('move', () => move(iid, 'exile')), h: () => act('move', () => move(iid, 'hand')), c: () => openCounters(iid), '+': () => act('counter', () => addCounter(iid, '+1/+1', 1)), '=': () => act('counter', () => addCounter(iid, '+1/+1', 1)), '-': () => act('counter', () => addCounter(iid, (S.cards[iid].counters['+1/+1'] || 0) ? '+1/+1' : '-1/-1', (S.cards[iid].counters['+1/+1'] || 0) ? -1 : 1)) };
@@ -1321,6 +1340,8 @@ async function start(data) {
   }
   function seatClick(seat, target) {
     if (target.zone === 'graveyard' || target.zone === 'exile') { openSeatZone(seat, target.zone); return; }
+    // Carta de um oponente: leve zoom nela (de novo, volta).
+    if (target.iid) { scene.focusCard(target); return; }
     if (target.mat) setView(scene.viewMode() === seat ? 'table' : seat);
   }
 

@@ -918,3 +918,7 @@ button.is-busy::after{content:"";display:inline-block;width:.8em;height:.8em;mar
 @media(max-width:850px){.trade-modes,.trade-fields{grid-template-columns:1fr}.trade-share{flex-direction:column}.trade-share-actions{justify-items:stretch;width:100%}.trade-public .trade-hero{flex-direction:column}}
 @media(max-width:600px){.trade-bulk{align-items:flex-start;flex-direction:column;gap:10px}.trade-table{font-size:.8rem}.trade-card-cell{min-width:170px}}
 .deck-format-chip{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--soft);color:var(--accent);font-size:.72rem;font-weight:800;letter-spacing:.02em;vertical-align:1px}
+/* Jogar: quantas mesas compartilhadas estão em aberto (no menu recolhido vira um ponto no ícone) */
+.sidebar nav a{position:relative}
+.nav-count{margin-left:auto;min-width:22px;padding:1px 7px;border-radius:999px;background:#d9b45a;color:#1a150a;font-size:.72rem;font-weight:800;text-align:center;line-height:1.5}
+.sidebar.is-collapsed .nav-count{position:absolute;top:7px;left:30px;min-width:0;width:10px;height:10px;padding:0;font-size:0;box-shadow:0 0 0 2px #17241c}

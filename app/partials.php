@@ -36,7 +36,7 @@ function uiIcon(string $name): string
 function pageHeader(string $title, string $description = '', array $meta = []): void
 {
     $route = basename($_SERVER['SCRIPT_NAME'] ?? 'index.php');
-    $section = !empty($GLOBALS['isHome']) ? 'home' : match ($route) { 'editions.php','edition.php'=>'sets', 'commanders.php'=>'commanders', 'collection.php'=>'collection','wishlist.php'=>'wishlist','trade.php'=>'trade', 'decks.php','upgrades.php','deck_board.php','deck_playtest.php'=>'decks','status.php','sync_history.php'=>'status','public.php','public_deck.php','public_collection.php','public_trade.php','profile.php'=>'community','users.php'=>'users','account.php'=>'account','login.php','register.php'=>'auth',default=>'cards' };
+    $section = !empty($GLOBALS['isHome']) ? 'home' : match ($route) { 'editions.php','edition.php'=>'sets', 'commanders.php'=>'commanders', 'collection.php'=>'collection','wishlist.php'=>'wishlist','trade.php'=>'trade', 'mesas.php'=>'play', 'deck_playtest.php'=>isset($_GET['mesa']) ? 'play' : 'decks', 'decks.php','upgrades.php','deck_board.php'=>'decks','status.php','sync_history.php'=>'status','public.php','public_deck.php','public_collection.php','public_trade.php','profile.php'=>'community','users.php'=>'users','account.php'=>'account','login.php','register.php'=>'auth',default=>'cards' };
     $user = authUser();
     $version = (string)filemtime(__DIR__ . '/assets/style.css');
     echo '<!doctype html><html lang="' . h(appLocale()) . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
@@ -52,7 +52,7 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
     ];
     $pageDescription = t($description !== '' ? $description : ($descriptions[$section] ?? 'Deckarium: catálogo de Magic, oficina de decks para Commander e outros formatos, mesa 3D com amigos e controle da sua coleção.'));
     $pageDescription = mb_substr(trim(preg_replace('/\s+/u', ' ', $pageDescription) ?? ''), 0, 300);
-    $privateRoutes = ['login.php','register.php','logout.php','account.php','collection.php','decks.php','deck_board.php','deck_playtest.php','upgrades.php','users.php','status.php','sync_history.php','wishlist.php','trade.php'];
+    $privateRoutes = ['login.php','register.php','logout.php','account.php','collection.php','decks.php','deck_board.php','deck_playtest.php','mesas.php','upgrades.php','users.php','status.php','sync_history.php','wishlist.php','trade.php'];
     $noindex = $meta['noindex'] ?? in_array($route, $privateRoutes, true);
     $scheme = (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'http') ? 'http' : 'https';
     $host = (string)($_SERVER['HTTP_HOST'] ?? 'deckarium.bernas.shop');
@@ -85,18 +85,21 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
     if ($section === 'home') echo '<link rel="stylesheet" href="/assets/home.css?v=' . filemtime(__DIR__ . '/assets/home.css') . '">';
     if ($section === 'commanders') echo '<link rel="stylesheet" href="/assets/commanders.css?v=' . filemtime(__DIR__ . '/assets/commanders.css') . '">';
     if ($route === 'editions.php') echo '<link rel="stylesheet" href="/assets/editions.css?v=' . filemtime(__DIR__ . '/assets/editions.css') . '">';
-    if ($section==='decks') echo '<link rel="stylesheet" href="/assets/decks.css?v=' . filemtime(__DIR__ . '/assets/decks.css') . '">';
+    if ($section==='decks' || $section==='play') echo '<link rel="stylesheet" href="/assets/decks.css?v=' . filemtime(__DIR__ . '/assets/decks.css') . '">';
     echo '<script src="/assets/app.js?v=' . h((string)filemtime(__DIR__ . '/assets/app.js')) . '" defer></script></head><body>';
     echo '<a class="skip-link" href="#main">' . te('Pular para o conteúdo') . '</a>';
     echo '<header class="sidebar" data-sidebar><div class="sidebar-header"><a class="brand" href="/" aria-label="Deckarium — início"><img class="brand-mark" src="/assets/deckarium-logo.png" alt="Deckarium" width="512" height="512"></a><button type="button" class="sidebar-toggle" data-sidebar-toggle aria-expanded="true"><span class="sr-only" data-sidebar-toggle-label>' . te('Recolher navegação') . '</span><span class="sidebar-toggle-open">' . uiIcon('menu') . '</span><span class="sidebar-toggle-close">' . uiIcon('close') . '</span><span class="sidebar-toggle-collapse">' . uiIcon('collapse') . '</span><span class="sidebar-toggle-expand">' . uiIcon('expand') . '</span></button></div>';
     echo '<nav aria-label="Navegação principal">';
-    $links = [['home','/',t('Início')],['commanders','/commanders.php',t('Comandantes')],['cards','/?catalog=1#catalogo',t('Catálogo')],['sets','/editions.php',t('Edições')],['collection','/collection.php',t('Minha coleção')],['wishlist','/wishlist.php',t('Lista de desejos')],['trade','/trade.php',t('À venda')],['decks','/decks.php',t('Meus decks')],['community','/public.php',t('Comunidade')]];
+    $links = [['home','/',t('Início')],['commanders','/commanders.php',t('Comandantes')],['cards','/?catalog=1#catalogo',t('Catálogo')],['sets','/editions.php',t('Edições')],['collection','/collection.php',t('Minha coleção')],['wishlist','/wishlist.php',t('Lista de desejos')],['trade','/trade.php',t('À venda')],['decks','/decks.php',t('Meus decks')],['play','/mesas.php',t('Jogar')],['community','/public.php',t('Comunidade')]];
     if (($user['role'] ?? '') === 'admin') {
         $links[] = ['status','/status.php',t('Status')];
         $links[] = ['users','/users.php',t('Usuários')];
     }
+    // Jogar: quantas mesas compartilhadas em aberto a pessoa tem (para voltar à partida de qualquer página).
+    $openTables = $user ? navOpenTables((int)$user['id']) : 0;
     foreach ($links as [$key,$url,$label]) {
-        echo '<a href="' . $url . '"' . ($section === $key ? ' aria-current="page"' : '') . '>' . uiIcon($key) . '<span>' . $label . '</span></a>';
+        $count = $key === 'play' && $openTables ? '<b class="nav-count" title="' . h($openTables . ' ' . ($openTables === 1 ? t('mesa em aberto') : t('mesas em aberto'))) . '">' . $openTables . '</b>' : '';
+        echo '<a href="' . $url . '"' . ($section === $key ? ' aria-current="page"' : '') . '>' . uiIcon($key === 'play' ? 'playtest' : $key) . '<span>' . $label . '</span>' . $count . '</a>';
     }
     echo '</nav>';
     if ($user) {
@@ -117,6 +120,18 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
     }
     echo '</div>';
     echo '</header><div class="sidebar-scrim" data-sidebar-scrim hidden></div><div class="app-content"><main id="main" class="wrap">';
+}
+/** Mesas compartilhadas em aberto da pessoa (0 se as tabelas da mesa ainda não existem). */
+function navOpenTables(int $userId): int
+{
+    try {
+        if (!db()->query("SELECT to_regclass('public.playtest_seats') IS NOT NULL")->fetchColumn()) return 0;
+        $stmt = db()->prepare("SELECT COUNT(*) FROM playtest_seats s JOIN playtest_tables t ON t.id=s.table_id WHERE s.user_id=? AND t.updated_at > now() - interval '2 days'");
+        $stmt->execute([$userId]);
+        return (int)$stmt->fetchColumn();
+    } catch (PDOException) {
+        return 0;
+    }
 }
 function pageFooter(): void
 {

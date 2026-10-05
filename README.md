@@ -38,6 +38,7 @@ Projeto local para pesquisar cartas, planejar decks a partir da sua coleção �
 | Minha coleção | `/collection.php` | Login |
 | À venda | `/trade.php` | Login |
 | Meus decks | `/decks.php` | Login |
+| Jogar | `/mesas.php` | Login — mesas em aberto e atalhos para jogar com cada deck |
 | Mesa compartilhada | `/deck_playtest.php?mesa=CÓDIGO` | Login, com um deck do formato da mesa |
 | Status do acervo | `/status.php` | Administrador |
 | Histórico de atualizações | `/sync_history.php` | Administrador |

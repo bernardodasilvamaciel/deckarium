@@ -64,6 +64,13 @@ main.wrap:has(> .pt-app){max-width:none}
 .pt-combat b{color:#fff}
 .pt-rule{display:inline-block;padding:0 5px;border-radius:4px;border:1px solid currentColor;font:600 .62rem/1.5 ui-monospace,Consolas,monospace;opacity:.75;vertical-align:1px}
 
+/* Câmera: aproximar, afastar, vista de cima e centralizar (canto inferior direito) */
+.pt-camera{position:absolute;z-index:5;right:12px;bottom:14px;display:flex;flex-direction:column;gap:4px;padding:4px;border:1px solid var(--glass-line);border-radius:12px;background:var(--glass);backdrop-filter:blur(10px)}
+.pt-camera button{min-width:38px;height:32px;padding:0 9px;border:0;border-radius:8px;background:none;font:inherit;font-size:.74rem;font-weight:700;color:var(--ink-on);cursor:pointer}
+.pt-camera button[data-pt-cam="in"],.pt-camera button[data-pt-cam="out"]{font-size:1.1rem;line-height:1}
+.pt-camera button:hover{background:rgba(255,255,255,.12)}
+.pt-camera button[aria-pressed=true]{background:rgba(217,180,90,.24);color:#ffe7a8}
+
 /* Mão: cartas seguradas na borda de baixo */
 .pt-hand{position:absolute;z-index:4;left:50%;bottom:0;transform:translateX(-50%);display:flex;align-items:flex-end;justify-content:center;height:var(--hand-h);padding:0 40px;max-width:calc(100% - 20px)}
 .pt-card{--w:clamp(92px,8.2vw,134px);position:relative;flex:0 0 auto;width:var(--w);margin-left:calc(var(--overlap,14px) * -1);padding:0;border:0;border-radius:5%/3.6%;background:none;cursor:grab;transform:translateY(calc(34% + var(--i) * var(--i) * 3px)) rotate(calc(var(--i) * 2.4deg));transform-origin:50% 130%;transition:transform .22s cubic-bezier(.2,.8,.2,1),filter .2s ease,opacity .15s;filter:drop-shadow(0 10px 14px #000a)}
@@ -79,7 +86,7 @@ main.wrap:has(> .pt-app){max-width:none}
 .is-dragging-card .pt-webgl{cursor:copy}
 
 /* Pré-visualização */
-.pt-preview{position:absolute;z-index:7;top:calc(var(--tools-top,76px) + 52px);width:clamp(200px,17vw,280px);pointer-events:none;animation:pt-fade .15s ease both}
+.pt-preview{position:absolute;z-index:7;top:calc(var(--tools-top,76px) + 52px);width:clamp(240px,min(23vw,40vh),370px);pointer-events:none;animation:pt-fade .15s ease both}
 .pt-preview.is-left{left:16px}
 .pt-preview.is-right{right:16px}
 .pt-preview img{display:block;width:100%;height:auto;border-radius:4.75%/3.4%;box-shadow:0 24px 50px #000c}
@@ -194,6 +201,7 @@ html.pt-lock{overflow:hidden}
   .pt-tools{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;left:8px;right:8px}
   .pt-tool{flex:0 0 auto;padding:6px 8px}
   .pt-preview{display:none}
+  .pt-camera{flex-direction:row;bottom:calc(var(--hand-h) + 8px)}
   .pt-mulligan,.pt-combat{top:auto;bottom:calc(var(--hand-h) + 44px);max-width:calc(100% - 24px)}
   .pt-log{display:none}
   .pt-toasts{top:auto;bottom:calc(var(--hand-h) + 50px)}

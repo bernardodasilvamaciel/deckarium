@@ -213,7 +213,11 @@ Nas duas vistas:
 
 **Efeitos.** Cada carta que entra no campo solta faíscas nas cores dela (terrenos: nas cores de mana que produzem) e ondas no tapete; a comandante sobe do pedestal com partículas douradas; o exílio dissolve a carta em luz azulada; o cemitério deixa cinzas; fichas surgem num estalo; comprar faz uma carta voar do grimório para a mão, que recebe a carta deslizando; embaralhar sacode a pilha; marcadores viram fichas de pôquer empilhadas no canto da carta; atacantes brilham em vermelho e avançam; o dano ao oponente sobe em números. Com `prefers-reduced-motion`, as animações e partículas param.
 
+**Câmera.** Arrastar a mesa gira a câmera; a roda do mouse aproxima na direção do ponteiro. Clicar numa carta de um oponente (ou **Z** sobre qualquer carta) dá um leve zoom nela; de novo, **Esc** ou duplo clique na mesa voltam ao enquadramento. **De cima** (ou **C**) trava a câmera olhando a mesa de cima — aí arrastar move a mesa em vez de girar — e fica lembrada no navegador. Os botões **+**, **−**, **De cima** e **Centralizar** ficam no canto inferior direito; passar o mouse sobre uma carta mostra a leitura grande ao lado.
+
 A partida fica guardada no navegador (`localStorage`, chave `deckarium-playtest-v2-<deck>`) e é retomada ao voltar, desde que as cartas do deck não tenham mudado. A mesa precisa de WebGL; sem ele, a página avisa.
+
+**Jogar** (no menu principal, `mesas.php`) junta as mesas compartilhadas em aberto em que você está sentado — formato, situação (lobby, turno, de quem é a vez), quem está conectado e **Voltar à partida** — e os seus decks com **Treinar sozinho** e **Jogar com amigos**. O menu mostra quantas mesas estão em aberto; em **Meus decks**, as mesas em aberto aparecem no topo e cada deck tem o atalho **Jogar**.
 
 ### Mesa compartilhada
 
