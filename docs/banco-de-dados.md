@@ -11,7 +11,7 @@ Banco PostgreSQL do Deckarium (schema `public`). Gerado a partir do banco em exe
 | Coleção e decks | `builder_collection`, `builder_decks`, `builder_items`, `deck_upgrades` | `deckSchema()` em `app/deck_library.php` e `app/auth.php` |
 | Cache de fontes externas | `deck_synergy`, `deck_commander_insights`, `deck_spellbook_cache` | `deckSchema()` |
 | Meta dos formatos (MTGO) | `meta_formats`, `meta_events`, `meta_decks`, `meta_deck_cards` | `metaSchema()` em `app/deck_meta.php` |
-| Mesa compartilhada | `playtest_tables`, `playtest_seats`, `playtest_events`, `app_secrets` | `playtestSchema()` em `app/playtest_lib.php` |
+| Mesa compartilhada | `playtest_tables`, `playtest_seats`, `playtest_events`, `app_secrets`, `player_prefs` | `playtestSchema()` em `app/playtest_lib.php` |
 | Legado | `upgrade_items` | `database/init.sql` |
 
 Não há ferramenta de migração: as tabelas novas usam `CREATE TABLE IF NOT EXISTS` e as colunas novas `ALTER TABLE … ADD COLUMN IF NOT EXISTS`, executados pelo próprio app. `database/init.sql` só roda na criação do volume do PostgreSQL.
@@ -435,7 +435,7 @@ A página é `deck_playtest.php?mesa=CÓDIGO`. O PHP (`playtest_table.php`) abre
 | `game` | integer | não | `0` | Número da partida (sobe a cada “Começar partida”). |
 | `starting_seat`, `turn_seat` | smallint | sim | | Quem começou (sorteado) e de quem é a vez. |
 | `turn_number` | integer | não | `0` | Turno da mesa (1 = primeiro turno da partida). |
-| `phase` | smallint | não | `0` | Fase de quem está jogando (0 desvirar … 6 final). |
+| `phase` | smallint | não | `0` | Etapa de quem está jogando (500.1): 0 desvirar, 1 manutenção, 2 compra, 3 primeira principal, 4 início do combate, 5 atacantes, 6 bloqueadores, 7 dano, 8 fim do combate, 9 segunda principal, 10 etapa final, 11 limpeza. |
 | `version` | bigint | não | `1` | Sobe quando assentos, vez ou fase mudam. |
 | `created_at`, `updated_at` | timestamptz | não | `now()` | |
 
@@ -460,9 +460,19 @@ A página é `deck_playtest.php?mesa=CÓDIGO`. O PHP (`playtest_table.php`) abre
 | `id` | bigint | não | sequência | **PK.** Ordem dos eventos. |
 | `table_id` | text | não | | FK → `playtest_tables.id` (cascata). |
 | `seat` | smallint | sim | | Quem gerou. |
-| `kind` | text | não | | `join`, `leave`, `start`, `lobby`, `turn`, `log`, `chat`, `damage`, `life`, `poison`, `reveal`, `dice`, `attack`, `concede`. |
-| `payload` | jsonb | não | `'{}'` | Dados do evento (ex.: `damage` → `to`, `amount`, `commander`, `combat`, `sources`). |
+| `kind` | text | não | | `join`, `leave`, `start`, `lobby`, `turn`, `log`, `chat`, `damage`, `life`, `poison`, `reveal`, `dice`, `attack`, `concede`, `interact`. |
+| `payload` | jsonb | não | `'{}'` | Dados do evento (ex.: `damage` → `to`, `amount`, `commander`, `combat`, `sources`; `interact` → `to`, `op` — `mill`, `exile-top`, `reveal-top`, `look`, `arrange`, `shuffle`, `draw`, `tap`, `untap`, `move`, `mod`, `damage`, `control`, `lend`, `return`, `zone-all` — e o que cada um precisa: `n`, `iid`, `zone`, `plan`…). As cartas que alguém olha no grimório de outro jogador não passam por aqui: vão só para ele, pelo WebSocket (`whisper`). |
 | `created_at` | timestamptz | não | `now()` | |
+
+### `player_prefs`
+
+A mesa de cada jogador: vale para todas as partidas e o shield e o verso aparecem para os outros jogadores.
+
+| Coluna | Tipo | Nulo | Padrão | Descrição |
+|---|---|---|---|---|
+| `user_id` | bigint | não | | **PK.** FK → `users.id` (cascata). |
+| `prefs` | jsonb | não | `'{}'` | `environment` (`auto`, `plains`, `island`, `swamp`, `mountain`, `forest`), `wood` (`carvalho`, `nogueira`, `mogno`), `sleeve` (oito cores de shield) e `back` (`deckarium`, `constelacao`, `runas`, `escamas`, `lisa`, `arte`). Só valores conhecidos são gravados (`playtestSavePrefs()`). |
+| `updated_at` | timestamptz | não | `now()` | |
 
 ---
 

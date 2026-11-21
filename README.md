@@ -26,7 +26,8 @@ Projeto local para pesquisar cartas, planejar decks a partir da sua coleção �
 
 | Página | Rota | Acesso |
 |---|---|---|
-| Início | `/` | Todos |
+| Jogar (início) | `/` | Todos — vitrine 3D da mesa; com login, traga seu deck, mesas em aberto, seus decks e a sua mesa (paisagem, madeira, shield e verso) |
+| Sobre o site | `/sobre.php` | Todos — o guia de cada módulo (a antiga página inicial) |
 | Comandantes | `/commanders.php` | Todos |
 | Catálogo | `/?catalog=1` | Todos |
 | Edições | `/editions.php` | Todos |
@@ -38,7 +39,7 @@ Projeto local para pesquisar cartas, planejar decks a partir da sua coleção �
 | Minha coleção | `/collection.php` | Login |
 | À venda | `/trade.php` | Login |
 | Meus decks | `/decks.php` | Login |
-| Jogar | `/mesas.php` | Login — mesas em aberto e atalhos para jogar com cada deck |
+| Trazer deck | `/play_import.php` (POST) | Login — importa a lista colada e já leva à mesa (sozinho ou com amigos); `/mesas.php` agora redireciona para `/#jogar` |
 | Mesa compartilhada | `/deck_playtest.php?mesa=CÓDIGO` | Login, com um deck do formato da mesa |
 | Status do acervo | `/status.php` | Administrador |
 | Histórico de atualizações | `/sync_history.php` | Administrador |

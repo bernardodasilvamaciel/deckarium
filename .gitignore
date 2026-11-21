@@ -25,3 +25,5 @@ storage/edhrec-misses/
 storage/meta/
 # Dependências do serviço de tempo real (instaladas na imagem com npm ci)
 realtime/node_modules/
+# Backups do banco (ex.: antes de zerar os dados de usuários)
+storage/backups/

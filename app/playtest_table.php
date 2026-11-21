@@ -35,18 +35,14 @@ try {
         session_write_close();
         $action = (string)($_POST['action'] ?? '');
 
+        // Paisagem, madeira, shield e verso da pessoa (valem para todas as mesas).
+        if ($action === 'prefs') {
+            $input = json_decode((string)($_POST['prefs'] ?? '{}'), true);
+            playtestRespond(['ok' => true, 'prefs' => playtestSavePrefs($userId, is_array($input) ? $input : [])]);
+        }
+
         if ($action === 'create') {
-            playtestCleanup();
-            $deck = deckQuery('SELECT * FROM builder_decks WHERE id=? AND user_id=?', [(int)($_POST['deck'] ?? 0), $userId])->fetch();
-            if (!$deck) throw new RuntimeException('Deck não encontrado na sua conta.');
-            $format = deckFormatOf($deck);
-            if (!in_array((int)$deck['id'], array_map(fn($row) => (int)$row['id'], playtestEligibleDecks($userId, $format)), true)) throw new RuntimeException('O deck precisa de cartas aprovadas' . (deckFormatHasLeader($format) ? ' e de comandante' : '') . ' para abrir uma mesa.');
-            do { $token = playtestToken(); } while (deckQuery('SELECT 1 FROM playtest_tables WHERE id=?', [$token])->fetchColumn());
-            db()->beginTransaction();
-            deckQuery('INSERT INTO playtest_tables(id,host_user_id,format) VALUES (?,?,?)', [$token, $userId, $format['key']]);
-            deckQuery('INSERT INTO playtest_seats(table_id,seat,user_id,deck_id) VALUES (?,0,?,?)', [$token, $userId, (int)$deck['id']]);
-            db()->commit();
-            playtestEvent($token, 0, 'join', ['deck' => (string)$deck['name']]);
+            $token = playtestCreateTable($userId, (int)($_POST['deck'] ?? 0));
             playtestRespond(['ok' => true, 'table' => $token, 'url' => '/deck_playtest.php?mesa=' . $token]);
         }
 

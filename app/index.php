@@ -34,10 +34,10 @@ $rankedOrder = [
     'price_asc' => 'cheapest ASC NULLS LAST, name, id',
 ][$sort];
 $isHome = !array_filter($f) && !isset($_GET['catalog']) && !isset($_GET['view']) && !isset($_GET['page']) && !isset($_GET['sort']);
-// "/" sem busca nem filtros é a página inicial, que explica cada módulo do site.
+// "/" sem busca nem filtros é a página do jogo (traga seu deck e jogue); o guia dos módulos está em /sobre.php.
 if ($isHome) {
     $GLOBALS['isHome'] = true;
-    require __DIR__ . '/home.php';
+    require __DIR__ . '/play_home.php';
     exit;
 }
 

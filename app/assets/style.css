@@ -922,3 +922,8 @@ button.is-busy::after{content:"";display:inline-block;width:.8em;height:.8em;mar
 .sidebar nav a{position:relative}
 .nav-count{margin-left:auto;min-width:22px;padding:1px 7px;border-radius:999px;background:#d9b45a;color:#1a150a;font-size:.72rem;font-weight:800;text-align:center;line-height:1.5}
 .sidebar.is-collapsed .nav-count{position:absolute;top:7px;left:30px;min-width:0;width:10px;height:10px;padding:0;font-size:0;box-shadow:0 0 0 2px #17241c}
+
+/* Menu: o grupo secundário (oficina e acervo) abaixo de Jogar e Meus decks */
+.sidebar nav .nav-group{display:block;margin:10px 14px 0;padding-top:12px;border-top:1px solid #2c3a34;font-size:.66rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#7f8d88;white-space:nowrap}
+@media(min-width:851px){.sidebar.is-collapsed nav .nav-group{margin-inline:6px;font-size:0;letter-spacing:0}}
+@media(max-width:850px){.sidebar nav .nav-group{margin-inline:6px}}

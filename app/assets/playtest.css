@@ -30,9 +30,23 @@ main.wrap:has(> .pt-app){max-width:none}
 .pt-turn{max-width:calc(100% - var(--meters-w,230px))}
 .pt-turn-number{font:700 1.15rem/1 Spectral,Georgia,serif;color:var(--gold);padding:0 4px}
 .pt-phases{display:flex;flex-wrap:wrap;gap:3px;margin:0;padding:0;list-style:none}
-.pt-phases li{padding:3px 7px;border-radius:999px;font-size:.66rem;font-weight:600;color:var(--muted-on)}
-.pt-phases li.is-done{color:#6f7f77}
-.pt-phases li[aria-current]{background:var(--gold);color:#1a150a}
+/* Barra das etapas (500.1): cinco fases; as de várias etapas têm um ponto por etapa e o nome da atual. */
+.pt-phases{align-items:center;gap:4px}
+.pt-ph{display:flex;align-items:center;gap:4px;padding:2px 3px 2px 7px;border:1px solid transparent;border-radius:999px;color:var(--muted-on)}
+.pt-ph.is-now{border-color:rgba(217,180,90,.5);background:rgba(217,180,90,.1);color:#f4e2b0}
+.pt-ph.is-done{opacity:.55}
+.pt-ph-name{font-size:.62rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.pt-ph-steps{display:flex;align-items:center;gap:3px}
+.pt-step{display:inline-flex;align-items:center;justify-content:center;min-width:10px;height:10px;padding:0;border:1px solid rgba(233,238,234,.35);border-radius:999px;background:transparent;color:inherit;font:inherit;font-size:.64rem;font-weight:700;cursor:pointer;transition:background .15s,border-color .15s}
+.pt-step .pt-step-name{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.pt-step.is-done{background:rgba(233,238,234,.35);border-color:transparent}
+.pt-step.is-now{height:auto;padding:2px 8px;background:var(--gold);border-color:var(--gold);color:#1a150a}
+.pt-step.is-now .pt-step-name{position:static;width:auto;height:auto;clip:auto}
+.pt-step.is-main{height:auto;padding:2px 8px;border-color:transparent;font-size:.66rem;margin-left:-6px}
+.pt-step.is-main.is-now{background:var(--gold);color:#1a150a}
+.pt-step:hover:not(.is-now){border-color:var(--gold);color:#ffe7a8}
+.pt-phases.is-theirs .pt-step{cursor:default}
+.pt-phases.is-theirs .pt-step.is-now,.pt-phases.is-theirs .pt-step.is-main.is-now{background:#8fb4d9;border-color:#8fb4d9}
 .pt-meters{position:absolute;top:0;right:0;flex-direction:column;align-items:stretch;flex-wrap:nowrap;gap:2px;padding:6px 8px}
 .pt-meter{display:grid;grid-template-columns:minmax(64px,1fr) auto auto auto;align-items:center;column-gap:6px;padding:2px 4px;border-radius:10px}
 .pt-meter>span{font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-on)}
@@ -60,6 +74,8 @@ main.wrap:has(> .pt-app){max-width:none}
 .pt-mulligan strong,.pt-combat strong{font:700 1.02rem Spectral,Georgia,serif;color:var(--gold)}
 .pt-mulligan span,.pt-combat span{font-size:.82rem;color:var(--muted-on)}
 .pt-combat{border-color:rgba(255,106,77,.6);box-shadow:0 0 0 4px rgba(255,106,77,.1),0 18px 40px #0008}
+.pt-combat.is-defending{border-color:rgba(127,200,255,.7);box-shadow:0 0 0 4px rgba(127,200,255,.12),0 18px 40px #0008}
+.pt-combat.is-defending strong{color:#a8dcff}
 .pt-combat strong{color:#ff9b85}
 .pt-combat b{color:#fff}
 .pt-rule{display:inline-block;padding:0 5px;border-radius:4px;border:1px solid currentColor;font:600 .62rem/1.5 ui-monospace,Consolas,monospace;opacity:.75;vertical-align:1px}
@@ -271,6 +287,8 @@ html.pt-lock{overflow:hidden}
 .pt-reveal{position:absolute;z-index:13;left:50%;top:50%;transform:translate(-50%,-50%);display:grid;justify-items:center;gap:8px;padding:14px;border-radius:16px;background:rgba(9,16,12,.86);backdrop-filter:blur(8px);border:1px solid var(--seat);box-shadow:0 0 40px -6px var(--seat),0 30px 70px #000c;animation:pt-reveal-in .45s cubic-bezier(.2,.8,.2,1) both;cursor:pointer;transition:opacity .45s ease,transform .45s ease}
 .pt-reveal p{margin:0;font-size:.84rem;color:var(--muted-on)}.pt-reveal p b{color:var(--seat)}
 .pt-reveal img{width:clamp(200px,20vw,300px);height:auto;border-radius:4.75%/3.4%}
+.pt-reveal-row{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;max-width:min(90vw,980px)}
+.pt-reveal.is-many img{width:clamp(110px,10vw,170px)}
 .pt-reveal.is-out{opacity:0;transform:translate(-50%,-60%) scale(.96)}
 @keyframes pt-reveal-in{from{opacity:0;transform:translate(-50%,-40%) rotateY(70deg) scale(.8)}}
 
@@ -331,9 +349,70 @@ html.pt-lock{overflow:hidden}
 .pt-look-cards.is-dealt .pt-look-flip{animation:none}
 .pt-look-front,.pt-look-back{position:absolute;inset:0;width:100%;height:100%;border-radius:4.75%/3.4%;backface-visibility:hidden;-webkit-backface-visibility:hidden}
 .pt-look-front{box-shadow:0 14px 30px #0009}
-.pt-look-back{transform:rotateY(180deg);background:radial-gradient(ellipse at center,#1f3a2e 0 30%,#10231b 60%,#0a1611);border:4px solid #c9a44f;box-sizing:border-box}
+.pt-look-back{transform:rotateY(180deg);background:var(--pt-back,radial-gradient(ellipse at center,#1f3a2e 0 30%,#10231b 60%,#0a1611)) center/cover;box-sizing:border-box}
 .pt-look-to{position:absolute;left:8px;bottom:8px;padding:2px 8px;border-radius:999px;background:rgba(9,16,12,.85);color:#ffe7a8;font-size:.68rem;backface-visibility:hidden}
 .pt-look-card.is-graveyard .pt-look-front,.pt-look-card.is-exile .pt-look-front{filter:grayscale(.6) brightness(.75)}
 .pt-look-card.is-hand .pt-look-front{outline:3px solid #5fd896;outline-offset:2px}
 @keyframes pt-look-deal{0%{opacity:0;transform:translateY(-60px) rotateY(180deg) scale(.85)}35%{opacity:1;transform:translateY(0) rotateY(180deg) scale(1)}100%{opacity:1;transform:rotateY(0)}}
 @media (prefers-reduced-motion:reduce){.pt-look-flip{animation:none}}
+
+/* Aviso de etapa: fase e etapa no alto da mesa, com o que acontece e os gatilhos */
+.pt-banner{position:absolute;z-index:7;left:50%;top:calc(var(--tools-top,76px) + 58px);display:grid;justify-items:center;gap:3px;min-width:min(420px,calc(100% - 40px));max-width:min(620px,calc(100% - 40px));padding:12px 22px 10px;border-radius:16px;background:linear-gradient(180deg,rgba(14,20,16,.9),rgba(9,14,11,.82));backdrop-filter:blur(10px);border:1px solid color-mix(in srgb,var(--seat,#e3c06a) 60%,transparent);box-shadow:0 0 0 4px color-mix(in srgb,var(--seat,#e3c06a) 12%,transparent),0 24px 50px #000a;text-align:center;pointer-events:none;opacity:0;transform:translate(-50%,-14px) scale(.97);transition:opacity .3s ease,transform .35s cubic-bezier(.2,.8,.2,1)}
+.pt-banner.is-in{opacity:1;transform:translate(-50%,0) scale(1)}
+.pt-banner small{font-size:.66rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--seat,#e3c06a)}
+.pt-banner small .pt-rule{margin-left:4px;letter-spacing:0}
+.pt-banner strong{font:700 clamp(1.3rem,2.3vw,1.85rem)/1.1 Spectral,Georgia,serif;color:#fff}
+.pt-banner span{font-size:.8rem;color:var(--muted-on)}
+.pt-banner em{margin-top:2px;padding:3px 10px;border-radius:999px;background:rgba(183,140,255,.16);color:#dcc8ff;font-style:normal;font-size:.76rem;font-weight:700}
+.pt-banner-pips{display:flex;gap:3px;margin-top:5px}
+.pt-banner-pips b{width:14px;height:4px;border-radius:2px;background:rgba(233,238,234,.18)}
+.pt-banner-pips b.is-gap{margin-left:6px}
+.pt-banner-pips b.is-done{background:rgba(233,238,234,.5)}
+.pt-banner-pips b.is-now{width:22px;background:var(--seat,#e3c06a)}
+.pt-banner.is-other{padding:8px 16px 7px;min-width:0}
+.pt-banner.is-other strong{font-size:1.15rem}
+.pt-toast.is-trigger{border-left-color:#b78cff;background:rgba(26,18,40,.92)}
+.pt-toast.is-trigger .pt-rule{color:#d4bcff}
+
+/* Força/resistência, habilidades e dano marcado */
+.pt-until{margin:4px 0 10px}
+.pt-until>span{font-size:.78rem;font-weight:700;color:var(--muted)}
+.pt-modal-card h3{margin:14px 0 6px;font-size:.92rem}
+.pt-modal-card h3 .pt-rule{font-size:.6rem}
+.pt-pt-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;margin-top:8px}
+.pt-chip.is-had{border-color:#5fd896;background:#eaf8ef;color:#1d5a3a}
+.pt-damage-mark{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.pt-damage-mark output{min-width:2ch;font:700 1.4rem Spectral,Georgia,serif;text-align:center;color:#a0281c}
+.pt-damage-mark small{flex:1 1 220px;font-size:.76rem;color:var(--muted)}
+.pt-mods{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.pt-mods li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;font-size:.84rem}
+.pt-mods li.pt-empty{justify-content:center;color:var(--muted)}
+.pt-damage-blockers{margin:0 0 6px;font-size:.8rem;color:#1d4f86;font-weight:700}
+
+/* Personalizar: paisagem, madeira, shield, verso e sons */
+.pt-pick-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+.pt-pick-grid.is-env{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
+.pt-pick-grid.is-backs{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}
+.pt-pick{display:grid;justify-items:start;gap:4px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#fff;font:inherit;font-size:.8rem;font-weight:700;color:var(--ink);text-align:left;cursor:pointer}
+.pt-pick small{font-size:.7rem;font-weight:500;color:var(--muted)}
+.pt-pick:hover{border-color:var(--accent)}
+.pt-pick.is-on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent);background:var(--soft)}
+.pt-pick.is-back{justify-items:center;text-align:center}
+.pt-pick.is-back img{width:100%;max-width:110px;height:auto;aspect-ratio:488/680;border-radius:6px;box-shadow:0 6px 14px #0003}
+.pt-back-art{display:block;width:100%;max-width:110px;aspect-ratio:488/680;border:7px solid;border-radius:8px;overflow:hidden;box-shadow:0 6px 14px #0003}
+.pt-back-art img{width:100%!important;height:100%!important;object-fit:cover;border-radius:0!important;box-shadow:none!important}
+.pt-swatch{display:block;width:100%;height:26px;border-radius:7px;border:1px solid #0002}
+.pt-env-swatch{display:block;width:100%;height:42px;border-radius:7px}
+.pt-env-swatch.is-plains{background:linear-gradient(180deg,#7fb2e6 0,#d6e7ef 45%,#c9b866 46%,#8c9b3e 100%)}
+.pt-env-swatch.is-island{background:linear-gradient(180deg,#3f8ee0 0,#bfe6f6 45%,#1f7fa6 46%,#e6d3a1 100%)}
+.pt-env-swatch.is-swamp{background:linear-gradient(180deg,#2f3a36 0,#5f6e5c 45%,#273a2c 46%,#3b3a28 100%)}
+.pt-env-swatch.is-mountain{background:linear-gradient(180deg,#3a2a4a 0,#e0946a 45%,#6b4a3a 46%,#3a2418 100%)}
+.pt-env-swatch.is-forest{background:linear-gradient(180deg,#5b8fbf 0,#aac3a2 40%,#2d4520 41%,#1d2c14 100%)}
+.pt-sound-grid{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 16px;align-items:center}
+.pt-sound-grid .pt-field.is-inline{margin:0}
+.pt-sound-grid input[type=range]{width:140px}
+@media (max-width:850px){.pt-banner{top:auto;bottom:calc(var(--hand-h) + 96px)}.pt-sound-grid{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.pt-banner{transition:none}}
+/* A faixa de combate fica acima da mão (as criaturas, no alto do tapete, continuam clicáveis) e o aviso de etapa no meio. */
+.pt-combat{top:auto;bottom:calc(var(--hand-h) + 16px)}
+.pt-banner{top:36%}

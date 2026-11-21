@@ -1,0 +1,103 @@
+/* Página inicial do jogo (play_home.php): vitrine 3D, traga seu deck, mesas, decks, sua mesa e o resto do site. */
+main.wrap:has(> .ph-hero){max-width:1500px}
+
+/* Vitrine: a mesa 3D ao fundo, o texto por cima */
+.ph-hero{--gold:#e3c06a;position:relative;display:grid;align-items:end;min-height:clamp(520px,74vh,760px);margin:-6px 0 48px;border-radius:24px;overflow:hidden;color:#f4f1e8;background:radial-gradient(120% 90% at 70% 30%,#35503f 0%,#16241c 55%,#0b120e 100%);box-shadow:0 34px 70px -40px #0c1411cc;isolation:isolate}
+.ph-hero[data-env=island]{background:radial-gradient(120% 90% at 70% 20%,#7fc1e6 0%,#1f6a8a 55%,#0d2f42 100%)}
+.ph-hero[data-env=swamp]{background:radial-gradient(120% 90% at 70% 30%,#4b5a4a 0%,#202a20 60%,#0d120d 100%)}
+.ph-hero[data-env=mountain]{background:radial-gradient(120% 90% at 70% 30%,#c98a68 0%,#5a3226 55%,#1e100b 100%)}
+.ph-hero[data-env=forest]{background:radial-gradient(120% 90% at 70% 30%,#7f9a74 0%,#2d4520 55%,#0f180c 100%)}
+.ph-stage{position:absolute;inset:0;z-index:-1;pointer-events:none}
+.ph-stage .pt-webgl{display:block;width:100%;height:100%}
+.ph-stage.is-static{background:radial-gradient(60% 50% at 65% 55%,#6b4423 0 38%,transparent 39%)}
+.ph-hero::after{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,rgba(6,10,8,.86) 0%,rgba(6,10,8,.55) 38%,rgba(6,10,8,0) 66%),linear-gradient(0deg,rgba(6,10,8,.6) 0%,rgba(6,10,8,0) 40%);pointer-events:none}
+.ph-hero-copy{max-width:600px;padding:clamp(28px,4vw,56px)}
+.ph-kicker{margin:0 0 10px;font-size:.74rem;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--gold)}
+.ph-hero h1{margin:0 0 16px;font-size:clamp(2.5rem,4.6vw,4.4rem);line-height:1.02;letter-spacing:-.035em;color:#fff;text-shadow:0 4px 30px #0009}
+.ph-hero h1 em{font-style:normal;color:var(--gold)}
+.ph-lede{margin:0 0 24px;max-width:54ch;font-size:1.02rem;line-height:1.6;color:#dfe6e1}
+.ph-actions{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:22px}
+.ph-btn{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:0 22px;border:1px solid rgba(255,255,255,.28);border-radius:10px;background:rgba(10,16,12,.45);backdrop-filter:blur(8px);color:#fff;font:inherit;font-weight:700;text-decoration:none;cursor:pointer;transition:background .16s,border-color .16s,transform .16s}
+.ph-btn:hover{background:rgba(255,255,255,.14);color:#fff;border-color:rgba(255,255,255,.5)}
+.ph-btn.is-gold{background:var(--gold);border-color:var(--gold);color:#1d1407}
+.ph-btn.is-gold:hover{background:#efcf83;color:#1d1407}
+.ph-btn.is-small{min-height:40px;padding:0 16px}
+.ph-join{max-width:470px}
+.ph-join label{display:block;margin-bottom:6px;font-size:.8rem;font-weight:700;color:#cbd5cf}
+.ph-join>div{display:flex;gap:6px}
+.ph-join input{flex:1;min-width:0;height:40px;padding:0 12px;border:1px solid rgba(255,255,255,.22);border-radius:10px;background:rgba(0,0,0,.35);color:#fff;font:inherit;font-size:.88rem}
+.ph-join input::placeholder{color:#9fb0a7}
+.ph-join-error{margin:6px 0 0;font-size:.8rem;color:#ffb8a8}
+.ph-envs{position:absolute;right:18px;bottom:18px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;max-width:calc(100% - 36px)}
+.ph-env{display:inline-flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;border:1px solid rgba(255,255,255,.2);border-radius:999px;background:rgba(8,12,10,.55);backdrop-filter:blur(8px);color:#e9efe9;font:inherit;font-size:.8rem;font-weight:700;cursor:pointer}
+.ph-env:hover{border-color:rgba(255,255,255,.5)}
+.ph-env.is-on{border-color:var(--gold);background:rgba(227,192,106,.2);color:#fff}
+.ph-env i,.ph-env-swatch{display:block;width:24px;height:24px;border-radius:50%}
+.ph-env.is-plains i,.ph-env-swatch.is-plains{background:linear-gradient(180deg,#7fb2e6 0,#d6e7ef 45%,#c9b866 46%,#8c9b3e 100%)}
+.ph-env.is-island i,.ph-env-swatch.is-island{background:linear-gradient(180deg,#3f8ee0 0,#bfe6f6 45%,#1f7fa6 46%,#e6d3a1 100%)}
+.ph-env.is-swamp i,.ph-env-swatch.is-swamp{background:linear-gradient(180deg,#2f3a36 0,#5f6e5c 45%,#273a2c 46%,#3b3a28 100%)}
+.ph-env.is-mountain i,.ph-env-swatch.is-mountain{background:linear-gradient(180deg,#3a2a4a 0,#e0946a 45%,#6b4a3a 46%,#3a2418 100%)}
+.ph-env.is-forest i,.ph-env-swatch.is-forest{background:linear-gradient(180deg,#5b8fbf 0,#aac3a2 40%,#2d4520 41%,#1d2c14 100%)}
+.ph-env-swatch.is-auto{background:conic-gradient(#f3e5a6 0 20%,#6fb5e8 0 40%,#4a3d5a 0 60%,#d86b42 0 80%,#4f8a3c 0)}
+
+/* Seções */
+.ph-section{margin:0 0 52px}
+.ph-section-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 18px;margin-bottom:16px}
+.ph-section-head h2{margin:0;font-size:clamp(1.5rem,2.2vw,2rem)}
+.ph-section-head p{margin:0;color:var(--muted);font-size:.92rem;max-width:80ch}
+.ph-empty{color:var(--muted)}
+
+/* Traga seu deck */
+.ph-bring-form{display:grid;gap:14px;padding:20px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+.ph-bring-fields{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr) minmax(0,1.2fr);gap:12px}
+.ph-bring-form label{display:grid;gap:6px;font-size:.84rem;font-weight:700}
+.ph-bring-form input,.ph-bring-form select,.ph-bring-form textarea{width:100%;min-width:0;padding:10px 12px;border:1px solid #bfc6bf;border-radius:8px;background:#fff;color:var(--ink);font:inherit;font-size:.92rem;font-weight:400}
+.ph-bring-form textarea{font-family:ui-monospace,Consolas,monospace;font-size:.84rem;resize:vertical}
+.ph-bring-actions{display:flex;flex-wrap:wrap;gap:10px}
+.ph-bring-actions .secondary-link{min-height:46px}
+
+/* Passos para quem ainda não tem conta */
+.ph-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.ph-steps li{display:grid;gap:6px;padding:18px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.ph-steps b{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--accent);color:#fffefa;font:700 1rem Spectral,Georgia,serif}
+.ph-steps strong{font:700 1.15rem Spectral,Georgia,serif}
+.ph-steps span{color:var(--muted);font-size:.9rem}
+
+/* O que a mesa faz */
+.ph-features{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.ph-features li{display:grid;gap:6px;padding:16px 18px;border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;background:var(--surface)}
+.ph-features strong{font:700 1.05rem Spectral,Georgia,serif}
+.ph-features span{color:var(--muted);font-size:.88rem;line-height:1.5}
+
+/* Sua mesa */
+.ph-prefs{display:grid;gap:18px;padding:20px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+.ph-pref h3{margin:0 0 8px;font-size:1rem}
+.ph-pref-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.ph-pref:first-child .ph-pref-grid{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}
+.ph-pick{display:grid;justify-items:start;gap:4px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:#fff;font:inherit;font-size:.82rem;color:var(--ink);text-align:left;cursor:pointer}
+.ph-pick small{font-size:.72rem;color:var(--muted)}
+.ph-pick:hover{border-color:var(--accent)}
+.ph-pick.is-on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent);background:var(--soft)}
+.ph-pick .ph-env-swatch{width:100%;height:36px;border-radius:7px}
+.ph-swatch{display:block;width:100%;height:26px;border-radius:7px}
+.ph-pick.is-back{justify-items:center;text-align:center}
+.ph-pick.is-back img{width:100%;max-width:100px;height:auto;aspect-ratio:488/680;border-radius:6px;box-shadow:0 6px 14px #0003}
+.ph-saved{margin:0;min-height:1.2em;font-size:.82rem;color:var(--accent);opacity:0;transition:opacity .3s}
+.ph-saved.is-on{opacity:1}
+
+/* Também no Deckarium */
+.ph-modules{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.ph-modules a{display:grid;grid-template-columns:28px minmax(0,1fr);grid-template-rows:auto auto;column-gap:12px;row-gap:2px;align-items:center;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);text-decoration:none}
+.ph-modules a:hover{border-color:var(--accent)}
+.ph-modules svg{grid-row:1/3;width:26px;height:26px;color:var(--accent)}
+.ph-modules strong{font-size:.95rem}
+.ph-modules span{font-size:.8rem;color:var(--muted)}
+
+@media (max-width:900px){
+  .ph-hero{min-height:560px}
+  .ph-hero::after{background:linear-gradient(0deg,rgba(6,10,8,.9) 0%,rgba(6,10,8,.55) 55%,rgba(6,10,8,.1) 100%)}
+  .ph-envs{position:static;justify-content:flex-start;padding:0 clamp(28px,4vw,56px) 22px}
+  .ph-bring-fields{grid-template-columns:1fr}
+  .ph-steps{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){.ph-btn{transition:none}}

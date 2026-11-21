@@ -133,6 +133,8 @@ export function createTableClient({ socket, api, token, ticket }, handlers) {
         break;
       }
       case 'error': handlers.onError?.(message.message); break;
+      // Mensagem só para você (as cartas do grimório de outro jogador que você está olhando).
+      case 'whisper': handlers.onWhisper?.(message.from, message.payload); break;
       case 'gone': running = false; clearTimeout(reconnectTimer); handlers.onGone?.(message.message); break;
       default: break;
     }
@@ -210,6 +212,8 @@ export function createTableClient({ socket, api, token, ticket }, handlers) {
   return {
     post: (action, fields = {}) => request(action, fields),
     event: (kind, payload = {}) => request('event', { kind, payload }),
+    /** Manda algo só para um assento (não fica no registro da mesa). */
+    whisper: (to, payload = {}) => request('whisper', { to, payload }),
     pushState,
     stop() { running = false; clearInterval(pinger); clearTimeout(reconnectTimer); ws?.close(1000); },
   };

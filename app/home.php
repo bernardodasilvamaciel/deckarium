@@ -101,7 +101,7 @@ $homeSources = [
     ['Commander Spellbook', t('combos completos e os que falta uma carta')],
     ['Scryfall Tagger', t('funções das cartas, que completam a leitura do texto')],
 ];
-pageHeader('Início');
+pageHeader(t('Sobre o site'));
 echo cardActionNotice();
 ?>
 <section class="home-hero" aria-labelledby="home-title">

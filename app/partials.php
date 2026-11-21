@@ -36,7 +36,8 @@ function uiIcon(string $name): string
 function pageHeader(string $title, string $description = '', array $meta = []): void
 {
     $route = basename($_SERVER['SCRIPT_NAME'] ?? 'index.php');
-    $section = !empty($GLOBALS['isHome']) ? 'home' : match ($route) { 'editions.php','edition.php'=>'sets', 'commanders.php'=>'commanders', 'collection.php'=>'collection','wishlist.php'=>'wishlist','trade.php'=>'trade', 'mesas.php'=>'play', 'deck_playtest.php'=>isset($_GET['mesa']) ? 'play' : 'decks', 'decks.php','upgrades.php','deck_board.php'=>'decks','status.php','sync_history.php'=>'status','public.php','public_deck.php','public_collection.php','public_trade.php','profile.php'=>'community','users.php'=>'users','account.php'=>'account','login.php','register.php'=>'auth',default=>'cards' };
+    // "/" é a página do jogo (Jogar); o guia de módulos ficou em /sobre.php.
+    $section = !empty($GLOBALS['isAbout']) ? 'home' : (!empty($GLOBALS['isHome']) ? 'play' : match ($route) { 'editions.php','edition.php'=>'sets', 'commanders.php'=>'commanders', 'collection.php'=>'collection','wishlist.php'=>'wishlist','trade.php'=>'trade', 'mesas.php'=>'play', 'deck_playtest.php'=>isset($_GET['mesa']) ? 'play' : 'decks', 'decks.php','upgrades.php','deck_board.php'=>'decks','status.php','sync_history.php'=>'status','public.php','public_deck.php','public_collection.php','public_trade.php','profile.php'=>'community','users.php'=>'users','account.php'=>'account','login.php','register.php'=>'auth','sobre.php'=>'home',default=>'cards' });
     $user = authUser();
     $version = (string)filemtime(__DIR__ . '/assets/style.css');
     echo '<!doctype html><html lang="' . h(appLocale()) . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
@@ -45,6 +46,7 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
     // Resumo, endereço canônico e cartão de compartilhamento.
     $descriptions = [
         'home' => 'Catálogo completo de Magic, sua coleção e uma oficina de decks de Commander, Modern, Pauper e outros formatos: veja o que cada parte do Deckarium faz e por onde começar.',
+        'play' => 'Traga o seu deck de Magic e jogue numa mesa 3D de madeira, no meio das planícies, ilhas, pântanos, montanhas ou florestas — sozinho ou com até 3 amigos.',
         'cards' => 'Pesquise qualquer carta de Magic pelo nome, texto Oracle, tipo, cores, raridade e edição.',
         'sets' => 'Todas as edições de Magic em linha do tempo, com cartas novas, reimpressões e proporção de cores.',
         'commanders' => 'Todos os comandantes do catálogo, com as cartas mais jogadas e as sinergias de cada um.',
@@ -86,18 +88,22 @@ function pageHeader(string $title, string $description = '', array $meta = []): 
     if ($section === 'commanders') echo '<link rel="stylesheet" href="/assets/commanders.css?v=' . filemtime(__DIR__ . '/assets/commanders.css') . '">';
     if ($route === 'editions.php') echo '<link rel="stylesheet" href="/assets/editions.css?v=' . filemtime(__DIR__ . '/assets/editions.css') . '">';
     if ($section==='decks' || $section==='play') echo '<link rel="stylesheet" href="/assets/decks.css?v=' . filemtime(__DIR__ . '/assets/decks.css') . '">';
+    if ($section==='play') echo '<link rel="stylesheet" href="/assets/play.css?v=' . filemtime(__DIR__ . '/assets/play.css') . '">';
     echo '<script src="/assets/app.js?v=' . h((string)filemtime(__DIR__ . '/assets/app.js')) . '" defer></script></head><body>';
     echo '<a class="skip-link" href="#main">' . te('Pular para o conteúdo') . '</a>';
     echo '<header class="sidebar" data-sidebar><div class="sidebar-header"><a class="brand" href="/" aria-label="Deckarium — início"><img class="brand-mark" src="/assets/deckarium-logo.png" alt="Deckarium" width="512" height="512"></a><button type="button" class="sidebar-toggle" data-sidebar-toggle aria-expanded="true"><span class="sr-only" data-sidebar-toggle-label>' . te('Recolher navegação') . '</span><span class="sidebar-toggle-open">' . uiIcon('menu') . '</span><span class="sidebar-toggle-close">' . uiIcon('close') . '</span><span class="sidebar-toggle-collapse">' . uiIcon('collapse') . '</span><span class="sidebar-toggle-expand">' . uiIcon('expand') . '</span></button></div>';
     echo '<nav aria-label="Navegação principal">';
-    $links = [['home','/',t('Início')],['commanders','/commanders.php',t('Comandantes')],['cards','/?catalog=1#catalogo',t('Catálogo')],['sets','/editions.php',t('Edições')],['collection','/collection.php',t('Minha coleção')],['wishlist','/wishlist.php',t('Lista de desejos')],['trade','/trade.php',t('À venda')],['decks','/decks.php',t('Meus decks')],['play','/mesas.php',t('Jogar')],['community','/public.php',t('Comunidade')]];
+    // O jogo primeiro: Jogar e os decks; depois, num grupo à parte, a oficina e o acervo.
+    $links = [['play','/',t('Jogar')],['decks','/decks.php',t('Meus decks')],['—',t('Oficina e acervo')],['commanders','/commanders.php',t('Comandantes')],['cards','/?catalog=1#catalogo',t('Catálogo')],['sets','/editions.php',t('Edições')],['collection','/collection.php',t('Minha coleção')],['wishlist','/wishlist.php',t('Lista de desejos')],['trade','/trade.php',t('À venda')],['community','/public.php',t('Comunidade')],['home','/sobre.php',t('Sobre o site')]];
     if (($user['role'] ?? '') === 'admin') {
         $links[] = ['status','/status.php',t('Status')];
         $links[] = ['users','/users.php',t('Usuários')];
     }
     // Jogar: quantas mesas compartilhadas em aberto a pessoa tem (para voltar à partida de qualquer página).
     $openTables = $user ? navOpenTables((int)$user['id']) : 0;
-    foreach ($links as [$key,$url,$label]) {
+    foreach ($links as $link) {
+        if ($link[0] === '—') { echo '<span class="nav-group" aria-hidden="true">' . h($link[1]) . '</span>'; continue; }
+        [$key, $url, $label] = $link;
         $count = $key === 'play' && $openTables ? '<b class="nav-count" title="' . h($openTables . ' ' . ($openTables === 1 ? t('mesa em aberto') : t('mesas em aberto'))) . '">' . $openTables . '</b>' : '';
         echo '<a href="' . $url . '"' . ($section === $key ? ' aria-current="page"' : '') . '>' . uiIcon($key === 'play' ? 'playtest' : $key) . '<span>' . $label . '</span>' . $count . '</a>';
     }

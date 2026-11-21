@@ -17,6 +17,9 @@ $_SESSION['builder_csrf'] ??= bin2hex(random_bytes(24));
 $csrf = (string)$_SESSION['builder_csrf'];
 deckSchema();
 playtestSchema();
+// Aviso de quem acabou de trazer o deck pela página inicial (cartas não reconhecidas, cópias reduzidas).
+$playNotice = (string)($_SESSION['play_notice'] ?? '');
+unset($_SESSION['play_notice']);
 session_write_close();
 $assetVersion = static fn(string $file): string => (string)@filemtime(__DIR__ . '/assets/' . $file);
 
@@ -127,7 +130,8 @@ function playtestCard(array $card): array
         'image' => '/image.php?id=' . rawurlencode($cardId) . '&size=normal',
         'thumb' => '/image.php?id=' . rawurlencode($cardId) . '&size=small',
         'back' => $hasBack ? $face($faces[1], $raw, '', '') + ['image' => '/image.php?id=' . rawurlencode($cardId) . '&face=back&size=normal'] : null,
-        'haste' => (bool)preg_match('/\bhaste\b/i', (string)($front['oracle_text'] ?? $card['oracle_text'] ?? '')),
+        // Habilidades da carta (do Scryfall): ímpeto, vigilância, vínculo com a vida… A mesa usa para o enjoo de invocação e o combate.
+        'keywords' => array_values(array_map(fn($word) => mb_strtolower((string)$word), (array)($raw['keywords'] ?? []))),
         'url' => '/card.php?id=' . rawurlencode($cardId),
     ];
 }
@@ -149,6 +153,17 @@ if (!$matArt && $items) {
     foreach ($items as $item) if (!str_contains(explode(' // ', (string)$item['type_line'])[0], 'Land') && (float)$item['cmc'] >= (float)($key['cmc'] ?? 0)) $key = $item;
     $matArt = '/image.php?id=' . rawurlencode((string)$key['id']) . '&size=normal';
 }
+// Cor que mais aparece no deck (a comandante pesa mais): escolhe a paisagem quando a pessoa deixa no automático.
+$colorCounts = ['W' => 0, 'U' => 0, 'B' => 0, 'R' => 0, 'G' => 0];
+foreach ($items as $item) {
+    if (str_contains(explode(' // ', (string)$item['type_line'])[0], 'Land')) continue;
+    $raw = is_string($item['raw'] ?? null) ? (json_decode($item['raw'], true) ?: []) : [];
+    foreach ((array)($raw['colors'] ?? $raw['card_faces'][0]['colors'] ?? []) as $color) if (isset($colorCounts[$color])) $colorCounts[$color] += max(1, (int)$item['quantity']);
+}
+if ($commander) {
+    $raw = json_decode((string)($commander['raw'] ?? '{}'), true) ?: [];
+    foreach ((array)($raw['color_identity'] ?? []) as $color) if (isset($colorCounts[$color])) $colorCounts[$color] += 6;
+}
 $playData = [
     'deck' => ['id' => (int)$deck['id'], 'name' => (string)$deck['name']],
     'format' => ['key' => $fmt['key'], 'name' => $fmt['name'], 'life' => (int)$fmt['life'], 'life_multiplayer' => (int)($fmt['life_multiplayer'] ?? $fmt['life']),
@@ -160,6 +175,12 @@ $playData = [
     'library' => $library,
     'tokens' => $tokens,
     'scene' => '/assets/playtest-scene.js?v=' . $assetVersion('playtest-scene.js'),
+    'world' => '/assets/playtest-world.js?v=' . $assetVersion('playtest-world.js'),
+    'audio' => '/assets/playtest-audio.js?v=' . $assetVersion('playtest-audio.js'),
+    'prefs' => playtestPrefs($userId),
+    'colorCounts' => $colorCounts,
+    // Verso "Arte do deck": a ilustração da comandante (ou da carta-chave), recortada.
+    'backArt' => $matArt ? str_replace('size=normal', 'size=art_crop', $matArt) : null,
     'net' => '/assets/playtest-net.js?v=' . $assetVersion('playtest-net.js'),
     'csrf' => $csrf,
     'table' => $table ? ['token' => $tableToken, 'api' => '/playtest_table.php', 'socket' => '/realtime/mesa', 'ticket' => playtestTicket($userId, $tableToken),
@@ -172,11 +193,12 @@ pageHeader(($table ? 'Mesa compartilhada' : 'Mesa de teste') . ' · ' . $deck['n
 <section class="pt-hero">
     <h1><?= $table ? 'Mesa compartilhada' : 'Mesa de teste' ?> <span><?= h($deck['name']) ?> · <?= h($fmt['name']) ?></span></h1>
     <?php if ($table): ?>
-    <p>Cada jogador controla o próprio deck; a mesa mostra o campo, os cemitérios, a vida e o dano de comandante de todos em tempo real. Dano entre jogadores, revelações, dados e mensagens chegam para todos.</p>
+    <p>Cada jogador controla o próprio deck; a mesa mostra o campo, os cemitérios, a vida e o dano de comandante de todos em tempo real. Clique com o botão direito no grimório ou nas cartas de um oponente para moer, olhar, buscar, destruir ou ganhar o controle.</p>
     <?php else: ?>
-    <p>Uma partida para sentir o deck: compre, jogue terrenos, lance mágicas, crie fichas e marque contadores. As regras que dá para conferir sozinho — mulligan, <?= $hasLeader ? 'imposto do comandante, ' : '' ?>um terreno por turno, fichas que somem, marcadores que se anulam — a mesa aplica ou avisa. Para jogar com amigos, abra uma mesa compartilhada e mande o link.</p>
+    <p>O turno corre em fases e etapas (desvirar, manutenção, compra, combate, limpeza), com aviso e som em cada uma. A mesa aplica ou avisa o que dá para conferir — mulligan, <?= $hasLeader ? 'imposto do comandante, ' : '' ?>um terreno por turno, enjoo de invocação e ímpeto, dano letal, efeitos até o fim do turno. Para jogar com amigos, abra uma mesa compartilhada e mande o link.</p>
     <?php endif; ?>
 </section>
+<?php if ($playNotice !== ''): ?><p class="notice"><?= h($playNotice) ?></p><?php endif; ?>
 <?php if ($hasLeader && !$commander): ?>
 <p class="notice warning">Escolha <?= $fmt['leader'] === 'oathbreaker' ? 'o oathbreaker' : 'a comandante' ?> do deck antes de testar. <a href="/decks.php?deck=<?= $id ?>&amp;choose=1">Escolher</a></p>
 <?php elseif ($deckCount < 1): ?>
@@ -184,7 +206,7 @@ pageHeader(($table ? 'Mesa compartilhada' : 'Mesa de teste') . ' · ' . $deck['n
 <?php else: ?>
 <?php if (!$table && ($fmt['exact'] ? $zoneCount + $deckCount !== (int)$fmt['size'] : $deckCount < (int)$fmt['size'])): ?><p class="notice pt-count-note">O deck tem <?= $zoneCount + $deckCount ?> cartas<?= $zoneCount ? ' com a zona de comando' : '' ?>; a mesa usa as que estão aprovadas, mesmo fora das <?= deckFormatSizeLabel($fmt) ?> do <?= h($fmt['name']) ?>.</p><?php endif; ?>
 <div class="pt-app<?= $table ? ' is-shared' : '' ?>" data-playtest>
-    <div class="pt-stage" data-pt-stage aria-label="Mesa 3D. Pelo teclado: D compra, U desvira tudo, N passa o turno, Ctrl+Z desfaz, Z aproxima a carta sob o mouse, C liga a vista de cima; as cartas da mão são botões.">
+    <div class="pt-stage" data-pt-stage aria-label="Mesa 3D. Pelo teclado: Espaço vai para a próxima etapa, N passa o turno, D compra, U desvira tudo, Ctrl+Z desfaz; com o mouse sobre uma carta, P abre os efeitos, I dá ímpeto e Z aproxima; C liga a vista de cima; as cartas da mão são botões.">
         <p class="pt-stage-status" data-pt-status>Arrumando a mesa…</p>
     </div>
 
@@ -192,9 +214,9 @@ pageHeader(($table ? 'Mesa compartilhada' : 'Mesa de teste') . ' · ' . $deck['n
         <div class="pt-turn">
             <span class="pt-turn-number" data-pt-turn>Turno 1</span>
             <span class="pt-land-badge" data-pt-lands title="Terrenos jogados neste turno: um por turno, sem efeitos que permitam mais (305.2)">Terreno 0/1</span>
-            <ol class="pt-phases" data-pt-phases aria-label="Fases do turno"></ol>
-            <button type="button" class="pt-btn is-quiet" data-pt-action="phase" title="Próxima fase (Espaço)">Próxima fase</button>
-            <button type="button" class="pt-btn is-strong" data-pt-action="turn" title="Próximo turno: desvira, manutenção e compra (N)">Próximo turno</button>
+            <ol class="pt-phases" data-pt-phases aria-label="Fases e etapas do turno (500.1): clique numa etapa para ir até ela"></ol>
+            <button type="button" class="pt-btn is-quiet" data-pt-action="phase" title="Próxima etapa (Espaço)">Próxima etapa</button>
+            <button type="button" class="pt-btn is-strong" data-pt-action="turn" title="Passar o turno: etapa final e limpeza, e o próximo turno começa (N)">Passar o turno</button>
         </div>
         <div class="pt-meters">
             <div class="pt-meter is-life" data-pt-meter="life"><span>Vida</span><button type="button" data-pt-adjust="life:-1" aria-label="Perder 1 de vida">−</button><output data-pt-value="life"><?= (int)$fmt['life'] ?></output><button type="button" data-pt-adjust="life:1" aria-label="Ganhar 1 de vida">+</button></div>
@@ -220,6 +242,7 @@ pageHeader(($table ? 'Mesa compartilhada' : 'Mesa de teste') . ' · ' . $deck['n
         <button type="button" class="pt-tool is-danger" data-pt-action="restart" title="Embaralhar tudo e começar de novo">Nova partida</button>
         <button type="button" class="pt-tool is-share" data-pt-action="share" title="Abrir uma mesa para jogar com até 3 amigos">Jogar com amigos</button>
         <?php endif; ?>
+        <button type="button" class="pt-tool" data-pt-action="settings" title="Paisagem, madeira da mesa, shield, verso e sons">Personalizar</button>
         <button type="button" class="pt-tool" data-pt-action="fullscreen" aria-pressed="false">Tela cheia</button>
     </nav>
 
@@ -227,6 +250,7 @@ pageHeader(($table ? 'Mesa compartilhada' : 'Mesa de teste') . ' · ' . $deck['n
         <button type="button" data-pt-cam="in" title="Aproximar (roda do mouse: aproxima onde o ponteiro está)" aria-label="Aproximar">+</button>
         <button type="button" data-pt-cam="out" title="Afastar" aria-label="Afastar">−</button>
         <button type="button" data-pt-cam="top" aria-pressed="false" title="Vista de cima: a câmera trava olhando a mesa de cima; arrastar move a mesa (C)">De cima</button>
+        <button type="button" data-pt-cam="scenic" aria-pressed="false" title="A câmera desce e gira devagar, mostrando a paisagem em volta da mesa">Paisagem</button>
         <button type="button" data-pt-cam="reset" title="Voltar ao enquadramento (Esc ou duplo clique na mesa)">Centralizar</button>
     </div>
     <aside class="pt-preview" data-pt-preview hidden></aside>
@@ -242,6 +266,12 @@ pageHeader(($table ? 'Mesa compartilhada' : 'Mesa de teste') . ' · ' . $deck['n
     <?php if ($table): ?><div class="pt-lobby" data-pt-lobby hidden></div><?php endif; ?>
 </div>
 <script type="application/json" id="playtest-data"><?= json_encode($playData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_INVALID_UTF8_SUBSTITUTE) ?></script>
+<?php // Os módulos da mesa importam uns aos outros pelo caminho simples; o mapa faz esses imports pegarem a versão atual. ?>
+<script type="importmap"><?= json_encode(['imports' => [
+    '/assets/playtest-world.js' => '/assets/playtest-world.js?v=' . $assetVersion('playtest-world.js'),
+    '/assets/playtest-audio.js' => '/assets/playtest-audio.js?v=' . $assetVersion('playtest-audio.js'),
+    '/assets/vendor/three.module.min.js' => '/assets/vendor/three.module.min.js?v=' . $assetVersion('vendor/three.module.min.js'),
+]], JSON_UNESCAPED_SLASHES) ?></script>
 <script type="module" src="/assets/playtest.js?v=<?= h($assetVersion('playtest.js')) ?>"></script>
 <?php endif; ?>
 <?php pageFooter(); ?>

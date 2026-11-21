@@ -23,7 +23,7 @@ function playtestSchema(): void
     if ($done) return;
     $done = true;
     // Só cria quando falta (DDL trava as tabelas e a mesa é usada o tempo todo).
-    if (db()->query("SELECT to_regclass('public.playtest_events') IS NOT NULL AND to_regclass('public.app_secrets') IS NOT NULL")->fetchColumn()) return;
+    if (db()->query("SELECT to_regclass('public.playtest_events') IS NOT NULL AND to_regclass('public.app_secrets') IS NOT NULL AND to_regclass('public.player_prefs') IS NOT NULL")->fetchColumn()) return;
     db()->exec("CREATE TABLE IF NOT EXISTS playtest_tables (
             id text PRIMARY KEY, host_user_id bigint NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             format text NOT NULL DEFAULT 'commander', status text NOT NULL DEFAULT 'lobby' CHECK (status IN ('lobby','playing')),
@@ -42,7 +42,34 @@ function playtestSchema(): void
             id bigserial PRIMARY KEY, table_id text NOT NULL REFERENCES playtest_tables(id) ON DELETE CASCADE,
             seat smallint NULL, kind text NOT NULL, payload jsonb NOT NULL DEFAULT '{}', created_at timestamptz NOT NULL DEFAULT now());
         CREATE INDEX IF NOT EXISTS playtest_events_table_idx ON playtest_events(table_id, id);
-        CREATE TABLE IF NOT EXISTS app_secrets (name text PRIMARY KEY, value text NOT NULL, created_at timestamptz NOT NULL DEFAULT now());");
+        CREATE TABLE IF NOT EXISTS app_secrets (name text PRIMARY KEY, value text NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+        CREATE TABLE IF NOT EXISTS player_prefs (user_id bigint PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, prefs jsonb NOT NULL DEFAULT '{}', updated_at timestamptz NOT NULL DEFAULT now());");
+}
+
+/** Opções da mesa de cada jogador: paisagem, madeira, shield e verso (as mesmas de assets/playtest-world.js). */
+const PLAYTEST_PREF_OPTIONS = [
+    'environment' => ['auto', 'plains', 'island', 'swamp', 'mountain', 'forest'],
+    'wood' => ['carvalho', 'nogueira', 'mogno'],
+    'sleeve' => ['esmeralda', 'obsidiana', 'rubi', 'safira', 'ametista', 'ambar', 'perola', 'gelo'],
+    'back' => ['deckarium', 'constelacao', 'runas', 'escamas', 'lisa', 'arte'],
+];
+
+function playtestPrefs(int $userId): array
+{
+    playtestSchema();
+    $saved = json_decode((string)(deckQuery('SELECT prefs FROM player_prefs WHERE user_id=?', [$userId])->fetchColumn() ?: '{}'), true) ?: [];
+    $prefs = [];
+    foreach (PLAYTEST_PREF_OPTIONS as $key => $options) $prefs[$key] = in_array($saved[$key] ?? null, $options, true) ? $saved[$key] : $options[0];
+    return $prefs;
+}
+
+function playtestSavePrefs(int $userId, array $input): array
+{
+    $prefs = playtestPrefs($userId);
+    foreach (PLAYTEST_PREF_OPTIONS as $key => $options) if (isset($input[$key]) && in_array($input[$key], $options, true)) $prefs[$key] = $input[$key];
+    deckQuery("INSERT INTO player_prefs(user_id, prefs, updated_at) VALUES (?, ?::jsonb, now()) ON CONFLICT (user_id) DO UPDATE SET prefs=EXCLUDED.prefs, updated_at=now()",
+        [$userId, json_encode($prefs)]);
+    return $prefs;
 }
 
 /** Segredo compartilhado com o serviço de tempo real, criado na primeira vez e guardado no banco. */
@@ -174,6 +201,25 @@ function playtestTableCards(array $tables, int $userId): string
             . '<a class="primary-link" href="/deck_playtest.php?mesa=' . h((string)$table['id']) . '">' . ($table['status'] === 'playing' ? 'Voltar à partida' : 'Voltar ao lobby') . '</a></div></article>';
     }
     return $html;
+}
+
+/** Abre uma mesa compartilhada com um deck da pessoa (que precisa estar pronto para jogar) e devolve o código. */
+function playtestCreateTable(int $userId, int $deckId): string
+{
+    playtestCleanup();
+    $deck = deckQuery('SELECT * FROM builder_decks WHERE id=? AND user_id=?', [$deckId, $userId])->fetch();
+    if (!$deck) throw new RuntimeException('Deck não encontrado na sua conta.');
+    $format = deckFormatOf($deck);
+    if (!in_array((int)$deck['id'], array_map(fn($row) => (int)$row['id'], playtestEligibleDecks($userId, $format)), true)) throw new RuntimeException('O deck precisa de cartas aprovadas' . (deckFormatHasLeader($format) ? ' e de comandante' : '') . ' para abrir uma mesa.');
+    do { $token = playtestToken(); } while (deckQuery('SELECT 1 FROM playtest_tables WHERE id=?', [$token])->fetchColumn());
+    db()->beginTransaction();
+    try {
+        deckQuery('INSERT INTO playtest_tables(id,host_user_id,format) VALUES (?,?,?)', [$token, $userId, $format['key']]);
+        deckQuery('INSERT INTO playtest_seats(table_id,seat,user_id,deck_id) VALUES (?,0,?,?)', [$token, $userId, (int)$deck['id']]);
+        db()->commit();
+    } catch (Throwable $e) { if (db()->inTransaction()) db()->rollBack(); throw $e; }
+    playtestEvent($token, 0, 'join', ['deck' => (string)$deck['name']]);
+    return $token;
 }
 
 /** Mesas paradas há mais de dois dias somem (com assentos e eventos). */

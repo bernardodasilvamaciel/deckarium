@@ -4,11 +4,15 @@
    longe, criaturas perto do centro) e legíveis. Só desenho e ponteiro: o estado da partida e as regras ficam em
    playtest.js, que chama sync() e syncSeats() depois de cada mudança. */
 import * as THREE from './vendor/three.module.min.js';
+import { createWorld, drawCardBack, DEFAULT_STYLE, SLEEVES } from './playtest-world.js';
 
 // Cartas grandes em relação ao tapete (cerca de 1/17 da largura), como num playmat de verdade.
 export const CARD_W = 1.78;
 export const CARD_H = CARD_W * 680 / 488;
 const THICK = 0.028;
+// O shield é um pouco maior que a carta: a borda colorida aparece em volta da face.
+const SLEEVE_RIM = 0.035;
+const MAT_THICK = 0.1;
 const MAT_W = 30;
 const MAT_D = 18;
 export const LAYOUT = {
@@ -47,12 +51,11 @@ function roundRect(ctx, x, y, w, h, r) {
 const hash = (text) => { let h = 2166136261; for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); } return ((h >>> 0) % 10000) / 10000; };
 
 export function createPlaytestScene(host, hooks) {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.setClearColor(0x000000, 0);
   const dom = renderer.domElement;
   dom.className = 'pt-webgl';
   host.prepend(dom);
@@ -62,16 +65,9 @@ export function createPlaytestScene(host, hooks) {
 
   const scene = new THREE.Scene();
   // near = 1: com 0.1, de longe (mesa toda) a face da carta e o corpo dela disputavam o mesmo pixel e piscavam.
-  const camera = new THREE.PerspectiveCamera(36, 1, 1, 400);
-  scene.add(new THREE.HemisphereLight(0xfff4e2, 0x0c140f, 1.15));
-  const key = new THREE.DirectionalLight(0xfff0d4, 1.9);
-  key.position.set(-7, 22, 9);
-  key.castShadow = true;
-  key.shadow.mapSize.set(2048, 2048);
-  Object.assign(key.shadow.camera, { left: -17, right: 17, top: 12, bottom: -12, near: 1, far: 60 });
-  key.shadow.bias = -0.0004;
-  key.shadow.radius = 4;
-  scene.add(key);
+  const camera = new THREE.PerspectiveCamera(36, 1, 1, 2400);
+  // Paisagem, mesa de madeira, luz e névoa (playtest-world.js).
+  const world = createWorld(scene, renderer, { environment: hooks.environment || 'plains', wood: hooks.wood || 'carvalho' });
 
   /* ---------- Texturas ---------- */
   const cardAlpha = canvasTexture(128, 178, (ctx, w, h) => { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = '#fff'; roundRect(ctx, 1, 1, w - 2, h - 2, 6); ctx.fill(); }, false);
@@ -91,23 +87,9 @@ export function createPlaytestScene(host, hooks) {
     ctx.shadowColor = '#fff'; ctx.shadowBlur = 22; ctx.strokeStyle = '#fff'; ctx.lineWidth = 9;
     roundRect(ctx, 20, 20, w - 40, h - 40, 26); ctx.stroke();
   });
-  // Verso próprio do Deckarium (não imita o verso oficial das cartas).
-  const backTex = canvasTexture(488, 680, (ctx, w, h) => {
-    const g = ctx.createLinearGradient(0, 0, w, h);
-    g.addColorStop(0, '#1f3a2e'); g.addColorStop(0.5, '#10231b'); g.addColorStop(1, '#0a1611');
-    ctx.fillStyle = '#0b0f0d'; ctx.fillRect(0, 0, w, h);
-    roundRect(ctx, 18, 18, w - 36, h - 36, 22); ctx.fillStyle = g; ctx.fill();
-    ctx.strokeStyle = '#c9a44f'; ctx.lineWidth = 5; ctx.stroke();
-    ctx.strokeStyle = 'rgba(201,164,79,.45)'; ctx.lineWidth = 2;
-    for (let r = 60; r < 330; r += 34) { ctx.beginPath(); ctx.ellipse(w / 2, h / 2, r * 0.62, r, 0, 0, Math.PI * 2); ctx.stroke(); }
-    ctx.fillStyle = '#e9d9a6'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = '700 64px Spectral, Georgia, serif'; ctx.fillText('Deckarium', w / 2, h / 2);
-    ctx.font = '600 20px "Segoe UI", sans-serif'; ctx.fillStyle = 'rgba(233,217,166,.7)'; ctx.fillText('MESA DE TESTE', w / 2, h / 2 + 52);
-  });
-  backTex.anisotropy = maxAniso;
   const edgeTex = canvasTexture(64, 64, (ctx, w, h) => {
-    ctx.fillStyle = '#e9e4d6'; ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(80,70,50,.35)'; for (let y = 0; y < h; y += 3) ctx.fillRect(0, y, w, 1);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(40,30,20,.28)'; for (let y = 0; y < h; y += 3) ctx.fillRect(0, y, w, 1);
   });
 
   /**
@@ -246,36 +228,33 @@ export function createPlaytestScene(host, hooks) {
   paintMat(null);
   // Os nomes do tapete usam a Spectral do site: se ela chegou depois da primeira pintura, pinta de novo.
   document.fonts?.load('700 40px Spectral').then(() => { paintMat(matArt); seats.forEach((board) => { board.painted = ''; paintSeat(board, board.name); }); }).catch(() => {});
-  const mat = new THREE.Mesh(new THREE.PlaneGeometry(MAT_W, MAT_D), new THREE.MeshStandardMaterial({ map: matTex, roughness: 0.96, metalness: 0 }));
-  mat.rotation.x = -Math.PI / 2;
+  // Tapete com espessura (borracha por baixo), em cima da mesa de madeira.
+  const rubber = new THREE.MeshStandardMaterial({ color: 0x0d100e, roughness: 0.92 });
+  const matSlab = new THREE.BoxGeometry(MAT_W, MAT_THICK, MAT_D);
+  const mat = new THREE.Mesh(matSlab, [rubber, rubber, new THREE.MeshStandardMaterial({ map: matTex, roughness: 0.96, metalness: 0 }), rubber, rubber, rubber]);
+  mat.position.y = -MAT_THICK / 2;
   mat.receiveShadow = true;
   scene.add(mat);
   const myFrame = new THREE.Mesh(new THREE.PlaneGeometry(MAT_W + 1.4, MAT_D + 1.4), new THREE.MeshBasicMaterial({ map: matFrame, color: 0xd9b45a, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
   myFrame.rotation.x = -Math.PI / 2; myFrame.position.y = 0.012;
   scene.add(myFrame);
-  const table = new THREE.Mesh(new THREE.PlaneGeometry(200, 160), new THREE.MeshStandardMaterial({ color: 0x0b120e, roughness: 1 }));
-  table.rotation.x = -Math.PI / 2;
-  table.position.y = -0.02;
-  table.receiveShadow = true;
-  scene.add(table);
 
   /* ---------- Geometrias das cartas ---------- */
   const shape = new THREE.Shape();
-  const r = 0.06; const hw = CARD_W / 2; const hh = CARD_H / 2;
+  const r = 0.07; const hw = CARD_W / 2 + SLEEVE_RIM; const hh = CARD_H / 2 + SLEEVE_RIM;
   shape.moveTo(-hw + r, -hh); shape.lineTo(hw - r, -hh); shape.quadraticCurveTo(hw, -hh, hw, -hh + r); shape.lineTo(hw, hh - r); shape.quadraticCurveTo(hw, hh, hw - r, hh);
   shape.lineTo(-hw + r, hh); shape.quadraticCurveTo(-hw, hh, -hw, hh - r); shape.lineTo(-hw, -hh + r); shape.quadraticCurveTo(-hw, -hh, -hw + r, -hh);
   const bodyGeo = new THREE.ExtrudeGeometry(shape, { depth: THICK, bevelEnabled: false, curveSegments: 4 });
   bodyGeo.rotateX(-Math.PI / 2);
   const faceGeo = new THREE.PlaneGeometry(CARD_W, CARD_H);
   faceGeo.rotateX(-Math.PI / 2);
-  const backGeo = new THREE.PlaneGeometry(CARD_W, CARD_H);
+  const backGeo = new THREE.PlaneGeometry(CARD_W + SLEEVE_RIM * 2, CARD_H + SLEEVE_RIM * 2);
   backGeo.rotateX(Math.PI / 2);
   const glowGeo = new THREE.PlaneGeometry(CARD_W * 1.3, CARD_H * 1.25);
   glowGeo.rotateX(-Math.PI / 2);
   const chipGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.07, 24);
   const ringGeo = new THREE.RingGeometry(0.9, 1, 64);
   ringGeo.rotateX(-Math.PI / 2);
-  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x151a17, roughness: 0.6 });
 
   // Os cantos arredondados são recorte (alphaTest), não transparência: material opaco não depende da ordem de desenho,
   // e o polygonOffset garante a face na frente da tampa do corpo da carta, mesmo de longe.
@@ -284,25 +263,83 @@ export function createPlaytestScene(host, hooks) {
       polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
   }
 
-  function makeCard(shadow = true) {
+  /* ---------- Shields e versos: um conjunto de materiais por dono (você = 'me', ou o número do assento) ---------- */
+  // Os materiais são compartilhados: trocar o shield de alguém troca o verso de todas as cartas dele de uma vez.
+  const ownerStyles = new Map();
+  const kits = new Map();
+  const ownerKey = (owner) => (owner === null || owner === undefined ? 'me' : owner);
+  const styleOf = (owner) => ownerStyles.get(ownerKey(owner)) || (ownerKey(owner) === 'me' ? { ...DEFAULT_STYLE, ...(hooks.style || {}) } : DEFAULT_STYLE);
+  function paintKit(kit, style) {
+    const sig = `${style.sleeve}|${style.back}|${kit.artImg ? kit.artUrl : ''}`;
+    if (kit.sig === sig) return;
+    kit.sig = sig;
+    drawCardBack(kit.canvas.getContext('2d'), kit.canvas.width, kit.canvas.height, style, kit.artImg);
+    kit.tex.needsUpdate = true;
+    const sleeve = SLEEVES[style.sleeve] || SLEEVES.esmeralda;
+    kit.body.color.set(sleeve.color);
+    kit.edge.color.set(sleeve.color).lerp(new THREE.Color('#ffffff'), 0.25);
+  }
+  function kitFor(owner) {
+    const key2 = ownerKey(owner);
+    let kit = kits.get(key2);
+    if (!kit) {
+      const el = document.createElement('canvas'); el.width = 488; el.height = 680;
+      const tex = new THREE.CanvasTexture(el);
+      tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = maxAniso;
+      kit = { canvas: el, tex, sig: '', artUrl: null, artImg: null,
+        body: new THREE.MeshStandardMaterial({ color: 0x151a17, roughness: 0.38, metalness: 0.05 }),
+        back: faceMaterial(tex),
+        hand: new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5, side: THREE.DoubleSide, alphaMap: cardAlpha, alphaTest: 0.5 }),
+        edge: new THREE.MeshStandardMaterial({ map: edgeTex, roughness: 0.7 }) };
+      kits.set(key2, kit);
+      const style = styleOf(owner);
+      if (style.back === 'arte' && style.art) setStyle(owner, style); else paintKit(kit, style);
+    }
+    return kit;
+  }
+  /** Troca o shield e a estampa do verso de alguém (owner null = você). style: { sleeve, back, art }. */
+  function setStyle(owner, style) {
+    const key2 = ownerKey(owner);
+    const next = { ...DEFAULT_STYLE, ...(style || {}) };
+    ownerStyles.set(key2, next);
+    const kit = kitFor(owner);
+    const art = next.back === 'arte' ? next.art || null : null;
+    if (art !== kit.artUrl) {
+      kit.artUrl = art; kit.artImg = null;
+      if (art) loadArt(art, (img) => { if (kit.artUrl !== art) return; kit.artImg = img; kit.sig = ''; paintKit(kit, ownerStyles.get(key2) || next); });
+    }
+    paintKit(kit, next);
+  }
+  /** A face mostra uma imagem: cada carta ganha o próprio material (o do verso é de todos). */
+  function setFaceTexture(parts, tex) {
+    if (!parts.ownFace) parts.ownFace = faceMaterial(tex);
+    else if (parts.ownFace.map !== tex) { parts.ownFace.map = tex; parts.ownFace.emissiveMap = tex; parts.ownFace.needsUpdate = true; }
+    parts.face.material = parts.ownFace;
+  }
+  function setFaceBack(parts) { parts.face.material = kitFor(parts.owner).back; }
+
+  function makeCard(shadow = true, owner = null) {
+    const kit = kitFor(owner);
     const group = new THREE.Group();
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    const body = new THREE.Mesh(bodyGeo, kit.body);
     body.castShadow = shadow;
-    const face = new THREE.Mesh(faceGeo, faceMaterial(backTex));
+    const face = new THREE.Mesh(faceGeo, kit.back);
     face.position.y = THICK + 0.003;
-    const back = new THREE.Mesh(backGeo, faceMaterial(backTex));
+    const back = new THREE.Mesh(backGeo, kit.back);
     back.position.y = -0.003;
     const glow = new THREE.Mesh(glowGeo, new THREE.MeshBasicMaterial({ map: frameGlow, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
     glow.position.y = THICK + 0.004;
     group.add(body, face, back, glow);
-    return { group, body, face, back, glow };
+    return { group, body, face, back, glow, owner, ownFace: null };
   }
 
   /* ---------- Pilhas das zonas ---------- */
-  function createPile(parent, zone, x, z, { counterSize = 0.5, shadow = true } = {}) {
+  function createPile(parent, zone, x, z, { counterSize = 0.5, shadow = true, owner = null } = {}) {
     const group = new THREE.Group();
     group.position.set(x, 0, z);
-    const stackMat = [new THREE.MeshStandardMaterial({ map: edgeTex, roughness: 0.8 }), new THREE.MeshStandardMaterial({ map: edgeTex, roughness: 0.8 }), faceMaterial(backTex), bodyMat, new THREE.MeshStandardMaterial({ map: edgeTex, roughness: 0.8 }), new THREE.MeshStandardMaterial({ map: edgeTex, roughness: 0.8 })];
+    const kit = kitFor(owner);
+    // Laterais na cor do shield, como um deck encapado; o topo é o verso (grimório) ou a última carta.
+    const stackMat = [kit.edge, kit.edge, kit.back, kit.body, kit.edge, kit.edge];
     const stack = new THREE.Mesh(new THREE.BoxGeometry(CARD_W, 1, CARD_H), stackMat);
     stack.castShadow = shadow; stack.receiveShadow = true;
     stack.userData.zone = zone;
@@ -312,7 +349,7 @@ export function createPlaytestScene(host, hooks) {
     const count = sprite('', { size: counterSize });
     count.position.set(0, 0.2, CARD_H / 2 + 0.05);
     group.add(count);
-    return { group, stack, glow, count, n: -1, top: null, hover: 0, height: 0 };
+    return { group, stack, glow, count, n: -1, top: null, hover: 0, height: 0, owner, ownTop: null };
   }
   function updatePile(pile, info, zone) {
     const height = Math.max(0.004, info.n * 0.011);
@@ -326,10 +363,12 @@ export function createPlaytestScene(host, hooks) {
     const topUrl = zone === 'library' ? null : info.top;
     if (pile.top !== topUrl) {
       pile.top = topUrl;
-      const faceMat = pile.stack.material[2];
-      const apply = (tex) => { faceMat.map = tex; faceMat.emissiveMap = tex; faceMat.needsUpdate = true; };
-      apply(backTex);
-      if (topUrl && topUrl !== 'back') texture(topUrl, (tex) => { if (pile.top === topUrl) apply(tex); });
+      pile.stack.material[2] = kitFor(pile.owner).back;
+      if (topUrl && topUrl !== 'back') texture(topUrl, (tex) => {
+        if (pile.top !== topUrl) return;
+        if (!pile.ownTop) pile.ownTop = faceMaterial(tex); else { pile.ownTop.map = tex; pile.ownTop.emissiveMap = tex; pile.ownTop.needsUpdate = true; }
+        pile.stack.material[2] = pile.ownTop;
+      });
     }
     pile.n = info.n;
   }
@@ -435,14 +474,13 @@ export function createPlaytestScene(host, hooks) {
     const url = view.image;
     if (entry.faceUrl === url && entry.faceName === view.fallbackKey) return;
     entry.faceUrl = url; entry.faceName = view.fallbackKey;
-    if (url === 'back') { entry.parts.face.material.map = backTex; entry.parts.face.material.emissiveMap = backTex; entry.parts.face.material.needsUpdate = true; return; }
-    const fallback = nameTexture(view.fallback);
-    entry.parts.face.material.map = fallback; entry.parts.face.material.emissiveMap = fallback; entry.parts.face.material.needsUpdate = true;
-    if (url) texture(url, (tex) => { if (entry.faceUrl !== url) return; entry.parts.face.material.map = tex; entry.parts.face.material.emissiveMap = tex; entry.parts.face.material.needsUpdate = true; });
+    if (url === 'back') { setFaceBack(entry.parts); return; }
+    setFaceTexture(entry.parts, nameTexture(view.fallback));
+    if (url) texture(url, (tex) => { if (entry.faceUrl !== url) return; setFaceTexture(entry.parts, tex); });
   }
 
   function applyCounters(entry, view) {
-    const signature = JSON.stringify([view.counters, view.pt, view.sick, view.buried, view.stack, view.targetLabel]);
+    const signature = JSON.stringify([view.counters, view.pt, view.sick, view.haste, view.damage, view.blocking, view.buried, view.stack, view.targetLabel]);
     if (entry.counterSig === signature) return;
     entry.counterSig = signature;
     entry.extras.forEach((o) => { entry.group.remove(o); o.material?.map?.dispose?.(); o.material?.dispose?.(); });
@@ -467,10 +505,28 @@ export function createPlaytestScene(host, hooks) {
       entry.group.add(label); entry.extras.push(label);
     });
     if (view.pt) {
-      const color = view.pt.state === 'up' ? '#9ff0b8' : view.pt.state === 'down' ? '#ff9c8a' : '#f4f6f3';
+      const color = view.pt.state === 'up' ? '#9ff0b8' : view.pt.state === 'down' ? '#ff9c8a' : view.pt.state === 'mixed' ? '#ffe08a' : '#f4f6f3';
       const badge = sprite(view.pt.text, { size: 0.38, color, border: view.pt.state === 'normal' ? null : color });
       badge.position.set(CARD_W / 2 - 0.18, THICK + 0.1, CARD_H / 2 - 0.16);
       entry.group.add(badge); entry.extras.push(badge);
+    }
+    if (view.damage) {
+      const hurt = sprite(`${view.damage} de dano`, { size: 0.3, color: '#fff', bg: 'rgba(170,30,20,.92)' });
+      hurt.position.set(CARD_W / 2 - 0.5, THICK + 0.12, CARD_H / 2 - 0.62);
+      entry.group.add(hurt); entry.extras.push(hurt);
+    }
+    if (view.blocking) {
+      const shield = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0x7fc8ff, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+      shield.scale.set(1.08, 1, 1.2); shield.position.y = -0.004;
+      entry.group.add(shield); entry.extras.push(shield);
+      const tag = sprite('bloqueando', { size: 0.3, color: '#e4f4ff', bg: 'rgba(20,60,110,.92)' });
+      tag.position.set(0, THICK + 0.3, -CARD_H / 2 - 0.2);
+      entry.group.add(tag); entry.extras.push(tag);
+    }
+    if (view.haste && !view.sick) {
+      const fast = sprite('ímpeto', { size: 0.26, color: '#2a1606', bg: 'rgba(255,190,90,.95)' });
+      fast.position.set(0, THICK + 0.1, -CARD_H / 2 - 0.12);
+      entry.group.add(fast); entry.extras.push(fast);
     }
     if (view.targetLabel) {
       const tag = sprite(`→ ${view.targetLabel}`, { size: 0.32, color: '#fff', bg: 'rgba(160,40,24,.9)' });
@@ -520,7 +576,7 @@ export function createPlaytestScene(host, hooks) {
     fan.from = look.from;
     const n = Math.max(1, Math.min(look.from === 'search' ? 9 : 10, look.n || 1));
     while (fan.cards.length < n) {
-      const parts = makeCard(false);
+      const parts = makeCard(false, key === 'me' ? null : Number(String(key).slice(4)));
       parts.group.scale.setScalar(key === 'me' ? 0.85 : 1.05);
       // Brilho dourado em volta de cada verso: o leque aparece mesmo sobre um tapete escuro.
       parts.glow.material.color.set('#f0c45c'); parts.glow.material.opacity = 0.75; parts.glow.position.y = -0.01; parts.glow.material.side = THREE.DoubleSide;
@@ -583,7 +639,7 @@ export function createPlaytestScene(host, hooks) {
       slot.group.visible = !!cmd?.image;
       if (cmd?.image && slot.group.userData.url !== cmd.image) {
         slot.group.userData.url = cmd.image;
-        texture(cmd.image, (tex) => { if (slot.group.userData.url !== cmd.image) return; slot.face.material.map = tex; slot.face.material.emissiveMap = tex; slot.face.material.needsUpdate = true; });
+        texture(cmd.image, (tex) => { if (slot.group.userData.url !== cmd.image) return; setFaceTexture(slot, tex); });
       }
     });
     const tax = commands.map((cmd) => cmd.tax || 0);
@@ -599,10 +655,8 @@ export function createPlaytestScene(host, hooks) {
   piles.library.group.add(revealParts.group);
   const reveal = { want: null, url: null, open: 0 };
   function setRevealFace(url) {
-    const material = revealParts.face.material;
-    const apply = (tex) => { material.map = tex; material.emissiveMap = tex; material.needsUpdate = true; };
-    apply(backTex);
-    texture(url, (tex) => { if (reveal.url === url) apply(tex); });
+    setFaceBack(revealParts);
+    texture(url, (tex) => { if (reveal.url === url) setFaceTexture(revealParts, tex); });
   }
 
   /** Anima uma carta do campo até uma pilha e só então a tira da cena. */
@@ -634,7 +688,6 @@ export function createPlaytestScene(host, hooks) {
   let activeMe = false;
   let seatLayoutKey = '';
   const handBackGeo = new THREE.PlaneGeometry(CARD_W, CARD_H);
-  const handBackMat = new THREE.MeshStandardMaterial({ map: backTex, roughness: 0.6, side: THREE.DoubleSide, alphaMap: cardAlpha, alphaTest: 0.5 });
   const seatArc = (count) => SEAT_ARCS[Math.max(1, Math.min(3, count))] || SEAT_ARCS[1];
   function seatPlacement(index, count) {
     const arc = seatArc(count);
@@ -652,8 +705,8 @@ export function createPlaytestScene(host, hooks) {
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = maxAniso;
     const accent = SEAT_COLORS[info.seat % SEAT_COLORS.length];
-    const matMesh = new THREE.Mesh(new THREE.PlaneGeometry(MAT_W, MAT_D), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.96 }));
-    matMesh.rotation.x = -Math.PI / 2; matMesh.receiveShadow = true;
+    const matMesh = new THREE.Mesh(matSlab, [rubber, rubber, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.96 }), rubber, rubber, rubber]);
+    matMesh.position.y = -MAT_THICK / 2; matMesh.receiveShadow = true;
     matMesh.userData.seatMat = info.seat;
     const frame = new THREE.Mesh(new THREE.PlaneGeometry(MAT_W + 1.4, MAT_D + 1.4), new THREE.MeshBasicMaterial({ map: matFrame, color: accent, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
     frame.rotation.x = -Math.PI / 2; frame.position.y = 0.012;
@@ -661,12 +714,12 @@ export function createPlaytestScene(host, hooks) {
     const seatPiles = {};
     ['library', 'graveyard', 'exile'].forEach((zone) => {
       const p = mirror(LAYOUT.zones[zone].x, LAYOUT.zones[zone].z);
-      seatPiles[zone] = createPile(group, zone, p.x, p.z, { counterSize: 0.9, shadow: false });
+      seatPiles[zone] = createPile(group, zone, p.x, p.z, { counterSize: 0.9, shadow: false, owner: info.seat });
       seatPiles[zone].stack.userData.seat = info.seat;
     });
     const cmdPos = mirror(LAYOUT.zones.command.x, LAYOUT.zones.command.z);
     const commands = [0, 1].map((i) => {
-      const parts = makeCard(false);
+      const parts = makeCard(false, info.seat);
       parts.face.userData = { seat: info.seat, zone: 'command', slot: i }; parts.body.userData = { seat: info.seat, zone: 'command', slot: i };
       parts.group.position.set(cmdPos.x + (i ? 1.1 : 0), 1.2, cmdPos.z + (i ? 0.3 : 0));
       parts.group.rotation.x = 1.0;
@@ -690,7 +743,7 @@ export function createPlaytestScene(host, hooks) {
     status.position.set(0, 1.4, 0);
     group.add(status);
     const board = { seat: info.seat, group, canvas, tex, mat: matMesh, frame, accent, piles: seatPiles, commands, taxSprite, hand, handCards: [], plate, status,
-      cards: new Map(), fading: [], art: null, artUrl: null, painted: '', placement: null, active: false, eliminated: false, reveal: null };
+      cards: new Map(), fading: [], art: null, artUrl: null, painted: '', placement: null, active: false, eliminated: false, reveal: null, synced: false, styleSig: '' };
     seats.set(info.seat, board);
     return board;
   }
@@ -724,12 +777,15 @@ export function createPlaytestScene(host, hooks) {
       board.group.scale.setScalar(place.scale);
       board.active = !!info.active; board.eliminated = !!info.eliminated;
       board.name = info.name;
+      // Shield e verso de quem está sentado ali (vêm do estado público dele).
+      const styleSig = JSON.stringify(info.style || null);
+      if (board.styleSig !== styleSig) { board.styleSig = styleSig; setStyle(info.seat, info.style || DEFAULT_STYLE); }
       if (info.playmat && board.artUrl !== info.playmat) {
         board.artUrl = info.playmat;
         loadArt(info.playmat, (img) => { if (board.artUrl === info.playmat) { board.art = img; paintSeat(board, board.name); } });
       }
       paintSeat(board, info.name);
-      board.mat.material.color.set(info.eliminated ? 0x555555 : 0xffffff);
+      board.mat.material[2].color.set(info.eliminated ? 0x555555 : 0xffffff);
       setSprite(board.plate, `${info.name}${info.online === false ? ' (fora)' : ''} · ♥ ${info.life}${info.poison ? ` · ☠ ${info.poison}` : ''}`);
       setSprite(board.status, info.eliminated ? 'Fora da partida' : info.stage && info.stage !== 'play' ? 'Escolhendo a mão' : '');
       // Cartas no campo.
@@ -739,7 +795,7 @@ export function createPlaytestScene(host, hooks) {
         let entry = board.cards.get(v.iid);
         const p = mirror(v.x, v.z);
         if (!entry) {
-          const parts = makeCard(false);
+          const parts = makeCard(false, info.seat);
           parts.face.userData = { seat: info.seat, iid: v.iid }; parts.body.userData = { seat: info.seat, iid: v.iid };
           parts.group.position.set(p.x, 0, p.z);
           parts.group.scale.setScalar(0.01);
@@ -747,9 +803,11 @@ export function createPlaytestScene(host, hooks) {
           entry = { iid: v.iid, parts, group: parts.group, extras: [], rot: 0, lift: 0, scale: 0.01, pop: true };
           board.cards.set(v.iid, entry);
           if (!still()) {
-            const world = board.group.localToWorld(new THREE.Vector3(p.x, 0.2, p.z));
-            emit(world.x, 0.25, world.z, 30, v.colors || ['C'], { speed: 2, up: 2.4, life: 0.9 });
+            const at = board.group.localToWorld(new THREE.Vector3(p.x, 0.2, p.z));
+            emit(at.x, 0.25, at.z, 30, v.colors || ['C'], { speed: 2, up: 2.4, life: 0.9 });
           }
+          // Carta nova no campo de outro jogador (não na primeira carga do assento): som de carta entrando.
+          if (board.synced) hooks.onSeatCardEnter?.(info.seat, v);
         }
         entry.view = v;
         entry.target = { x: p.x, z: p.z, rot: v.tapped ? -Math.PI / 2 : 0, attack: v.attacking ? 1 : 0 };
@@ -769,7 +827,7 @@ export function createPlaytestScene(host, hooks) {
         slot.group.visible = !!cmd?.image;
         if (cmd?.image && slot.group.userData.url !== cmd.image) {
           slot.group.userData.url = cmd.image;
-          texture(cmd.image, (tex) => { if (slot.group.userData.url !== cmd.image) return; slot.face.material.map = tex; slot.face.material.emissiveMap = tex; slot.face.material.needsUpdate = true; });
+          texture(cmd.image, (tex) => { if (slot.group.userData.url !== cmd.image) return; setFaceTexture(slot, tex); });
         }
       });
       const taxes = info.piles.command.map((cmd) => cmd.tax || 0);
@@ -777,7 +835,7 @@ export function createPlaytestScene(host, hooks) {
       // Mão em leque (só os versos: a mão é segredo de quem joga).
       const n = Math.min(12, info.hand || 0);
       while (board.handCards.length > n) board.hand.remove(board.handCards.pop());
-      while (board.handCards.length < n) { const m = new THREE.Mesh(handBackGeo, handBackMat); board.hand.add(m); board.handCards.push(m); }
+      while (board.handCards.length < n) { const m = new THREE.Mesh(handBackGeo, kitFor(info.seat).hand); board.hand.add(m); board.handCards.push(m); }
       board.handCards.forEach((m, i) => {
         const offset = i - (n - 1) / 2;
         m.position.set(offset * 0.62, 0.9 + Math.abs(offset) * -0.03, -Math.abs(offset) * 0.05);
@@ -785,11 +843,25 @@ export function createPlaytestScene(host, hooks) {
         m.scale.setScalar(0.72);
       });
       board.revealWant = info.reveal || null;
+      board.synced = true;
     });
     seats.forEach((board, seat) => { if (!seen.has(seat)) removeSeat(board); });
     // Só reenquadra quando a mesa muda de forma (alguém entrou ou saiu), para não desfazer o giro de quem está olhando.
     const layoutKey = list.map((info) => `${info.seat}:${info.index}/${info.count}`).join(',');
-    if (layoutKey !== seatLayoutKey) { seatLayoutKey = layoutKey; if (camMode !== 'me') refreshView(); }
+    if (layoutKey !== seatLayoutKey) { seatLayoutKey = layoutKey; fitTable(); if (camMode !== 'me') refreshView(); }
+  }
+  /** A mesa de madeira cresce para caber o seu tapete e os dos oponentes (com a mão deles atrás). */
+  function fitTable() {
+    const box = { minX: -MAT_W / 2, maxX: MAT_W / 2, minZ: -MAT_D / 2, maxZ: MAT_D / 2 };
+    const p = new THREE.Vector3();
+    seats.forEach((board) => {
+      board.group.updateMatrixWorld();
+      [[-MAT_W / 2, -MAT_D / 2 - 2.4], [MAT_W / 2, -MAT_D / 2 - 2.4], [-MAT_W / 2, MAT_D / 2], [MAT_W / 2, MAT_D / 2]].forEach(([x, z]) => {
+        board.group.localToWorld(p.set(x, 0, z));
+        box.minX = Math.min(box.minX, p.x); box.maxX = Math.max(box.maxX, p.x); box.minZ = Math.min(box.minZ, p.z); box.maxZ = Math.max(box.maxZ, p.z);
+      });
+    });
+    world.fitTable(box);
   }
 
   /* ---------- Feixes de ataque ---------- */
@@ -882,6 +954,10 @@ export function createPlaytestScene(host, hooks) {
   const base = { yaw: 0, pitch: PITCH };
   const baseTarget = new THREE.Vector3(0.2, 0, -0.5);
   let camMode = 'me';
+  // Abertura: a câmera começa baixa, mostrando a paisagem, e desce até a mesa.
+  let intro = 0;
+  // Paisagem: a câmera desce e gira devagar em volta da mesa.
+  let scenic = false;
   // Vista de cima: a câmera trava olhando a mesa de cima (arrastar move a mesa em vez de girar).
   const TOP_PITCH = 1.47;
   let topDown = false;
@@ -967,13 +1043,20 @@ export function createPlaytestScene(host, hooks) {
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    if (width > 1) refreshView(!resized);
+    if (width > 1) {
+      const first = !resized;
+      refreshView(first);
+      if (first && !still()) { view.pitch = 0.17; view.yaw = base.yaw + 0.85; view.dist = goal.dist * 1.9; view.target.y = 8; intro = 3.4; }
+    }
     resized = true;
   }
   let resized = false;
   new ResizeObserver(resize).observe(host);
   function placeCamera(dt, reduce) {
-    const k = reduce ? 1 : 1 - Math.exp(-dt * 6);
+    // Paisagem: a câmera desce, olha um pouco acima da mesa (o horizonte aparece) e gira devagar.
+    if (scenic && !reduce) { goal.yaw = base.yaw + Math.sin(time * 0.07) * 1.15; goal.pitch = 0.2; goal.target.y = 7; }
+    const k = reduce ? 1 : 1 - Math.exp(-dt * (intro > 0 ? 1.25 : scenic ? 1.5 : 6));
+    if (intro > 0) intro -= dt;
     view.yaw += (goal.yaw - view.yaw) * k; view.pitch += (goal.pitch - view.pitch) * k; view.zoom += (goal.zoom - view.zoom) * k;
     view.dist += (goal.dist - view.dist) * k;
     view.target.lerp(goal.target, k);
@@ -991,6 +1074,7 @@ export function createPlaytestScene(host, hooks) {
   }
   function resetCamera() {
     focusKey = null;
+    scenic = false;
     goal.yaw = base.yaw; goal.pitch = base.pitch; goal.zoom = 1; goal.target.copy(baseTarget);
   }
   /** Leve zoom numa carta (sua ou de um oponente); de novo na mesma carta, volta. Devolve true se aproximou. */
@@ -1011,7 +1095,12 @@ export function createPlaytestScene(host, hooks) {
   }
   function setTopDown(on) {
     topDown = !!on;
+    scenic = false;
     refreshView();
+  }
+  function setScenic(on) {
+    scenic = !!on;
+    if (scenic) { focusKey = null; goal.zoom = 1.45; goal.target.copy(baseTarget); goal.target.y = 7; } else resetCamera();
   }
 
   /* ---------- Ponteiro ---------- */
@@ -1106,8 +1195,10 @@ export function createPlaytestScene(host, hooks) {
       goal.target.copy(pointer.from).addScaledVector(right, -dx * perPixel).addScaledVector(up, dy * perPixel);
       clampTarget();
     } else if (!pointer.target || pointer.target.mat || pointer.target.seat !== undefined) {
-      goal.yaw = THREE.MathUtils.clamp(pointer.yaw - dx * 0.004, base.yaw - 0.6, base.yaw + 0.6);
-      goal.pitch = THREE.MathUtils.clamp(pointer.pitch + dy * 0.003, 0.6, 1.35);
+      // Gira mais que antes: inclinando, aparece a paisagem em volta da mesa.
+      scenic = false;
+      goal.yaw = THREE.MathUtils.clamp(pointer.yaw - dx * 0.004, base.yaw - 1.4, base.yaw + 1.4);
+      goal.pitch = THREE.MathUtils.clamp(pointer.pitch + dy * 0.003, 0.2, 1.42);
     }
   });
   const release = (event) => {
@@ -1178,6 +1269,7 @@ export function createPlaytestScene(host, hooks) {
     const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now; time += dt;
     const reduce = still();
     placeCamera(dt, reduce);
+    world.update(reduce ? 0 : dt, reduce ? 0 : time, camera);
     if (lastMove && !pointer) {
       const target = pickObject(lastMove.x, lastMove.y);
       const id = target?.iid || null; const zone = target?.zone || null; const seat = target?.seat ?? null;
@@ -1302,12 +1394,13 @@ export function createPlaytestScene(host, hooks) {
   function showGhost(image, clientX, clientY) {
     if (!ghost) {
       const parts = makeCard();
-      parts.face.material.transparent = true;
-      parts.face.material.opacity = 0.75;
+      setFaceTexture(parts, null);
+      parts.ownFace.transparent = true;
+      parts.ownFace.opacity = 0.75;
       scene.add(parts.group);
       ghost = { ...parts, url: null, on: false };
     }
-    if (ghost.url !== image) { ghost.url = image; texture(image, (tex) => { if (ghost.url === image) { ghost.face.material.map = tex; ghost.face.material.emissiveMap = tex; ghost.face.material.needsUpdate = true; } }); }
+    if (ghost.url !== image) { ghost.url = image; texture(image, (tex) => { if (ghost.url === image) setFaceTexture(ghost, tex); }); }
     const p = pick(clientX, clientY);
     ghost.on = p.inside;
     ghost.group.position.set(p.x, 1.1, p.z);
@@ -1333,6 +1426,15 @@ export function createPlaytestScene(host, hooks) {
     zoomBy,
     setTopDown,
     isTopDown: () => topDown,
+    setScenic,
+    isScenic: () => scenic,
+    /** Paisagem em volta da mesa: plains, island, swamp, mountain, forest. */
+    setEnvironment: (kind) => world.setEnvironment(kind),
+    environment: () => world.environment(),
+    setWood: (kind) => world.setWood(kind),
+    setStyle,
+    /** O verso de alguém como imagem (para as janelas em HTML). */
+    backImage: (owner = null) => kitFor(owner).canvas.toDataURL('image/png'),
     isFocused: () => focusKey !== null || goal.zoom < 0.98,
     spawn(iid, from) { spawnFrom.set(iid, from); },
     revealTop(url) {

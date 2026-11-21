@@ -10,7 +10,11 @@ import { randomInt } from 'node:crypto';
 
 export const MAX_SEATS = 4;
 const STATE_LIMIT = 400000;
-const EVENT_KINDS = new Set(['log', 'chat', 'damage', 'life', 'poison', 'reveal', 'dice', 'attack', 'concede']);
+// interact: um jogador age nas cartas de outro (moer, olhar, destruir, ganhar o controle…); quem é dono executa.
+const EVENT_KINDS = new Set(['log', 'chat', 'damage', 'life', 'poison', 'reveal', 'dice', 'attack', 'concede', 'interact']);
+// O turno tem 12 etapas (500.1): 0 desvirar … 11 limpeza.
+const LAST_STEP = 11;
+const WHISPER_LIMIT = 300000;
 const PERSIST_MS = 800;
 const OFFLINE_GRACE_MS = 4000;
 const IDLE_ROOM_MS = 120000;
@@ -339,6 +343,20 @@ const ACTIONS = {
     return { id: events[0].id };
   },
 
+  /** Algo só para outro assento (cartas escondidas que ele pediu para ver): vai direto, sem passar pelo registro. */
+  whisper(ws, seat, message) {
+    this.needPlaying();
+    const to = toInt(message.to, -1);
+    if (!this.seats.has(to) || to === seat.seat) throw new TableError('Jogador não encontrado na mesa.');
+    const payload = plainObject(message.payload) ? message.payload : {};
+    const text = JSON.stringify({ type: 'whisper', from: seat.seat, payload });
+    if (text.length > WHISPER_LIMIT) throw new TableError('Mensagem grande demais.');
+    let delivered = 0;
+    for (const client of this.clients) if (client.seat === to) { this.send(client, text); delivered += 1; }
+    if (!delivered) throw new TableError('Esse jogador está desconectado agora.');
+    return null;
+  },
+
   async turn(ws, seat, message) {
     this.needPlaying();
     // Pedido de um turno que já passou (clique duplo, duas abas): nada a fazer.
@@ -354,7 +372,7 @@ const ACTIONS = {
   async phase(ws, seat, message) {
     this.needPlaying();
     if (this.table.turn !== seat.seat) throw new TableError('A fase é de quem está jogando o turno.');
-    const phase = Math.max(0, Math.min(6, toInt(message.phase)));
+    const phase = Math.max(0, Math.min(LAST_STEP, toInt(message.phase)));
     if (phase === this.table.phase) return null;
     await this.updateTable({ phase });
     this.broadcast(this.roomMessage());
