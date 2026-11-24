@@ -1941,9 +1941,8 @@ async function start(data) {
   function seatClick(seat, target) {
     if (target.zone === 'graveyard' || target.zone === 'exile') { openSeatZone(seat, target.zone); return; }
     if (target.zone === 'library') { const r = root.getBoundingClientRect(); openSeatLibraryMenu(seat, lastPointer.x || r.left + r.width / 2, lastPointer.y || r.top + r.height / 2); return; }
-    // Carta de um oponente: leve zoom nela (de novo, volta).
-    if (target.iid) { scene.focusCard(target); return; }
-    if (target.mat) setView(scene.viewMode() === seat ? 'table' : seat);
+    // Carta ou tapete de um oponente: a câmera fica parada (Z aproxima a carta; o painel troca a vista).
+    if (target.iid || target.mat) return;
   }
 
   function openSeatMenu(seat, x, y, target = null) {

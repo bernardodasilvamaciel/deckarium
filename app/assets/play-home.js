@@ -59,7 +59,7 @@ async function start() {
         ],
         piles: { library: { n: 62 }, graveyard: { n: 4, top: cards[4]?.image || null }, exile: { n: 0, top: null }, command: cards[0] ? [{ image: cards[0].image, tax: 0 }] : [] },
       });
-      setTimeout(() => { scene.setScenic(true); scene.zoomBy(0.74); }, 3600);
+      setTimeout(() => { scene.setScenic(true); scene.zoomBy(0.74); }, 200);
     } catch (error) {
       console.warn(error);
       host.classList.add('is-static');

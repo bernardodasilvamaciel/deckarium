@@ -934,7 +934,7 @@ export function createPlaytestScene(host, hooks) {
       if (!c) return;
       emit(c.x, 0.4, c.z, big ? 160 : 90, ['#ff5b3a', '#ffb199', '#ffffff'], { speed: big ? 6 : 4.5, up: 2.5, gravity: -4, life: 1.1, spread: 3 });
       shockwave(c.x, c.z, '#ff5b3a', big ? 12 : 8);
-      if (seat === null) shake = 0.5;
+
     },
     /** Começo de turno: um anel dourado varre o tapete de quem vai jogar. */
     turn(seat = null) {
@@ -1046,7 +1046,6 @@ export function createPlaytestScene(host, hooks) {
     if (width > 1) {
       const first = !resized;
       refreshView(first);
-      if (first && !still()) { view.pitch = 0.17; view.yaw = base.yaw + 0.85; view.dist = goal.dist * 1.9; view.target.y = 8; intro = 3.4; }
     }
     resized = true;
   }
@@ -1160,7 +1159,8 @@ export function createPlaytestScene(host, hooks) {
   dom.addEventListener('pointerdown', (event) => {
     const target = pickObject(event.clientX, event.clientY);
     dom.setPointerCapture(event.pointerId);
-    pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, sx: event.clientX, sy: event.clientY, button: event.button, target, moved: false, yaw: goal.yaw, pitch: goal.pitch, from: goal.target.clone() };
+    // A câmera é parada: só com Ctrl (ou Cmd) apertado o arrasto gira a mesa (ou a move, na vista de cima).
+    pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, sx: event.clientX, sy: event.clientY, button: event.button, target, moved: false, yaw: goal.yaw, pitch: goal.pitch, from: goal.target.clone(), ctrl: event.ctrlKey || event.metaKey };
     if (event.button === 2) {
       // Depois do evento: o clique que fecha menus abertos não pode fechar este.
       const { clientX, clientY } = event;
@@ -1177,9 +1177,10 @@ export function createPlaytestScene(host, hooks) {
     lastMove = { x: event.clientX, y: event.clientY };
     if (!pointer) return;
     const dx = event.clientX - pointer.sx; const dy = event.clientY - pointer.sy;
+    const ctrl = pointer.ctrl || event.ctrlKey || event.metaKey;
     if (!pointer.moved && Math.hypot(dx, dy) > 6) {
       pointer.moved = true;
-      if (pointer.target?.iid && pointer.target.seat === undefined && cards.has(pointer.target.iid)) { dragId = pointer.target.iid; hooks.onDragStart?.(dragId); }
+      if (!ctrl && pointer.target?.iid && pointer.target.seat === undefined && cards.has(pointer.target.iid)) { dragId = pointer.target.iid; hooks.onDragStart?.(dragId); }
     }
     if (!pointer.moved) return;
     if (dragId) {
@@ -1187,6 +1188,8 @@ export function createPlaytestScene(host, hooks) {
       const entry = cards.get(dragId);
       if (entry) { entry.drag = { x: p.x, z: p.z }; }
       dropZone = p.zone;
+    } else if (!ctrl) {
+      // Sem Ctrl, arrastar o fundo não mexe na câmera.
     } else if (topDown) {
       // Vista de cima: a mesa acompanha o ponteiro.
       const perPixel = 2 * view.dist * view.zoom * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / height;
@@ -1194,8 +1197,8 @@ export function createPlaytestScene(host, hooks) {
       const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).setY(0).normalize();
       goal.target.copy(pointer.from).addScaledVector(right, -dx * perPixel).addScaledVector(up, dy * perPixel);
       clampTarget();
-    } else if (!pointer.target || pointer.target.mat || pointer.target.seat !== undefined) {
-      // Gira mais que antes: inclinando, aparece a paisagem em volta da mesa.
+    } else {
+      // Ctrl + arrastar gira; inclinando, aparece a paisagem em volta da mesa.
       scenic = false;
       goal.yaw = THREE.MathUtils.clamp(pointer.yaw - dx * 0.004, base.yaw - 1.4, base.yaw + 1.4);
       goal.pitch = THREE.MathUtils.clamp(pointer.pitch + dy * 0.003, 0.2, 1.42);
@@ -1222,6 +1225,8 @@ export function createPlaytestScene(host, hooks) {
   dom.addEventListener('pointercancel', release);
   dom.addEventListener('pointerleave', () => { lastMove = null; if (hoverId || hoverZone || hoverSeat !== null) { hoverId = null; hoverZone = null; hoverSeat = null; hooks.onHover?.(null); } });
   dom.addEventListener('wheel', (event) => {
+    // Só Ctrl + roda aproxima; sem Ctrl a roda rola a página, como em qualquer lugar do site.
+    if (!event.ctrlKey && !event.metaKey) return;
     event.preventDefault();
     const before = goal.zoom;
     goal.zoom = THREE.MathUtils.clamp(goal.zoom * Math.exp(event.deltaY * 0.0012), MIN_ZOOM, 1.3);
@@ -1238,6 +1243,11 @@ export function createPlaytestScene(host, hooks) {
     focusKey = null;
   }, { passive: false });
   dom.addEventListener('dblclick', resetCamera);
+  // Com Ctrl apertado, o cursor vira a mãozinha de girar.
+  const orbitCursor = (event) => host.classList.toggle('is-orbit', event.ctrlKey || event.metaKey);
+  window.addEventListener('keydown', orbitCursor);
+  window.addEventListener('keyup', orbitCursor);
+  window.addEventListener('blur', () => host.classList.remove('is-orbit'));
 
   /* ---------- Quadro a quadro ---------- */
   let ghost = null;

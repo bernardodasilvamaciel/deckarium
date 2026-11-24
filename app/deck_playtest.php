@@ -206,7 +206,7 @@ pageHeader(($table ? 'Mesa compartilhada' : 'Mesa de teste') . ' · ' . $deck['n
 <?php else: ?>
 <?php if (!$table && ($fmt['exact'] ? $zoneCount + $deckCount !== (int)$fmt['size'] : $deckCount < (int)$fmt['size'])): ?><p class="notice pt-count-note">O deck tem <?= $zoneCount + $deckCount ?> cartas<?= $zoneCount ? ' com a zona de comando' : '' ?>; a mesa usa as que estão aprovadas, mesmo fora das <?= deckFormatSizeLabel($fmt) ?> do <?= h($fmt['name']) ?>.</p><?php endif; ?>
 <div class="pt-app<?= $table ? ' is-shared' : '' ?>" data-playtest>
-    <div class="pt-stage" data-pt-stage aria-label="Mesa 3D. Pelo teclado: Espaço vai para a próxima etapa, N passa o turno, D compra, U desvira tudo, Ctrl+Z desfaz; com o mouse sobre uma carta, P abre os efeitos, I dá ímpeto e Z aproxima; C liga a vista de cima; as cartas da mão são botões.">
+    <div class="pt-stage" data-pt-stage aria-label="Mesa 3D. Pelo teclado: Espaço vai para a próxima etapa, N passa o turno, D compra, U desvira tudo, Ctrl+Z desfaz; com o mouse sobre uma carta, P abre os efeitos, I dá ímpeto e Z aproxima; C liga a vista de cima. A câmera fica parada: Ctrl + arrastar gira e Ctrl + roda aproxima. As cartas da mão são botões.">
         <p class="pt-stage-status" data-pt-status>Arrumando a mesa…</p>
     </div>
 
@@ -247,9 +247,9 @@ pageHeader(($table ? 'Mesa compartilhada' : 'Mesa de teste') . ' · ' . $deck['n
     </nav>
 
     <div class="pt-camera" data-pt-camera role="group" aria-label="Câmera">
-        <button type="button" data-pt-cam="in" title="Aproximar (roda do mouse: aproxima onde o ponteiro está)" aria-label="Aproximar">+</button>
+        <button type="button" data-pt-cam="in" title="Aproximar (ou Ctrl + roda do mouse, na direção do ponteiro)" aria-label="Aproximar">+</button>
         <button type="button" data-pt-cam="out" title="Afastar" aria-label="Afastar">−</button>
-        <button type="button" data-pt-cam="top" aria-pressed="false" title="Vista de cima: a câmera trava olhando a mesa de cima; arrastar move a mesa (C)">De cima</button>
+        <button type="button" data-pt-cam="top" aria-pressed="false" title="Vista de cima: a câmera olha a mesa de cima; Ctrl + arrastar move a mesa (C)">De cima</button>
         <button type="button" data-pt-cam="scenic" aria-pressed="false" title="A câmera desce e gira devagar, mostrando a paisagem em volta da mesa">Paisagem</button>
         <button type="button" data-pt-cam="reset" title="Voltar ao enquadramento (Esc ou duplo clique na mesa)">Centralizar</button>
     </div>

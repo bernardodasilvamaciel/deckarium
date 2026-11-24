@@ -10,7 +10,9 @@ main.wrap:has(> .pt-app){max-width:none}
 .pt-app{--glass:rgba(9,16,12,.74);--glass-line:rgba(233,238,234,.12);--ink-on:#eef2ef;--muted-on:#a9b8b0;--gold:#d9b45a;--hand-h:clamp(150px,19vh,210px);position:relative;height:clamp(640px,calc(100dvh - 150px),1500px);border-radius:16px;overflow:hidden;color:var(--ink-on);background:radial-gradient(120% 100% at 50% 30%,#1d2c25 0%,#0d1511 60%,#070b09 100%);box-shadow:0 30px 60px -34px #0c1411cc;user-select:none;-webkit-user-select:none}
 .pt-app [hidden]{display:none!important}
 .pt-stage{position:absolute;inset:0;touch-action:none}
-.pt-webgl{display:block;width:100%;height:100%;cursor:grab}
+.pt-webgl{display:block;width:100%;height:100%}
+.pt-stage.is-orbit .pt-webgl{cursor:grab!important}
+.pt-stage.is-orbit .pt-webgl:active{cursor:grabbing!important}
 .pt-stage-status{position:absolute;inset:0;display:grid;place-items:center;margin:0;max-width:none;padding:24px;text-align:center;color:var(--muted-on)}
 
 /* Botões sobre a mesa */
